@@ -37,19 +37,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if ($shop_id > 0) {
             $stmt = $conn->prepare("SELECT DISTINCT category FROM menu_items WHERE shop_id = ? AND is_available = 1 AND category IS NOT NULL AND TRIM(category) != '' ORDER BY category ASC");
-            $stmt->bind_param('i', $shop_id);
+            $stmt->execute([$shop_id]);
         } else {
             $stmt = $conn->prepare("SELECT DISTINCT m.category FROM menu_items m JOIN shops s ON m.shop_id = s.shop_id WHERE s.shop_name = ? AND m.is_available = 1 AND m.category IS NOT NULL AND TRIM(m.category) != '' ORDER BY m.category ASC");
-            $stmt->bind_param('s', $shop_name);
+            $stmt->execute([$shop_name]);
         }
         
         if ($stmt) {
-            $stmt->execute();
-            $c_res = $stmt->get_result();
-            while ($c_row = $c_res->fetch_assoc()) {
+            while ($c_row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $categories[] = $c_row['category'];
             }
-            $stmt->close();
         }
         
         api_response(['success' => true, 'store' => $shop_name, 'categories' => $categories]);
@@ -67,11 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             WHERE (s.shop_name = ? OR m.shop_id = ?) AND m.is_available = 1 
             ORDER BY m.is_recommended DESC, m.item_name ASC
         ");
-        $stmt->bind_param('si', $shop_name, $shop_id);
         if ($stmt) {
-            $stmt->execute();
-            $m_res = $stmt->get_result();
-            while ($m_row = $m_res->fetch_assoc()) {
+            $stmt->execute([$shop_name, $shop_id]);
+            while ($m_row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $items[] = [
                     'id'          => (int)$m_row['item_id'],
                     'name'        => $m_row['item_name'],
@@ -82,7 +77,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'recommended' => (int)$m_row['is_recommended']
                 ];
             }
-            $stmt->close();
         }
         api_response(['success' => true, 'items' => $items]);
     }
@@ -97,10 +91,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Fetch order to verify ownership
         $chk = $conn->prepare("SELECT order_id, order_ref, status FROM food_orders WHERE order_id = ? AND customer_id = ? LIMIT 1");
-        $chk->bind_param('ii', $order_id, $user_id);
-        $chk->execute();
-        $curr = $chk->get_result()->fetch_assoc();
-        $chk->close();
+        $chk->execute([$order_id, $user_id]);
+        $curr = $chk->fetch(PDO::FETCH_ASSOC);
 
         if (!$curr) {
             api_response(['success' => false, 'message' => 'Order not found.'], 404);
@@ -108,13 +100,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt = $conn->prepare("UPDATE food_orders SET status = 'DELIVERED', delivery_status = 'delivered', updated_at = NOW() WHERE order_id = ? AND customer_id = ?");
         if (!$stmt) {
-            api_response(['success' => false, 'message' => 'Database error: ' . $conn->error], 500);
+            api_response(['success' => false, 'message' => 'Database error preparing query.'], 500);
         }
         
-        $stmt->bind_param('ii', $order_id, $user_id);
-        $stmt->execute();
-        $changed = $stmt->affected_rows;
-        $stmt->close();
+        $stmt->execute([$order_id, $user_id]);
         
         // Record audit log entry
         record_order_audit_log($conn, $order_id, $curr['status'], 'DELIVERED', $user_id, 'customer', 'Customer confirmed receipt of order');
@@ -145,13 +134,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         $created_orders = [];
-        $conn->begin_transaction();
+        $conn->beginTransaction();
         
         try {
             $shops = [];
             $shops_res = $conn->query("SELECT shop_id, shop_name FROM shops");
             if ($shops_res) {
-                while ($row = $shops_res->fetch_assoc()) {
+                while ($row = $shops_res->fetch(PDO::FETCH_ASSOC)) {
                     $shops[strtolower(trim($row['shop_name']))] = $row['shop_id'];
                 }
             }
@@ -200,31 +189,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $cname = !empty($full_name) ? $full_name : 'Customer';
                 
                 // Insert order with initial status 'PENDING'
-                $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, store_name, customer_id, customer_name, order_ref, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'waiting', 'Delivery', NOW())");
-                if (!$stmt) throw new Exception("Prepare order failed: " . $conn->error);
-                $stmt->bind_param('isisssddd', $shop_id, $store_name, $user_id, $cname, $unique_ref, $items_summary, $subtotal, $delivery_fee, $total_amount);
-                if (!$stmt->execute()) throw new Exception("Insert order failed: " . $stmt->error);
-                $new_order_id = $stmt->insert_id;
-                $stmt->close();
+                $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, store_name, customer_id, customer_name, order_ref, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, created_at) VALUES (:shop_id, :store_name, :customer_id, :customer_name, :order_ref, :items_summary, :subtotal, :delivery_fee, :total_amount, 'PENDING', 'waiting', 'Delivery', NOW())");
+                $stmt->execute([
+                    ':shop_id'       => $shop_id,
+                    ':store_name'    => $store_name,
+                    ':customer_id'   => $user_id,
+                    ':customer_name' => $cname,
+                    ':order_ref'     => $unique_ref,
+                    ':items_summary' => $items_summary,
+                    ':subtotal'      => $subtotal,
+                    ':delivery_fee'  => $delivery_fee,
+                    ':total_amount'  => $total_amount
+                ]);
+                $new_order_id = (int)$conn->lastInsertId();
                 
                 // Insert items into food_order_items
-                $it_stmt = $conn->prepare("INSERT INTO food_order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                if ($it_stmt) {
-                    foreach ($clean_items as $ci) {
-                        $it_stmt->bind_param('issidds', $new_order_id, $ci['name'], $ci['store'], $ci['qty'], $ci['price'], $ci['line'], $ci['icon']);
-                        $it_stmt->execute();
-                    }
-                    $it_stmt->close();
+                $it_stmt = $conn->prepare("INSERT INTO food_order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (:oid, :name, :store, :qty, :price, :line, :icon)");
+                foreach ($clean_items as $ci) {
+                    $it_stmt->execute([
+                        ':oid'   => $new_order_id,
+                        ':name'  => $ci['name'],
+                        ':store' => $ci['store'],
+                        ':qty'   => $ci['qty'],
+                        ':price' => $ci['price'],
+                        ':line'  => $ci['line'],
+                        ':icon'  => $ci['icon'],
+                    ]);
                 }
 
                 // Insert into order_items compatibility table
-                $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                if ($co_stmt) {
-                    foreach ($clean_items as $ci) {
-                        $co_stmt->bind_param('issidds', $new_order_id, $ci['name'], $ci['store'], $ci['qty'], $ci['price'], $ci['line'], $ci['icon']);
-                        $co_stmt->execute();
-                    }
-                    $co_stmt->close();
+                $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (:oid, :name, :store, :qty, :price, :line, :icon)");
+                foreach ($clean_items as $ci) {
+                    $co_stmt->execute([
+                        ':oid'   => $new_order_id,
+                        ':name'  => $ci['name'],
+                        ':store' => $ci['store'],
+                        ':qty'   => $ci['qty'],
+                        ':price' => $ci['price'],
+                        ':line'  => $ci['line'],
+                        ':icon'  => $ci['icon'],
+                    ]);
                 }
 
                 // Record audit log for PENDING
@@ -245,7 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conn->commit();
             api_response(['success' => true, 'message' => 'Orders placed successfully!', 'orders' => $created_orders]);
         } catch (Throwable $e) {
-            $conn->rollback();
+            if ($conn->inTransaction()) $conn->rollBack();
             api_response(['success' => false, 'message' => 'Checkout failed: ' . $e->getMessage()], 200);
         }
     }
@@ -258,26 +262,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $db_orders = [];
 $ontheway_count = 0;
 
-$stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, status, delivery_status, order_type, created_at FROM food_orders WHERE customer_id = ? ORDER BY order_id DESC LIMIT 40");
+$stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, status, delivery_status, order_type, created_at FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
 if ($stmt) {
-    $stmt->bind_param('i', $user_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    while ($row = $res->fetch_assoc()) { 
+    $stmt->execute([':cid' => $user_id]);
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) { 
         $db_orders[] = $row; 
         $st = strtoupper(trim(str_replace([' ', '-'], '_', $row['status'])));
         if (in_array($st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER'])) {
             $ontheway_count++;
         }
     }
-    $stmt->close();
 }
 
 // Fetch all partner stores with official logo_url
 $db_shops = [];
 $shops_res = $conn->query("SELECT shop_id, shop_name, category, logo_url FROM shops ORDER BY shop_id ASC");
 if ($shops_res) {
-    while ($row = $shops_res->fetch_assoc()) {
+    while ($row = $shops_res->fetch(PDO::FETCH_ASSOC)) {
         $db_shops[] = $row;
     }
 }
@@ -293,7 +294,7 @@ $menu_items_res = $conn->query("
     ORDER BY m.shop_id ASC, m.is_recommended DESC, m.item_name ASC
 ");
 if ($menu_items_res) {
-    while ($mi = $menu_items_res->fetch_assoc()) {
+    while ($mi = $menu_items_res->fetch(PDO::FETCH_ASSOC)) {
         $sname = trim($mi['shop_name']);
         if (!isset($db_store_menus[$sname])) {
             $db_store_menus[$sname] = [];

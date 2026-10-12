@@ -22,9 +22,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $rider_name = trim($_POST['rider_name']);
         if (!empty($rider_name)) {
             $stmt = $conn->prepare("INSERT INTO riders (rider_name, status) VALUES (?, 'waiting')");
-            $stmt->bind_param("s", $rider_name);
-            $stmt->execute();
-            $stmt->close();
+            $stmt->execute([$rider_name]);
             $action_msg = "Rider added to dispatch fleet!";
         }
     }
@@ -36,9 +34,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $order_ref = ($new_status === 'on_delivery') ? '#FD-' . rand(1000, 9999) : 'None';
 
         $stmt = $conn->prepare("UPDATE riders SET status = ?, current_order = ? WHERE rider_id = ?");
-        $stmt->bind_param("ssi", $new_status, $order_ref, $rider_id);
-        $stmt->execute();
-        $stmt->close();
+        $stmt->execute([$new_status, $order_ref, $rider_id]);
         $action_msg = "Rider status updated!";
     }
 
@@ -46,9 +42,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['action_delete_rider'])) {
         $rider_id = intval($_POST['rider_id']);
         $stmt = $conn->prepare("DELETE FROM riders WHERE rider_id = ?");
-        $stmt->bind_param("i", $rider_id);
-        $stmt->execute();
-        $stmt->close();
+        $stmt->execute([$rider_id]);
         $action_msg = "Rider removed successfully!";
     }
 
@@ -61,9 +55,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         if (!empty($shop_name)) {
             $stmt = $conn->prepare("INSERT INTO shops (shop_name, category, logo_url) VALUES (?, ?, ?)");
-            $stmt->bind_param("sss", $shop_name, $category, $logo_url);
-            $stmt->execute();
-            $stmt->close();
+            $stmt->execute([$shop_name, $category, $logo_url]);
             $action_msg = "Store added successfully!";
         }
     }
@@ -78,9 +70,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         if ($shop_id > 0 && !empty($shop_name)) {
             $stmt = $conn->prepare("UPDATE shops SET shop_name = ?, category = ?, logo_url = ? WHERE shop_id = ?");
-            $stmt->bind_param("sssi", $shop_name, $category, $logo_url, $shop_id);
-            $stmt->execute();
-            $stmt->close();
+            $stmt->execute([$shop_name, $category, $logo_url, $shop_id]);
             $action_msg = "Store updated successfully!";
         }
     }
@@ -89,9 +79,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['action_delete_shop'])) {
         $shop_id = intval($_POST['shop_id']);
         $stmt = $conn->prepare("DELETE FROM shops WHERE shop_id = ?");
-        $stmt->bind_param("i", $shop_id);
-        $stmt->execute();
-        $stmt->close();
+        $stmt->execute([$shop_id]);
         $action_msg = "Store removed successfully!";
     }
 
@@ -104,9 +92,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         if (!empty($item_name) && $shop_id > 0 && $price > 0) {
             $stmt = $conn->prepare("INSERT INTO menu_items (shop_id, item_name, price, is_recommended) VALUES (?, ?, ?, ?)");
-            $stmt->bind_param("isdi", $shop_id, $item_name, $price, $is_recommended);
-            $stmt->execute();
-            $stmt->close();
+            $stmt->execute([$shop_id, $item_name, $price, $is_recommended]);
             $action_msg = "Menu item added!";
         }
     }
@@ -121,9 +107,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         if ($item_id > 0 && !empty($item_name) && $shop_id > 0 && $price > 0) {
             $stmt = $conn->prepare("UPDATE menu_items SET shop_id = ?, item_name = ?, price = ?, is_recommended = ? WHERE item_id = ?");
-            $stmt->bind_param("isdii", $shop_id, $item_name, $price, $is_recommended, $item_id);
-            $stmt->execute();
-            $stmt->close();
+            $stmt->execute([$shop_id, $item_name, $price, $is_recommended, $item_id]);
             $action_msg = "Menu item updated!";
         }
     }
@@ -132,9 +116,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['action_delete_item'])) {
         $item_id = intval($_POST['item_id']);
         $stmt = $conn->prepare("DELETE FROM menu_items WHERE item_id = ?");
-        $stmt->bind_param("i", $item_id);
-        $stmt->execute();
-        $stmt->close();
+        $stmt->execute([$item_id]);
         $action_msg = "Item removed from menu!";
     }
 
@@ -143,9 +125,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $msg = trim($_POST['message_text']);
         if (!empty($msg)) {
             $stmt = $conn->prepare("INSERT INTO delivered_messages (message_text) VALUES (?)");
-            $stmt->bind_param("s", $msg);
-            $stmt->execute();
-            $stmt->close();
+            $stmt->execute([$msg]);
             $action_msg = "Delivery broadcast sent!";
         }
     }
@@ -156,10 +136,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $order_id = intval($_POST['order_id']);
         if ($order_id > 0) {
             $stmt = $conn->prepare("SELECT order_id, order_ref, customer_id, customer_name, total_amount, payment_method, status FROM food_orders WHERE order_id = ? LIMIT 1");
-            $stmt->bind_param("i", $order_id);
-            $stmt->execute();
-            $ord = $stmt->get_result()->fetch_assoc();
-            $stmt->close();
+            $stmt->execute([$order_id]);
+            $ord = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($ord && strtoupper(trim($ord['status'])) === 'DELIVERED') {
                 $ref = !empty($ord['order_ref']) ? $ord['order_ref'] : '#' . $ord['order_id'];
@@ -171,17 +149,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 // 1. Update order status to SETTLED
                 $stmt = $conn->prepare("UPDATE food_orders SET status = 'SETTLED', updated_at = NOW() WHERE order_id = ?");
-                $stmt->bind_param("i", $order_id);
-                $stmt->execute();
-                $stmt->close();
+                $stmt->execute([$order_id]);
 
-                // 2. Insert/Update settlements table
+                // 2. Insert/Update settlements table (PostgreSQL ON CONFLICT)
                 $stmt = $conn->prepare("INSERT INTO settlements (order_id, admin_id, subtotal, delivery_fee, total_amount, payment_method, status, reconciled_at) 
                     VALUES (?, ?, ?, ?, ?, ?, 'settled', NOW())
-                    ON DUPLICATE KEY UPDATE admin_id=VALUES(admin_id), status='settled', reconciled_at=NOW()");
-                $stmt->bind_param("iiddds", $order_id, $admin_id, $subtotal, $delivery_fee, $total_amount, $pay_method);
-                $stmt->execute();
-                $stmt->close();
+                    ON CONFLICT (order_id) DO UPDATE SET admin_id = EXCLUDED.admin_id, subtotal = EXCLUDED.subtotal, delivery_fee = EXCLUDED.delivery_fee, total_amount = EXCLUDED.total_amount, payment_method = EXCLUDED.payment_method, status = 'settled', reconciled_at = NOW()");
+                $stmt->execute([$order_id, $admin_id, $subtotal, $delivery_fee, $total_amount, $pay_method]);
 
                 // 3. Record order audit log
                 record_order_audit_log($conn, $order_id, 'DELIVERED', 'SETTLED', $admin_id, 'admin', 'Transaction verified, reconciled and settled by Admin ' . $user_name);
@@ -226,37 +200,30 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $action_msg = "Error: " . implode(" ", $pass_errs);
             } else {
                 $chk = $conn->prepare("SELECT user_id FROM users WHERE username = ? OR email = ?");
-                $chk->bind_param("ss", $u_username, $u_email);
-                $chk->execute();
-                if ($chk->get_result()->num_rows > 0) {
+                $chk->execute([$u_username, $u_email]);
+                if ($chk->fetch(PDO::FETCH_ASSOC)) {
                     $action_msg = "Error: Username or Email is already taken by another account.";
                 } else {
                     $hashed = password_hash($u_password, PASSWORD_BCRYPT);
                     $ins = $conn->prepare("INSERT INTO users (username, full_name, email, password, role, failed_attempts, lockout_until, created_at) VALUES (?, ?, ?, ?, ?, 0, NULL, NOW())");
-                    $ins->bind_param("sssss", $u_username, $u_fullname, $u_email, $hashed, $u_role);
-                    if ($ins->execute()) {
-                        $new_user_id = (int)$ins->insert_id;
+                    if ($ins->execute([$u_username, $u_fullname, $u_email, $hashed, $u_role])) {
+                        $new_user_id = (int)$conn->lastInsertId();
                         if ($u_role === 'rider') {
                             $r_chk = $conn->prepare("SELECT rider_id FROM riders WHERE user_id = ?");
-                            $r_chk->bind_param("i", $new_user_id);
-                            $r_chk->execute();
-                            if ($r_chk->get_result()->num_rows === 0) {
+                            $r_chk->execute([$new_user_id]);
+                            if (!$r_chk->fetch(PDO::FETCH_ASSOC)) {
                                 $r_ins = $conn->prepare("INSERT INTO riders (user_id, rider_name, status, current_order) VALUES (?, ?, 'waiting', 'None')");
-                                $r_ins->bind_param("is", $new_user_id, $u_fullname);
-                                $r_ins->execute();
-                                $r_ins->close();
+                                $r_ins->execute([$new_user_id, $u_fullname]);
                             }
-                            $r_chk->close();
                         }
 
                         log_activity($conn, $user_id, 'USER_CREATED', "Admin {$user_name} created user '{$u_username}' (ID: {$new_user_id}, Role: {$u_role}).");
                         $action_msg = "User '{$u_username}' ({$u_role}) created successfully with BCRYPT password encryption!";
                     } else {
-                        $action_msg = "Error creating user: " . $conn->error;
+                        $errInfo = $ins->errorInfo();
+                        $action_msg = "Error creating user: " . ($errInfo[2] ?? 'Database error');
                     }
-                    $ins->close();
                 }
-                $chk->close();
             }
         }
     }
@@ -280,9 +247,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $action_msg = "Error: Invalid user details submitted for edit.";
         } else {
             $chk = $conn->prepare("SELECT user_id FROM users WHERE (username = ? OR email = ?) AND user_id != ?");
-            $chk->bind_param("ssi", $e_username, $e_email, $edit_id);
-            $chk->execute();
-            if ($chk->get_result()->num_rows > 0) {
+            $chk->execute([$e_username, $e_email, $edit_id]);
+            if ($chk->fetch(PDO::FETCH_ASSOC)) {
                 $action_msg = "Error: Username or Email is already taken by another user.";
             } else {
                 $password_ok = true;
@@ -305,19 +271,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 if ($password_ok) {
                     if ($new_hash !== null) {
                         $upd = $conn->prepare("UPDATE users SET full_name = ?, username = ?, email = ?, role = ?, password = ? WHERE user_id = ?");
-                        $upd->bind_param("sssssi", $e_fullname, $e_username, $e_email, $e_role, $new_hash, $edit_id);
+                        $upd->execute([$e_fullname, $e_username, $e_email, $e_role, $new_hash, $edit_id]);
                     } else {
                         $upd = $conn->prepare("UPDATE users SET full_name = ?, username = ?, email = ?, role = ? WHERE user_id = ?");
-                        $upd->bind_param("ssssi", $e_fullname, $e_username, $e_email, $e_role, $edit_id);
+                        $upd->execute([$e_fullname, $e_username, $e_email, $e_role, $edit_id]);
                     }
-                    $upd->execute();
-                    $upd->close();
 
                     if ($reset_lockout) {
                         $rst = $conn->prepare("UPDATE users SET failed_attempts = 0, lockout_until = NULL WHERE user_id = ?");
-                        $rst->bind_param("i", $edit_id);
-                        $rst->execute();
-                        $rst->close();
+                        $rst->execute([$edit_id]);
                     }
 
                     if ($edit_id === (int)$_SESSION['user_id']) {
@@ -330,7 +292,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $action_msg = "User '{$e_username}' updated successfully!";
                 }
             }
-            $chk->close();
         }
     }
 
@@ -346,26 +307,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $action_msg = "Security Protection: You cannot delete your own active administrator account!";
         } else {
             $u_stmt = $conn->prepare("SELECT username, role FROM users WHERE user_id = ? LIMIT 1");
-            $u_stmt->bind_param("i", $del_id);
-            $u_stmt->execute();
-            $u_info = $u_stmt->get_result()->fetch_assoc();
-            $u_stmt->close();
+            $u_stmt->execute([$del_id]);
+            $u_info = $u_stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($u_info) {
                 $del_uname = $u_info['username'];
                 $del_role = $u_info['role'];
 
-                $conn->query("DELETE FROM riders WHERE user_id = {$del_id}");
+                $del_rider = $conn->prepare("DELETE FROM riders WHERE user_id = ?");
+                $del_rider->execute([$del_id]);
 
                 $del_stmt = $conn->prepare("DELETE FROM users WHERE user_id = ?");
-                $del_stmt->bind_param("i", $del_id);
-                if ($del_stmt->execute()) {
+                if ($del_stmt->execute([$del_id])) {
                     log_activity($conn, $current_admin_id, 'USER_DELETED', "Admin {$user_name} deleted user '{$del_uname}' (ID: {$del_id}, Role: {$del_role}).");
                     $action_msg = "User '{$del_uname}' ({$del_role}) deleted successfully.";
                 } else {
-                    $action_msg = "Error deleting user: " . $conn->error;
+                    $errInfo = $del_stmt->errorInfo();
+                    $action_msg = "Error deleting user: " . ($errInfo[2] ?? 'Database error');
                 }
-                $del_stmt->close();
             } else {
                 $action_msg = "Error: User account not found.";
             }
@@ -378,15 +337,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $unlock_id = intval($_POST['user_id'] ?? 0);
         if ($unlock_id > 0) {
             $u_stmt = $conn->prepare("SELECT username FROM users WHERE user_id = ? LIMIT 1");
-            $u_stmt->bind_param("i", $unlock_id);
-            $u_stmt->execute();
-            $u_row = $u_stmt->get_result()->fetch_assoc();
-            $u_stmt->close();
+            $u_stmt->execute([$unlock_id]);
+            $u_row = $u_stmt->fetch(PDO::FETCH_ASSOC);
 
             $unl = $conn->prepare("UPDATE users SET failed_attempts = 0, lockout_until = NULL WHERE user_id = ?");
-            $unl->bind_param("i", $unlock_id);
-            $unl->execute();
-            $unl->close();
+            $unl->execute([$unlock_id]);
 
             $unl_name = $u_row['username'] ?? "User #{$unlock_id}";
             log_activity($conn, (int)$_SESSION['user_id'], 'USER_UPDATED', "Admin {$user_name} unlocked account for '{$unl_name}'.");
@@ -419,10 +374,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $error_response = "Error: " . implode(" ", $pass_errs);
             } else {
                 $u_stmt = $conn->prepare("SELECT user_id, username, full_name, role FROM users WHERE user_id = ? LIMIT 1");
-                $u_stmt->bind_param("i", $target_user_id);
-                $u_stmt->execute();
-                $target_user = $u_stmt->get_result()->fetch_assoc();
-                $u_stmt->close();
+                $u_stmt->execute([$target_user_id]);
+                $target_user = $u_stmt->fetch(PDO::FETCH_ASSOC);
 
                 if (!$target_user) {
                     $error_response = "Error: Target user account not found.";
@@ -433,15 +386,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                     if ($unlock_account) {
                         $upd = $conn->prepare("UPDATE users SET password = ?, failed_attempts = 0, lockout_until = NULL WHERE user_id = ?");
-                        $upd->bind_param("si", $hashed, $target_user_id);
+                        $executed = $upd->execute([$hashed, $target_user_id]);
                     } else {
                         $upd = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
-                        $upd->bind_param("si", $hashed, $target_user_id);
+                        $executed = $upd->execute([$hashed, $target_user_id]);
                     }
 
-                    if ($upd->execute()) {
-                        $upd->close();
-
+                    if ($executed) {
                         // Immutable audit log entry in system_audit_logs
                         $admin_username = $_SESSION['username'] ?? $user_name;
                         $audit_detail = "Admin {$admin_username} reset password and unlocked account for User ID: {$target_user_id} ({$target_username})";
@@ -463,8 +414,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             $action_msg = $success_msg;
                         }
                     } else {
-                        $error_response = "Error updating user password: " . $conn->error;
-                        $upd->close();
+                        $errInfo = $upd->errorInfo();
+                        $error_response = "Error updating user password: " . ($errInfo[2] ?? 'Database error');
                     }
                 }
             }
@@ -495,7 +446,7 @@ $users_res = $conn->query("SELECT user_id, username, full_name, email, role, fai
 $user_counts = ['customer' => 0, 'chef' => 0, 'rider' => 0, 'admin' => 0, 'locked' => 0];
 if ($users_res) {
     $now_ts = time();
-    while ($urow = $users_res->fetch_assoc()) {
+    while ($urow = $users_res->fetch(PDO::FETCH_ASSOC)) {
         $users_list[] = $urow;
         $r_key = strtolower(trim($urow['role'] ?? 'customer'));
         if (isset($user_counts[$r_key])) {
@@ -517,22 +468,18 @@ $audit_page = max(1, intval($_GET['audit_page'] ?? 1));
 $audit_per_page = 15;
 
 $audit_where = [];
-$audit_types = "";
 $audit_params = [];
 
 if (!empty($filter_action) && $filter_action !== 'all') {
     $audit_where[] = "action = ?";
-    $audit_types .= "s";
     $audit_params[] = strtoupper($filter_action);
 }
 if (!empty($filter_role) && $filter_role !== 'all') {
     $audit_where[] = "LOWER(role) = LOWER(?)";
-    $audit_types .= "s";
     $audit_params[] = $filter_role;
 }
 if (!empty($filter_search)) {
     $audit_where[] = "(username LIKE ? OR details LIKE ? OR ip_address LIKE ?)";
-    $audit_types .= "sss";
     $s_term = "%" . $filter_search . "%";
     $audit_params[] = $s_term;
     $audit_params[] = $s_term;
@@ -543,12 +490,8 @@ $where_clause_sql = !empty($audit_where) ? "WHERE " . implode(" AND ", $audit_wh
 
 // Count total matching logs
 $audit_count_stmt = $conn->prepare("SELECT COUNT(*) as total FROM system_audit_logs {$where_clause_sql}");
-if (!empty($audit_params)) {
-    $audit_count_stmt->bind_param($audit_types, ...$audit_params);
-}
-$audit_count_stmt->execute();
-$audit_total_rows = (int)($audit_count_stmt->get_result()->fetch_assoc()['total'] ?? 0);
-$audit_count_stmt->close();
+$audit_count_stmt->execute($audit_params);
+$audit_total_rows = (int)($audit_count_stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
 
 $audit_total_pages = max(1, ceil($audit_total_rows / $audit_per_page));
 if ($audit_page > $audit_total_pages) $audit_page = $audit_total_pages;
@@ -556,65 +499,55 @@ $audit_offset = ($audit_page - 1) * $audit_per_page;
 
 // Fetch paginated logs
 $audit_logs_stmt = $conn->prepare("SELECT log_id, user_id, username, role, action, details, ip_address, user_agent, created_at FROM system_audit_logs {$where_clause_sql} ORDER BY log_id DESC LIMIT ? OFFSET ?");
-$page_types = $audit_types . "ii";
 $page_params = array_merge($audit_params, [$audit_per_page, $audit_offset]);
-$audit_logs_stmt->bind_param($page_types, ...$page_params);
-$audit_logs_stmt->execute();
-$system_audit_logs = [];
-$sal_res = $audit_logs_stmt->get_result();
-while ($r = $sal_res->fetch_assoc()) {
-    $system_audit_logs[] = $r;
-}
-$audit_logs_stmt->close();
+$audit_logs_stmt->execute($page_params);
+$system_audit_logs = $audit_logs_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$shops = $conn->query("SELECT * FROM shops ORDER BY shop_id DESC");
-$menu_items = $conn->query("SELECT m.*, s.shop_name FROM menu_items m JOIN shops s ON m.shop_id = s.shop_id ORDER BY m.item_id DESC");
-$riders = $conn->query("SELECT * FROM riders ORDER BY rider_id DESC");
+$shops_res = $conn->query("SELECT * FROM shops ORDER BY shop_id DESC");
+$shops = $shops_res ? $shops_res->fetchAll(PDO::FETCH_ASSOC) : [];
 
-$total_shops = $shops ? $shops->num_rows : 0;
-$total_items = $menu_items ? $menu_items->num_rows : 0;
-$total_riders = $riders ? $riders->num_rows : 0;
+$menu_items_res = $conn->query("SELECT m.*, s.shop_name FROM menu_items m JOIN shops s ON m.shop_id = s.shop_id ORDER BY m.item_id DESC");
+$menu_items = $menu_items_res ? $menu_items_res->fetchAll(PDO::FETCH_ASSOC) : [];
+
+$riders_res = $conn->query("SELECT * FROM riders ORDER BY rider_id DESC");
+$riders = $riders_res ? $riders_res->fetchAll(PDO::FETCH_ASSOC) : [];
+
+$total_shops = count($shops);
+$total_items = count($menu_items);
+$total_riders = count($riders);
 
 // Fetch orders delivered awaiting reconciliation
 $pending_settlements = [];
 $ps_res = $conn->query("SELECT o.*, s.shop_name FROM food_orders o LEFT JOIN shops s ON o.shop_id = s.shop_id WHERE UPPER(o.status) = 'DELIVERED' ORDER BY o.order_id DESC");
 if ($ps_res) {
-    while ($r = $ps_res->fetch_assoc()) {
-        $pending_settlements[] = $r;
-    }
+    $pending_settlements = $ps_res->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // Fetch all reconciled settlements & transaction history
 $settled_transactions = [];
 $settled_res = $conn->query("SELECT st.*, o.order_ref, o.customer_name, o.store_name, o.items_summary, u.username as admin_user FROM settlements st JOIN food_orders o ON st.order_id = o.order_id LEFT JOIN users u ON st.admin_id = u.user_id ORDER BY st.settlement_id DESC LIMIT 50");
 if ($settled_res) {
-    while ($r = $settled_res->fetch_assoc()) {
-        $settled_transactions[] = $r;
-    }
+    $settled_transactions = $settled_res->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // Fetch complete transaction history across all states
 $transactions = [];
 $txn_res = $conn->query("SELECT o.order_id, o.order_ref, o.shop_id, o.customer_id, o.customer_name, o.store_name, o.items_summary, o.total_amount, o.status, o.delivery_status, o.created_at, o.updated_at, s.shop_name AS shopper_name FROM food_orders o LEFT JOIN shops s ON o.shop_id = s.shop_id ORDER BY o.order_id DESC LIMIT 100");
 if ($txn_res) {
-    while ($row = $txn_res->fetch_assoc()) {
-        $transactions[] = $row;
-    }
+    $transactions = $txn_res->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // Fetch Order Audit Logs (Requirement: Admin verifies audit log)
 $audit_logs = [];
 $audit_res = $conn->query("SELECT a.*, o.order_ref, u.username as actor_name FROM order_audit_logs a LEFT JOIN food_orders o ON a.order_id = o.order_id LEFT JOIN users u ON a.action_by_user_id = u.user_id ORDER BY a.log_id DESC LIMIT 60");
 if ($audit_res) {
-    while ($r = $audit_res->fetch_assoc()) {
-        $audit_logs[] = $r;
-    }
+    $audit_logs = $audit_res->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // Sales summary: settled + delivered
 $total_revenue = 0;
 $rev_res = $conn->query("SELECT SUM(total_amount) as rev FROM food_orders WHERE UPPER(status) IN ('SETTLED', 'DELIVERED', 'COMPLETED')");
-if ($rev_res && $rev_row = $rev_res->fetch_assoc()) {
+if ($rev_res && $rev_row = $rev_res->fetch(PDO::FETCH_ASSOC)) {
     $total_revenue = (float)($rev_row['rev'] ?? 0);
 }
 $txn_count = count($transactions);
@@ -1430,8 +1363,8 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
             </tr>
           </thead>
           <tbody>
-            <?php if ($riders && $riders->num_rows > 0): ?>
-              <?php $riders->data_seek(0); while($r = $riders->fetch_assoc()): ?>
+            <?php if (!empty($riders)): ?>
+              <?php foreach ($riders as $r): ?>
                 <tr>
                   <td><strong><?php echo htmlspecialchars($r['rider_name']); ?></strong></td>
                   <td>
@@ -1454,7 +1387,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
                     </form>
                   </td>
                 </tr>
-              <?php endwhile; ?>
+              <?php endforeach; ?>
             <?php else: ?>
               <tr><td colspan="4">No riders in fleet.</td></tr>
             <?php endif; ?>
@@ -1471,8 +1404,8 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
           <button class="btn-action" onclick="openModal('addShopModal')" style="padding: 4px 8px; font-size: 0.72rem;">Add Store</button>
         </div>
         <div class="admin-stores-grid">
-          <?php if ($shops && $shops->num_rows > 0): ?>
-            <?php $shops->data_seek(0); while($s = $shops->fetch_assoc()): 
+          <?php if (!empty($shops)): ?>
+            <?php foreach ($shops as $s): 
               $s_logo = !empty($s['logo_url']) ? $s['logo_url'] : 'assets/shops/default_store.png';
               $s_cat = !empty($s['category']) ? $s['category'] : 'Restaurant';
             ?>
@@ -1493,7 +1426,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
                   </form>
                 </div>
               </div>
-            <?php endwhile; ?>
+            <?php endforeach; ?>
           <?php else: ?>
             <div style="padding: 15px; text-align: center; color: #74776a; font-size: 0.8rem;">No stores registered.</div>
           <?php endif; ?>
@@ -1519,8 +1452,8 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
             </tr>
           </thead>
           <tbody>
-            <?php if ($menu_items && $menu_items->num_rows > 0): ?>
-              <?php $menu_items->data_seek(0); while($m = $menu_items->fetch_assoc()): ?>
+            <?php if (!empty($menu_items)): ?>
+              <?php foreach ($menu_items as $m): ?>
                 <tr>
                   <td><strong><?php echo htmlspecialchars($m['item_name']); ?></strong></td>
                   <td><?php echo htmlspecialchars($m['shop_name']); ?></td>
@@ -1540,7 +1473,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
                     </form>
                   </td>
                 </tr>
-              <?php endwhile; ?>
+              <?php endforeach; ?>
             <?php else: ?>
               <tr><td colspan="5">No dishes listed.</td></tr>
             <?php endif; ?>
@@ -1864,9 +1797,8 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
         <select name="shop_id" required>
           <option value="" disabled selected>Select Associated Store</option>
           <?php 
-          if ($shops) {
-              $shops->data_seek(0);
-              while($s = $shops->fetch_assoc()) {
+          if (!empty($shops)) {
+              foreach ($shops as $s) {
                   echo "<option value='".$s['shop_id']."'>".htmlspecialchars($s['shop_name'])."</option>";
               }
           }
@@ -1897,9 +1829,8 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
         
         <select name="shop_id" id="edit_item_shop_id" required>
           <?php 
-          if ($shops) {
-              $shops->data_seek(0);
-              while($s = $shops->fetch_assoc()) {
+          if (!empty($shops)) {
+              foreach ($shops as $s) {
                   echo "<option value='".$s['shop_id']."'>".htmlspecialchars($s['shop_name'])."</option>";
               }
           }

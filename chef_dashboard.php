@@ -30,11 +30,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit();
         }
 
-        $chk = $conn->prepare("SELECT order_id, customer_id, order_ref, store_name, status FROM food_orders WHERE order_id = ? LIMIT 1");
-        $chk->bind_param('i', $order_id);
-        $chk->execute();
-        $ord_data = $chk->get_result()->fetch_assoc();
-        $chk->close();
+        $chk = $conn->prepare("SELECT order_id, customer_id, order_ref, store_name, status FROM food_orders WHERE order_id = :oid LIMIT 1");
+        $chk->execute([':oid' => $order_id]);
+        $ord_data = $chk->fetch(PDO::FETCH_ASSOC);
 
         if (!$ord_data) {
             echo json_encode(['success' => false, 'message' => 'Order not found.']);
@@ -45,11 +43,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new_delivery_status = ($new_status === 'PREPARING') ? 'preparing' : 'ready_for_pickup';
         $notes = ($new_status === 'PREPARING') ? 'Chef accepted order and started kitchen preparation' : 'Food prepared and packed, ready for rider pickup';
 
-        $stmt = $conn->prepare("UPDATE food_orders SET status = ?, delivery_status = ?, chef_id = ?, updated_at = NOW() WHERE order_id = ?");
+        $stmt = $conn->prepare("UPDATE food_orders SET status = :st, delivery_status = :dst, chef_id = :cid, updated_at = NOW() WHERE order_id = :oid");
         if ($stmt) {
-            $stmt->bind_param('ssii', $new_status, $new_delivery_status, $user_id, $order_id);
-            $stmt->execute();
-            $stmt->close();
+            $stmt->execute([
+                ':st'  => $new_status,
+                ':dst' => $new_delivery_status,
+                ':cid' => $user_id,
+                ':oid' => $order_id,
+            ]);
 
             // Record audit log
             record_order_audit_log($conn, $order_id, $old_st, $new_status, $user_id, 'chef', $notes);
@@ -64,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             echo json_encode(['success' => true, 'message' => 'Status updated to ' . $new_status]);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Database error: ' . $conn->error]);
+            echo json_encode(['success' => false, 'message' => 'Database error']);
         }
         exit();
     }
@@ -72,14 +73,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'toggle_stock') {
         $item_id = isset($_POST['item_id']) ? (int)$_POST['item_id'] : 0;
         $is_available = isset($_POST['is_available']) ? (int)$_POST['is_available'] : 1;
-        $stmt = $conn->prepare("UPDATE menu_items SET is_available = ? WHERE item_id = ?");
+        $stmt = $conn->prepare("UPDATE menu_items SET is_available = :avail WHERE item_id = :iid");
         if ($stmt) {
-            $stmt->bind_param('ii', $is_available, $item_id);
-            $stmt->execute();
+            $stmt->execute([':avail' => $is_available, ':iid' => $item_id]);
             if (ob_get_level()) ob_clean();
             header('Content-Type: application/json');
             echo json_encode(array('success' => true, 'message' => 'Availability updated!'));
-            $stmt->close();
         } else {
             if (ob_get_level()) ob_clean();
             header('Content-Type: application/json');
@@ -95,35 +94,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $price = (float)$_POST['price'];
 
         if ($item_id > 0) {
-            $stmt = $conn->prepare("UPDATE menu_items SET shop_id = ?, item_name = ?, price = ? WHERE item_id = ?");
-            $stmt->bind_param('isdi', $shop_id, $item_name, $price, $item_id);
+            $stmt = $conn->prepare("UPDATE menu_items SET shop_id = :sid, item_name = :iname, price = :price WHERE item_id = :iid");
+            $ok = $stmt->execute([':sid' => $shop_id, ':iname' => $item_name, ':price' => $price, ':iid' => $item_id]);
         } else {
-            $stmt = $conn->prepare("INSERT INTO menu_items (shop_id, item_name, price, is_available) VALUES (?, ?, ?, 1)");
-            $stmt->bind_param('isd', $shop_id, $item_name, $price);
+            $stmt = $conn->prepare("INSERT INTO menu_items (shop_id, item_name, price, is_available) VALUES (:sid, :iname, :price, 1)");
+            $ok = $stmt->execute([':sid' => $shop_id, ':iname' => $item_name, ':price' => $price]);
         }
-        if ($stmt && $stmt->execute()) {
+        if ($ok) {
             if (ob_get_level()) ob_clean();
             header('Content-Type: application/json');
             echo json_encode(array('success' => true, 'message' => 'Menu saved successfully!'));
         } else {
             if (ob_get_level()) ob_clean();
             header('Content-Type: application/json');
-            echo json_encode(array('success' => false, 'message' => $stmt ? $stmt->error : 'Database error'));
+            echo json_encode(array('success' => false, 'message' => 'Database error'));
         }
-        $stmt->close();
         exit();
     }
 
     if ($action === 'delete_menu_item') {
         $item_id = isset($_POST['item_id']) ? (int)$_POST['item_id'] : 0;
-        $stmt = $conn->prepare("DELETE FROM menu_items WHERE item_id = ?");
+        $stmt = $conn->prepare("DELETE FROM menu_items WHERE item_id = :iid");
         if ($stmt) {
-            $stmt->bind_param('i', $item_id);
-            $stmt->execute();
+            $stmt->execute([':iid' => $item_id]);
             if (ob_get_level()) ob_clean();
             header('Content-Type: application/json');
             echo json_encode(array('success' => true, 'message' => 'Item deleted!'));
-            $stmt->close();
         } else {
             if (ob_get_level()) ob_clean();
             header('Content-Type: application/json');
@@ -143,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $shops = array();
 $shops_res = $conn->query("SELECT * FROM shops ORDER BY shop_id ASC");
 if ($shops_res) {
-    while ($row = $shops_res->fetch_assoc()) {
+    while ($row = $shops_res->fetch(PDO::FETCH_ASSOC)) {
         $shops[$row['shop_id']] = $row;
     }
 }
@@ -155,14 +151,10 @@ if ($selected_shop_id > 0 && isset($shops[$selected_shop_id])) {
 
 // Dynamic column detection for orders table
 function getOrderCustomerColumn($conn) {
-    $res = $conn->query("SHOW COLUMNS FROM food_orders LIKE 'customer_id'");
-    if ($res && $res->num_rows > 0) return 'customer_id';
-    $res = $conn->query("SHOW COLUMNS FROM food_orders LIKE 'user_id'");
-    if ($res && $res->num_rows > 0) return 'user_id';
     return 'customer_id';
 }
 
-$order_customer_col = getOrderCustomerColumn($conn);
+$order_customer_col = 'customer_id';
 
 // 2. Fetch Order Counts grouped by shop_id
 $store_counts = array();
@@ -171,7 +163,7 @@ $total_all_orders = 0;
 // Query orders with shop_id for proper grouping
 $count_query = $conn->query("SELECT shop_id, COUNT(*) as total FROM food_orders WHERE UPPER(status) NOT IN ('COMPLETED', 'DELIVERED', 'SETTLED', 'CANCELLED') GROUP BY shop_id");
 if ($count_query) {
-    while ($r = $count_query->fetch_assoc()) {
+    while ($r = $count_query->fetch(PDO::FETCH_ASSOC)) {
         $sid = (int)$r['shop_id'];
         $cnt = (int)$r['total'];
         $store_counts[$sid] = $cnt;
@@ -182,7 +174,7 @@ if ($count_query) {
 // Also get counts for orders without shop_id (legacy) grouped by store_name
 $legacy_count_query = $conn->query("SELECT store_name, COUNT(*) as total FROM food_orders WHERE (shop_id = 0 OR shop_id IS NULL) AND UPPER(status) NOT IN ('COMPLETED', 'DELIVERED', 'SETTLED', 'CANCELLED') GROUP BY store_name");
 if ($legacy_count_query) {
-    while ($r = $legacy_count_query->fetch_assoc()) {
+    while ($r = $legacy_count_query->fetch(PDO::FETCH_ASSOC)) {
         $store_name = $r['store_name'];
         $cnt = (int)$r['total'];
         // Try to match with shops
@@ -210,10 +202,12 @@ if ($active_tab === 'orders') {
         $res = $conn->query("SELECT * FROM food_orders WHERE UPPER(status) IN ('PENDING', 'PREPARING', 'READY_FOR_PICKUP', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'SETTLED') ORDER BY order_id DESC");
     } else {
         // Specific store - filter by shop_id
-        $res = $conn->query("SELECT * FROM food_orders WHERE shop_id = " . (int)$selected_shop_id . " AND UPPER(status) IN ('PENDING', 'PREPARING', 'READY_FOR_PICKUP', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'SETTLED') ORDER BY order_id DESC");
+        $stmt = $conn->prepare("SELECT * FROM food_orders WHERE shop_id = :sid AND UPPER(status) IN ('PENDING', 'PREPARING', 'READY_FOR_PICKUP', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'SETTLED') ORDER BY order_id DESC");
+        $stmt->execute([':sid' => $selected_shop_id]);
+        $res = $stmt;
     }
     if ($res) {
-        while ($row = $res->fetch_assoc()) { $orders[] = $row; }
+        while ($row = $res->fetch(PDO::FETCH_ASSOC)) { $orders[] = $row; }
     }
 }
 
@@ -223,10 +217,12 @@ if ($active_tab === 'menu') {
     if ($selected_shop_id === 0) {
         $res = $conn->query("SELECT m.*, s.shop_name FROM menu_items m LEFT JOIN shops s ON m.shop_id = s.shop_id ORDER BY m.item_id DESC");
     } else {
-        $res = $conn->query("SELECT m.*, s.shop_name FROM menu_items m LEFT JOIN shops s ON m.shop_id = s.shop_id WHERE m.shop_id = " . (int)$selected_shop_id . " ORDER BY m.item_id DESC");
+        $stmt = $conn->prepare("SELECT m.*, s.shop_name FROM menu_items m LEFT JOIN shops s ON m.shop_id = s.shop_id WHERE m.shop_id = :sid ORDER BY m.item_id DESC");
+        $stmt->execute([':sid' => $selected_shop_id]);
+        $res = $stmt;
     }
     if ($res) {
-        while ($row = $res->fetch_assoc()) { $menu_items[] = $row; }
+        while ($row = $res->fetch(PDO::FETCH_ASSOC)) { $menu_items[] = $row; }
     }
 }
 ?>

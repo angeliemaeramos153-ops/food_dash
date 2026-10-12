@@ -70,16 +70,14 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
         if (empty($username_input) || empty($password_input)) {
             $error_msg = "Please enter both username and password.";
         } else {
-            $stmt = $conn->prepare("SELECT user_id, username, full_name, email, password, role, failed_attempts, lockout_until FROM users WHERE username = ? OR email = ? LIMIT 1");
-            $stmt->bind_param("ss", $username_input, $username_input);
-            $stmt->execute();
-            $result = $stmt->get_result();
+            $stmt = $conn->prepare("SELECT user_id, username, full_name, email, password, role, failed_attempts, lockout_until FROM users WHERE username = :u OR email = :e LIMIT 1");
+            $stmt->execute([':u' => $username_input, ':e' => $username_input]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if ($result->num_rows === 0) {
+            if (!$user) {
                 $error_msg = "Account does not exist.";
                 log_activity($conn, null, 'LOGIN_FAILED', "Failed login attempt for non-existent account: {$username_input}", $username_input, null);
             } else {
-                $user = $result->fetch_assoc();
                 $user_id = (int)$user['user_id'];
                 $curr_failed = (int)($user['failed_attempts'] ?? 0);
                 $lockout_until = $user['lockout_until'];
@@ -104,25 +102,16 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
                     } elseif ($password_input === $user['password']) {
                         $is_valid = true;
                         // Auto-upgrade legacy plaintext password to secure BCRYPT
-                        $up_hash = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
-                        if ($up_hash) {
-                            $new_bcrypt = password_hash($password_input, PASSWORD_BCRYPT);
-                            $up_hash->bind_param("si", $new_bcrypt, $user_id);
-                            $up_hash->execute();
-                            $up_hash->close();
-                        }
+                        $up_hash = $conn->prepare("UPDATE users SET password = :p WHERE user_id = :uid");
+                        $up_hash->execute([':p' => password_hash($password_input, PASSWORD_BCRYPT), ':uid' => $user_id]);
                     } elseif (strtolower($user['username']) === 'customer' && ($password_input === '@SWEDNfpAu5RJ6' || $password_input === 'cust123')) {
                         $is_valid = true;
                     }
 
                     if ($is_valid) {
                         // Reset failed attempts & lockout counter
-                        $reset_stmt = $conn->prepare("UPDATE users SET failed_attempts = 0, lockout_until = NULL WHERE user_id = ?");
-                        if ($reset_stmt) {
-                            $reset_stmt->bind_param("i", $user_id);
-                            $reset_stmt->execute();
-                            $reset_stmt->close();
-                        }
+                        $reset_stmt = $conn->prepare("UPDATE users SET failed_attempts = 0, lockout_until = NULL WHERE user_id = :uid");
+                        $reset_stmt->execute([':uid' => $user_id]);
 
                         // Secure session regeneration
                         session_regenerate_id(true);
@@ -151,12 +140,8 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
 
                         if ($lockout_mins > 0) {
                             $new_lockout_until = date('Y-m-d H:i:s', $now + ($lockout_mins * 60));
-                            $up_lock = $conn->prepare("UPDATE users SET failed_attempts = ?, lockout_until = ? WHERE user_id = ?");
-                            if ($up_lock) {
-                                $up_lock->bind_param("isi", $new_failed, $new_lockout_until, $user_id);
-                                $up_lock->execute();
-                                $up_lock->close();
-                            }
+                            $up_lock = $conn->prepare("UPDATE users SET failed_attempts = :f, lockout_until = :lu WHERE user_id = :uid");
+                            $up_lock->execute([':f' => $new_failed, ':lu' => $new_lockout_until, ':uid' => $user_id]);
                             $lockout_remaining_seconds = $lockout_mins * 60;
                             $rem_min = $lockout_mins;
                             $rem_sec = 0;
@@ -165,19 +150,14 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
                             log_activity($conn, $user_id, 'LOGIN_FAILED', "Account locked for {$lockout_mins}m after {$new_failed} consecutive failed attempts.", $user['username'], $user['role']);
                         } else {
                             $attempts_left = 3 - $new_failed;
-                            $up_lock = $conn->prepare("UPDATE users SET failed_attempts = ?, lockout_until = NULL WHERE user_id = ?");
-                            if ($up_lock) {
-                                $up_lock->bind_param("ii", $new_failed, $user_id);
-                                $up_lock->execute();
-                                $up_lock->close();
-                            }
+                            $up_lock = $conn->prepare("UPDATE users SET failed_attempts = :f, lockout_until = NULL WHERE user_id = :uid");
+                            $up_lock->execute([':f' => $new_failed, ':uid' => $user_id]);
                             $error_msg = "Incorrect username or password. {$attempts_left} attempt(s) remaining before account lockout.";
                             log_activity($conn, $user_id, 'LOGIN_FAILED', "Failed login attempt ({$new_failed}/3). {$attempts_left} attempts remaining.", $user['username'], $user['role']);
                         }
                     }
                 }
             }
-            $stmt->close();
         }
     }
 
@@ -206,28 +186,30 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
             if (!empty($pass_errors)) {
                 $error_msg = "Password requirement: " . implode(" ", $pass_errors);
             } else {
-                $check_stmt = $conn->prepare("SELECT user_id FROM users WHERE username = ? OR email = ?");
-                $check_stmt->bind_param("ss", $reg_user, $reg_email);
-                $check_stmt->execute();
+                $check_stmt = $conn->prepare("SELECT user_id FROM users WHERE username = :u OR email = :e LIMIT 1");
+                $check_stmt->execute([':u' => $reg_user, ':e' => $reg_email]);
                 
-                if ($check_stmt->get_result()->num_rows > 0) {
+                if ($check_stmt->fetch(PDO::FETCH_ASSOC)) {
                     $error_msg = "Username or Email is already registered.";
                 } else {
                     $hashed_pass = password_hash($reg_pass, PASSWORD_BCRYPT);
-                    $stmt = $conn->prepare("INSERT INTO users (username, full_name, email, password, role, failed_attempts, lockout_until, created_at) VALUES (?, ?, ?, ?, ?, 0, NULL, NOW())");
-                    $stmt->bind_param("sssss", $reg_user, $reg_user, $reg_email, $hashed_pass, $reg_role);
+                    $stmt = $conn->prepare("INSERT INTO users (username, full_name, email, password, role, failed_attempts, lockout_until, created_at) VALUES (:u, :fn, :em, :p, :r, 0, NULL, NOW())");
                     
-                    if ($stmt->execute()) {
-                        $new_uid = (int)$stmt->insert_id;
+                    if ($stmt->execute([
+                        ':u'  => $reg_user,
+                        ':fn' => $reg_user,
+                        ':em' => $reg_email,
+                        ':p'  => $hashed_pass,
+                        ':r'  => $reg_role
+                    ])) {
+                        $new_uid = (int)$conn->lastInsertId();
                         $success_msg = "Account created with strong password encryption! You can now sign in.";
                         $active_tab = 'login';
                         log_activity($conn, $new_uid, 'USER_CREATED', "New user registration: {$reg_user} ({$reg_role}) with BCRYPT password.", $reg_user, $reg_role);
                     } else {
-                        $error_msg = "Registration failed. Please try again: " . $conn->error;
+                        $error_msg = "Registration failed. Please try again.";
                     }
-                    $stmt->close();
                 }
-                $check_stmt->close();
             }
         }
     }

@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once 'db_connect.php';
 require_once 'notification_lib.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -10,25 +11,7 @@ function json_response(bool $success, string $message = '', array $extra = [], i
     exit;
 }
 
-function get_pdo(): PDO {
-    static $pdo = null;
-    if ($pdo === null) {
-        $host = 'localhost';
-        $dbname = 'food_dash';
-        $user = 'root';
-        $pass = '';
-        $dsn = "mysql:host={$host};dbname={$dbname};charset=utf8mb4";
-        $options = [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES   => false,
-        ];
-        $pdo = new PDO($dsn, $user, $pass, $options);
-    }
-    return $pdo;
-}
-
-$pdo = get_pdo();
+$pdo = $conn;
 
 if (!isset($_SESSION['user_id'], $_SESSION['role'])) {
     json_response(false, 'Authentication required.', [], 401);
@@ -286,7 +269,7 @@ try {
 
     // Insert Settlement record if SETTLED
     if ($target_status === 'SETTLED') {
-        $settle_stmt = $pdo->prepare("INSERT INTO settlements (order_id, admin_id, subtotal, delivery_fee, total_amount, payment_method, status, notes, reconciled_at) VALUES (:oid, :aid, :sub, :del, :tot, 'Cash on Delivery', 'SETTLED', :notes, NOW()) ON DUPLICATE KEY UPDATE status = 'SETTLED', notes = VALUES(notes), reconciled_at = NOW()");
+        $settle_stmt = $pdo->prepare("INSERT INTO settlements (order_id, admin_id, subtotal, delivery_fee, total_amount, payment_method, status, notes, reconciled_at) VALUES (:oid, :aid, :sub, :del, :tot, 'Cash on Delivery', 'SETTLED', :notes, NOW()) ON CONFLICT (order_id) DO UPDATE SET status = 'SETTLED', notes = EXCLUDED.notes, reconciled_at = NOW()");
         $settle_stmt->execute([
             ':oid'   => $order_id,
             ':aid'   => ($role === 'admin' ? $user_id : 14),

@@ -109,43 +109,56 @@ if ($method === 'POST') {
         $shop_id = 0;
         $first_store = array_key_first($stores);
         if ($first_store) {
-            $s_stmt = $conn->prepare("SELECT shop_id FROM shops WHERE LOWER(shop_name) = LOWER(?) LIMIT 1");
-            if ($s_stmt) {
-                $s_stmt->bind_param('s', $first_store);
-                $s_stmt->execute();
-                $s_res = $s_stmt->get_result()->fetch_assoc();
-                if ($s_res) $shop_id = (int)$s_res['shop_id'];
-                $s_stmt->close();
-            }
+            $s_stmt = $conn->prepare("SELECT shop_id FROM shops WHERE LOWER(shop_name) = LOWER(:sname) LIMIT 1");
+            $s_stmt->execute([':sname' => $first_store]);
+            $s_res = $s_stmt->fetch(PDO::FETCH_ASSOC);
+            if ($s_res) $shop_id = (int)$s_res['shop_id'];
         }
 
-        $conn->begin_transaction();
+        $conn->beginTransaction();
         try {
-            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, customer_lat, customer_lng, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'waiting', 'Delivery', ?, ?, NOW())");
-            if (!$stmt) throw new Exception('Failed to prepare order query: ' . $conn->error);
-            $stmt->bind_param('iissssddddd', $shop_id, $user_id, $customer_name, $order_ref, $store_name, $items_summary, $subtotal, $delivery_fee, $total_amount, $customer_lat, $customer_lng);
-            if (!$stmt->execute()) throw new Exception('Failed to save order: ' . $stmt->error);
-            $order_id = $stmt->insert_id;
-            $stmt->close();
+            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, customer_lat, customer_lng, created_at) VALUES (:shop_id, :cust_id, :cust_name, :ref, :store_name, :summary, :subtotal, :fee, :total, 'PENDING', 'waiting', 'Delivery', :lat, :lng, NOW())");
+            $stmt->execute([
+                ':shop_id'    => $shop_id,
+                ':cust_id'    => $user_id,
+                ':cust_name'  => $customer_name,
+                ':ref'        => $order_ref,
+                ':store_name' => $store_name,
+                ':summary'    => $items_summary,
+                ':subtotal'   => $subtotal,
+                ':fee'        => $delivery_fee,
+                ':total'      => $total_amount,
+                ':lat'        => $customer_lat,
+                ':lng'        => $customer_lng,
+            ]);
+            $order_id = (int)$conn->lastInsertId();
 
             // Insert into food_order_items
-            $item_stmt = $conn->prepare("INSERT INTO food_order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            if ($item_stmt) {
-                foreach ($clean as $x) {
-                    $item_stmt->bind_param('issidds', $order_id, $x['name'], $x['store'], $x['qty'], $x['price'], $x['line'], $x['icon']);
-                    $item_stmt->execute();
-                }
-                $item_stmt->close();
+            $item_stmt = $conn->prepare("INSERT INTO food_order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (:oid, :name, :store, :qty, :price, :line, :icon)");
+            foreach ($clean as $x) {
+                $item_stmt->execute([
+                    ':oid'   => $order_id,
+                    ':name'  => $x['name'],
+                    ':store' => $x['store'],
+                    ':qty'   => $x['qty'],
+                    ':price' => $x['price'],
+                    ':line'  => $x['line'],
+                    ':icon'  => $x['icon'],
+                ]);
             }
 
             // Insert into order_items compatibility table
-            $c_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            if ($c_stmt) {
-                foreach ($clean as $x) {
-                    $c_stmt->bind_param('issidds', $order_id, $x['name'], $x['store'], $x['qty'], $x['price'], $x['line'], $x['icon']);
-                    $c_stmt->execute();
-                }
-                $c_stmt->close();
+            $c_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (:oid, :name, :store, :qty, :price, :line, :icon)");
+            foreach ($clean as $x) {
+                $c_stmt->execute([
+                    ':oid'   => $order_id,
+                    ':name'  => $x['name'],
+                    ':store' => $x['store'],
+                    ':qty'   => $x['qty'],
+                    ':price' => $x['price'],
+                    ':line'  => $x['line'],
+                    ':icon'  => $x['icon'],
+                ]);
             }
 
             // Audit Log: PENDING
@@ -166,7 +179,7 @@ if ($method === 'POST') {
                 'store_name'   => $store_name
             ]);
         } catch (Throwable $e) {
-            $conn->rollback();
+            if ($conn->inTransaction()) $conn->rollBack();
             respond(false, $e->getMessage(), [], 500);
         }
     }
@@ -177,15 +190,13 @@ if ($method === 'POST') {
         if ($order_id <= 0) respond(false, 'Invalid order ID.', [], 400);
 
         // Fetch current order state
-        $stmt = $conn->prepare("SELECT order_id, shop_id, customer_id, customer_name, order_ref, store_name, subtotal, delivery_fee, total_amount, status, delivery_status, chef_id, rider_id FROM food_orders WHERE order_id = ? LIMIT 1 FOR UPDATE");
-        $conn->begin_transaction();
-        $stmt->bind_param('i', $order_id);
-        $stmt->execute();
-        $order = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
+        $conn->beginTransaction();
+        $stmt = $conn->prepare("SELECT order_id, shop_id, customer_id, customer_name, order_ref, store_name, subtotal, delivery_fee, total_amount, status, delivery_status, chef_id, rider_id FROM food_orders WHERE order_id = :oid LIMIT 1 FOR UPDATE");
+        $stmt->execute([':oid' => $order_id]);
+        $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$order) {
-            $conn->rollback();
+            $conn->rollBack();
             respond(false, 'Order not found.', [], 404);
         }
 
@@ -212,7 +223,7 @@ if ($method === 'POST') {
         }
 
         if ($target_status === '') {
-            $conn->rollback();
+            $conn->rollBack();
             respond(false, 'No valid target status specified.', [], 422);
         }
 
@@ -239,7 +250,7 @@ if ($method === 'POST') {
             if ($target_status === 'OUT_FOR_DELIVERY') {
                 if (in_array($current_canonical, ['READY_FOR_PICKUP', 'READY'], true)) {
                     if (!empty($order['rider_id']) && (int)$order['rider_id'] !== $user_id) {
-                        $conn->rollback();
+                        $conn->rollBack();
                         respond(false, 'Order is already assigned to another rider.', [], 409);
                     }
                     $allowed = true;
@@ -275,7 +286,7 @@ if ($method === 'POST') {
         }
 
         if (!$allowed) {
-            $conn->rollback();
+            $conn->rollBack();
             respond(false, "Invalid transition from {$current_canonical} to {$target_status} for role {$role}.", [
                 'current_status'   => $current_canonical,
                 'target_status'    => $target_status,
@@ -295,43 +306,37 @@ if ($method === 'POST') {
                 $rider_id_val = $user_id;
 
                 // Sync with riders table
-                $u_rider = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = ? WHERE user_id = ? OR rider_id = ?");
-                if ($u_rider) {
-                    $u_rider->bind_param('sii', $order['order_ref'], $user_id, $user_id);
-                    $u_rider->execute();
-                    $u_rider->close();
-                }
+                $u_rider = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE user_id = :uid OR rider_id = :rid");
+                $u_rider->execute([':ref' => $order['order_ref'], ':uid' => $user_id, ':rid' => $user_id]);
             }
             if ($target_status === 'DELIVERED' && $rider_id_val) {
                 // Free up rider status
-                $u_rider = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE user_id = ? OR rider_id = ?");
-                if ($u_rider) {
-                    $u_rider->bind_param('ii', $rider_id_val, $rider_id_val);
-                    $u_rider->execute();
-                    $u_rider->close();
-                }
+                $u_rider = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE user_id = :uid OR rider_id = :rid");
+                $u_rider->execute([':uid' => $rider_id_val, ':rid' => $rider_id_val]);
             }
 
             // Update food_orders record
-            $upd = $conn->prepare("UPDATE food_orders SET status = ?, delivery_status = ?, chef_id = ?, rider_id = ?, updated_at = NOW() WHERE order_id = ?");
-            if (!$upd) throw new Exception('Failed to prepare status update query: ' . $conn->error);
-            $upd->bind_param('ssiii', $target_status, $new_delivery_status, $chef_id_val, $rider_id_val, $order_id);
-            if (!$upd->execute()) throw new Exception('Failed to execute status update: ' . $upd->error);
-            $upd->close();
+            $upd = $conn->prepare("UPDATE food_orders SET status = :st, delivery_status = :dst, chef_id = :cid, rider_id = :rid, updated_at = NOW() WHERE order_id = :oid");
+            $upd->execute([
+                ':st'  => $target_status,
+                ':dst' => $new_delivery_status,
+                ':cid' => $chef_id_val,
+                ':rid' => $rider_id_val,
+                ':oid' => $order_id,
+            ]);
 
             // Settle transaction if target is SETTLED
             if ($target_status === 'SETTLED') {
-                $settle_stmt = $conn->prepare("INSERT INTO settlements (order_id, admin_id, subtotal, delivery_fee, total_amount, payment_method, status, notes, reconciled_at) VALUES (?, ?, ?, ?, ?, 'Cash on Delivery', 'SETTLED', ?, NOW()) ON DUPLICATE KEY UPDATE status = 'SETTLED', reconciled_at = NOW(), notes = VALUES(notes)");
-                if ($settle_stmt) {
-                    $admin_id_val = ($role === 'admin') ? $user_id : 14;
-                    $sub_val = (float)$order['subtotal'];
-                    $del_val = (float)$order['delivery_fee'];
-                    $tot_val = (float)$order['total_amount'];
-                    $notes_val = 'Reconciled & settled by ' . $user_name;
-                    $settle_stmt->bind_param('iiddds', $order_id, $admin_id_val, $sub_val, $del_val, $tot_val, $notes_val);
-                    $settle_stmt->execute();
-                    $settle_stmt->close();
-                }
+                $settle_stmt = $conn->prepare("INSERT INTO settlements (order_id, admin_id, subtotal, delivery_fee, total_amount, payment_method, status, notes, reconciled_at) VALUES (:oid, :aid, :sub, :del, :tot, 'Cash on Delivery', 'SETTLED', :notes, NOW()) ON CONFLICT (order_id) DO UPDATE SET status = 'SETTLED', reconciled_at = NOW(), notes = EXCLUDED.notes");
+                $admin_id_val = ($role === 'admin') ? $user_id : 14;
+                $settle_stmt->execute([
+                    ':oid'   => $order_id,
+                    ':aid'   => $admin_id_val,
+                    ':sub'   => (float)$order['subtotal'],
+                    ':del'   => (float)$order['delivery_fee'],
+                    ':tot'   => (float)$order['total_amount'],
+                    ':notes' => 'Reconciled & settled by ' . $user_name,
+                ]);
             }
 
             // Record audit log entry
@@ -378,7 +383,7 @@ if ($method === 'POST') {
                 'previous_status' => $current_canonical
             ]);
         } catch (Throwable $e) {
-            $conn->rollback();
+            if ($conn->inTransaction()) $conn->rollBack();
             respond(false, 'Transaction failed: ' . $e->getMessage(), [], 500);
         }
     }
@@ -393,13 +398,9 @@ if ($method === 'GET') {
     // Customer orders
     if ($action === 'my_orders') {
         if ($role !== 'customer') respond(false, 'Unauthorized.', [], 403);
-        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, rider_id, rider_lat, rider_lng, customer_lat, customer_lng, DATE_FORMAT(created_at, '%b %d, %Y • %h:%i %p') AS created_at FROM food_orders WHERE customer_id = ? ORDER BY order_id DESC LIMIT 40");
-        $stmt->bind_param('i', $user_id);
-        $stmt->execute();
-        $res = $stmt->get_result();
-        $orders = [];
-        while ($r = $res->fetch_assoc()) $orders[] = $r;
-        $stmt->close();
+        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, rider_id, rider_lat, rider_lng, customer_lat, customer_lng, TO_CHAR(created_at, 'Mon DD, YYYY • HH12:MI AM') AS created_at FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
+        $stmt->execute([':cid' => $user_id]);
+        $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
         respond(true, '', ['orders' => $orders]);
     }
 
@@ -407,28 +408,22 @@ if ($method === 'GET') {
     if ($action === 'audit_logs') {
         $order_id = (int)($_GET['order_id'] ?? 0);
         if ($order_id > 0) {
-            $stmt = $conn->prepare("SELECT a.log_id, a.order_id, o.order_ref, a.old_status, a.new_status, a.action_by_user_id, a.action_by_role, u.full_name AS action_by_name, a.notes, DATE_FORMAT(a.created_at, '%b %d, %Y • %h:%i:%s %p') AS created_at FROM order_audit_logs a LEFT JOIN food_orders o ON a.order_id = o.order_id LEFT JOIN users u ON a.action_by_user_id = u.user_id WHERE a.order_id = ? ORDER BY a.log_id ASC");
-            $stmt->bind_param('i', $order_id);
+            $stmt = $conn->prepare("SELECT a.log_id, a.order_id, o.order_ref, a.old_status, a.new_status, a.action_by_user_id, a.action_by_role, u.full_name AS action_by_name, a.notes, TO_CHAR(a.created_at, 'Mon DD, YYYY • HH12:MI:SS AM') AS created_at FROM order_audit_logs a LEFT JOIN food_orders o ON a.order_id = o.order_id LEFT JOIN users u ON a.action_by_user_id = u.user_id WHERE a.order_id = :oid ORDER BY a.log_id ASC");
+            $stmt->execute([':oid' => $order_id]);
         } else {
             if ($role !== 'admin') respond(false, 'Only Admin can view complete audit logs.', [], 403);
-            $stmt = $conn->prepare("SELECT a.log_id, a.order_id, o.order_ref, o.store_name, a.old_status, a.new_status, a.action_by_user_id, a.action_by_role, u.full_name AS action_by_name, a.notes, DATE_FORMAT(a.created_at, '%b %d, %Y • %h:%i:%s %p') AS created_at FROM order_audit_logs a LEFT JOIN food_orders o ON a.order_id = o.order_id LEFT JOIN users u ON a.action_by_user_id = u.user_id ORDER BY a.log_id DESC LIMIT 100");
+            $stmt = $conn->prepare("SELECT a.log_id, a.order_id, o.order_ref, o.store_name, a.old_status, a.new_status, a.action_by_user_id, a.action_by_role, u.full_name AS action_by_name, a.notes, TO_CHAR(a.created_at, 'Mon DD, YYYY • HH12:MI:SS AM') AS created_at FROM order_audit_logs a LEFT JOIN food_orders o ON a.order_id = o.order_id LEFT JOIN users u ON a.action_by_user_id = u.user_id ORDER BY a.log_id DESC LIMIT 100");
+            $stmt->execute();
         }
-        $stmt->execute();
-        $res = $stmt->get_result();
-        $logs = [];
-        while ($row = $res->fetch_assoc()) $logs[] = $row;
-        $stmt->close();
+        $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
         respond(true, '', ['audit_logs' => $logs]);
     }
 
     // Settlements list
     if ($action === 'settlements') {
         if ($role !== 'admin') respond(false, 'Only Admin can view settlements.', [], 403);
-        $res = $conn->query("SELECT s.*, o.order_ref, o.store_name, o.customer_name, u.full_name AS admin_name, DATE_FORMAT(s.reconciled_at, '%b %d, %Y • %h:%i %p') AS formatted_reconciled_at FROM settlements s LEFT JOIN food_orders o ON s.order_id = o.order_id LEFT JOIN users u ON s.admin_id = u.user_id ORDER BY s.settlement_id DESC LIMIT 100");
-        $settlements = [];
-        if ($res) {
-            while ($row = $res->fetch_assoc()) $settlements[] = $row;
-        }
+        $stmt = $conn->query("SELECT s.*, o.order_ref, o.store_name, o.customer_name, u.full_name AS admin_name, TO_CHAR(s.reconciled_at, 'Mon DD, YYYY • HH12:MI AM') AS formatted_reconciled_at FROM settlements s LEFT JOIN food_orders o ON s.order_id = o.order_id LEFT JOIN users u ON s.admin_id = u.user_id ORDER BY s.settlement_id DESC LIMIT 100");
+        $settlements = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
         respond(true, '', ['settlements' => $settlements]);
     }
 }

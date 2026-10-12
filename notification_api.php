@@ -5,7 +5,8 @@ header('Content-Type: application/json; charset=utf-8');
 
 if (!isset($_SESSION['user_id'], $_SESSION['role'])) {
     http_response_code(401);
-    echo json_encode(['success'=>false,'message'=>'Session expired']); exit;
+    echo json_encode(['success' => false, 'message' => 'Session expired']);
+    exit;
 }
 $user_id = (int)$_SESSION['user_id'];
 $method = $_SERVER['REQUEST_METHOD'];
@@ -14,11 +15,9 @@ if ($method === 'GET') {
     $action = $_GET['action'] ?? '';
     
     // Quick unread count check
-    $stmt2 = $conn->prepare("SELECT COUNT(*) c FROM notifications WHERE user_id=? AND is_read=0");
-    $stmt2->bind_param('i', $user_id);
-    $stmt2->execute();
-    $unread = (int)($stmt2->get_result()->fetch_assoc()['c'] ?? 0);
-    $stmt2->close();
+    $stmt2 = $conn->prepare("SELECT COUNT(*) AS c FROM notifications WHERE user_id = :uid AND is_read = 0");
+    $stmt2->execute([':uid' => $user_id]);
+    $unread = (int)($stmt2->fetchColumn() ?: 0);
     
     if ($action === 'get_unread_count') {
         echo json_encode(['success' => true, 'unread' => $unread, 'unread_count' => $unread]);
@@ -26,16 +25,15 @@ if ($method === 'GET') {
     }
 
     $limit = min(50, max(1, (int)($_GET['limit'] ?? 30)));
-    $stmt = $conn->prepare("SELECT notification_id, order_id, notification_type, title, message, is_read, DATE_FORMAT(created_at, '%b %d, %Y • %h:%i %p') created_at FROM notifications WHERE user_id=? ORDER BY notification_id DESC LIMIT ?");
-    $stmt->bind_param('ii', $user_id, $limit);
+    $stmt = $conn->prepare("SELECT notification_id, order_id, notification_type, title, message, is_read, TO_CHAR(created_at, 'Mon DD, YYYY • HH12:MI AM') AS created_at FROM notifications WHERE user_id = :uid ORDER BY notification_id DESC LIMIT :lim");
+    $stmt->bindValue(':uid', $user_id, PDO::PARAM_INT);
+    $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
     $stmt->execute();
-    $res = $stmt->get_result();
-    $rows = [];
-    while ($r = $res->fetch_assoc()) {
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) {
         $r['status'] = ((int)$r['is_read'] === 0) ? 'unread' : 'read';
-        $rows[] = $r;
     }
-    $stmt->close();
+    unset($r);
 
     echo json_encode([
         'success' => true,
@@ -49,15 +47,17 @@ if ($method === 'GET') {
 $payload = json_decode(file_get_contents('php://input'), true) ?: $_POST;
 $action = $payload['action'] ?? '';
 if ($action === 'mark_read') {
-    $id=(int)($payload['notification_id']??0);
-    $stmt=$conn->prepare("UPDATE notifications SET is_read=1 WHERE notification_id=? AND user_id=?");
-    $stmt->bind_param('ii',$id,$user_id); $ok=$stmt->execute(); $stmt->close();
-    echo json_encode(['success'=>$ok]); exit;
+    $id = (int)($payload['notification_id'] ?? 0);
+    $stmt = $conn->prepare("UPDATE notifications SET is_read = 1 WHERE notification_id = :nid AND user_id = :uid");
+    $ok = $stmt->execute([':nid' => $id, ':uid' => $user_id]);
+    echo json_encode(['success' => (bool)$ok]);
+    exit;
 }
 if ($action === 'mark_all_read') {
-    $stmt=$conn->prepare("UPDATE notifications SET is_read=1 WHERE user_id=? AND is_read=0");
-    $stmt->bind_param('i',$user_id); $ok=$stmt->execute(); $stmt->close();
-    echo json_encode(['success'=>$ok]); exit;
+    $stmt = $conn->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = :uid AND is_read = 0");
+    $ok = $stmt->execute([':uid' => $user_id]);
+    echo json_encode(['success' => (bool)$ok]);
+    exit;
 }
-echo json_encode(['success'=>false,'message'=>'Unknown notification action']);
+echo json_encode(['success' => false, 'message' => 'Unknown notification action']);
 ?>

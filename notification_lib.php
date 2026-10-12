@@ -1,28 +1,20 @@
 <?php
-// Food Dash In-App Notification & Audit Logging Engine
+// Food Dash In-App Notification & Audit Logging Engine (PostgreSQL PDO)
 
 function create_notification($conn, int $user_id, string $type, string $title, string $message, ?int $order_id = null): bool {
-    if ($conn instanceof mysqli) {
-        $stmt = $conn->prepare("INSERT INTO notifications (user_id, order_id, notification_type, title, message, is_read, created_at) VALUES (?, ?, ?, ?, ?, 0, NOW())");
-        if (!$stmt) return false;
-        $stmt->bind_param('iisss', $user_id, $order_id, $type, $title, $message);
-        $ok = $stmt->execute();
-        $stmt->close();
-        return $ok;
-    } elseif ($conn instanceof PDO) {
-        $stmt = $conn->prepare("INSERT INTO notifications (user_id, order_id, notification_type, title, message, is_read, created_at) VALUES (:uid, :oid, :type, :title, :msg, 0, NOW())");
-        return $stmt->execute([
-            ':uid'   => $user_id,
-            ':oid'   => $order_id,
-            ':type'  => $type,
-            ':title' => $title,
-            ':msg'   => $message
-        ]);
-    }
-    return false;
+    if (!($conn instanceof PDO)) return false;
+    $stmt = $conn->prepare("INSERT INTO notifications (user_id, order_id, notification_type, title, message, is_read, created_at) VALUES (:uid, :oid, :type, :title, :msg, 0, NOW())");
+    return $stmt->execute([
+        ':uid'   => $user_id,
+        ':oid'   => $order_id,
+        ':type'  => $type,
+        ':title' => $title,
+        ':msg'   => $message
+    ]);
 }
 
 function notify_role($conn, string $role, ...$args): int {
+    if (!($conn instanceof PDO)) return 0;
     $count = 0;
     $role = strtolower(trim($role));
     $roles = [$role];
@@ -48,53 +40,30 @@ function notify_role($conn, string $role, ...$args): int {
         $message = (string)$args[1];
     }
 
-    if ($conn instanceof mysqli) {
-        $placeholders = implode(',', array_fill(0, count($roles), '?'));
-        $types = str_repeat('s', count($roles));
-        $stmt = $conn->prepare("SELECT user_id FROM users WHERE LOWER(role) IN ($placeholders)");
-        if (!$stmt) return 0;
-        $stmt->bind_param($types, ...$roles);
-        $stmt->execute();
-        $res = $stmt->get_result();
-        while ($row = $res->fetch_assoc()) {
-            if (create_notification($conn, (int)$row['user_id'], $type, $title, $message, $order_id)) $count++;
-        }
-        $stmt->close();
-    } elseif ($conn instanceof PDO) {
-        $in = implode(',', array_fill(0, count($roles), '?'));
-        $stmt = $conn->prepare("SELECT user_id FROM users WHERE LOWER(role) IN ($in)");
-        $stmt->execute($roles);
-        while ($row = $stmt->fetch()) {
-            if (create_notification($conn, (int)$row['user_id'], $type, $title, $message, $order_id)) $count++;
-        }
+    $in = implode(',', array_fill(0, count($roles), '?'));
+    $stmt = $conn->prepare("SELECT user_id FROM users WHERE LOWER(role) IN ($in)");
+    $stmt->execute($roles);
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        if (create_notification($conn, (int)$row['user_id'], $type, $title, $message, $order_id)) $count++;
     }
     return $count;
 }
 
 function record_order_audit_log($conn, int $order_id, ?string $old_status, string $new_status, ?int $user_id, string $role, ?string $notes = null): bool {
+    if (!($conn instanceof PDO)) return false;
     $old_status_val = $old_status !== null ? strtoupper(trim($old_status)) : null;
     $new_status_val = strtoupper(trim($new_status));
     $role_val = strtolower(trim($role));
 
-    if ($conn instanceof mysqli) {
-        $stmt = $conn->prepare("INSERT INTO order_audit_logs (order_id, old_status, new_status, action_by_user_id, action_by_role, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
-        if (!$stmt) return false;
-        $stmt->bind_param('ississ', $order_id, $old_status_val, $new_status_val, $user_id, $role_val, $notes);
-        $ok = $stmt->execute();
-        $stmt->close();
-        return $ok;
-    } elseif ($conn instanceof PDO) {
-        $stmt = $conn->prepare("INSERT INTO order_audit_logs (order_id, old_status, new_status, action_by_user_id, action_by_role, notes, created_at) VALUES (:oid, :old_st, :new_st, :uid, :role, :notes, NOW())");
-        return $stmt->execute([
-            ':oid'    => $order_id,
-            ':old_st' => $old_status_val,
-            ':new_st' => $new_status_val,
-            ':uid'    => $user_id,
-            ':role'   => $role_val,
-            ':notes'  => $notes
-        ]);
-    }
-    return false;
+    $stmt = $conn->prepare("INSERT INTO order_audit_logs (order_id, old_status, new_status, action_by_user_id, action_by_role, notes, created_at) VALUES (:oid, :old_st, :new_st, :uid, :role, :notes, NOW())");
+    return $stmt->execute([
+        ':oid'    => $order_id,
+        ':old_st' => $old_status_val,
+        ':new_st' => $new_status_val,
+        ':uid'    => $user_id,
+        ':role'   => $role_val,
+        ':notes'  => $notes
+    ]);
 }
 
 /**
@@ -132,7 +101,7 @@ function validate_strong_password(string $password): array {
  * Centralized Security & Activity Audit Logger
  * Records immutable events to system_audit_logs table.
  *
- * @param mysqli|PDO $conn
+ * @param PDO $conn
  * @param int|null $user_id
  * @param string $action (e.g. LOGIN_SUCCESS, LOGIN_FAILED, LOGOUT, USER_CREATED, etc.)
  * @param string|null $details
@@ -141,6 +110,7 @@ function validate_strong_password(string $password): array {
  * @return bool
  */
 function log_activity($conn, ?int $user_id, string $action, ?string $details = null, ?string $override_username = null, ?string $override_role = null): bool {
+    if (!($conn instanceof PDO)) return false;
     $action_val = strtoupper(trim($action));
     $ip_address = substr($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1', 0, 45);
     $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? substr((string)$_SERVER['HTTP_USER_AGENT'], 0, 255) : 'System/API';
@@ -156,25 +126,11 @@ function log_activity($conn, ?int $user_id, string $action, ?string $details = n
         }
 
         if ($username === null || $role === null) {
-            if ($conn instanceof mysqli) {
-                $stmt = $conn->prepare("SELECT username, role FROM users WHERE user_id = ? LIMIT 1");
-                if ($stmt) {
-                    $stmt->bind_param('i', $actual_user_id);
-                    $stmt->execute();
-                    $res = $stmt->get_result();
-                    if ($row = $res->fetch_assoc()) {
-                        if ($username === null) $username = $row['username'];
-                        if ($role === null) $role = $row['role'];
-                    }
-                    $stmt->close();
-                }
-            } elseif ($conn instanceof PDO) {
-                $stmt = $conn->prepare("SELECT username, role FROM users WHERE user_id = :uid LIMIT 1");
-                $stmt->execute([':uid' => $actual_user_id]);
-                if ($row = $stmt->fetch()) {
-                    if ($username === null) $username = $row['username'];
-                    if ($role === null) $role = $row['role'];
-                }
+            $stmt = $conn->prepare("SELECT username, role FROM users WHERE user_id = :uid LIMIT 1");
+            $stmt->execute([':uid' => $actual_user_id]);
+            if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                if ($username === null) $username = $row['username'];
+                if ($role === null) $role = $row['role'];
             }
         }
     } elseif (isset($_SESSION['user_id'])) {
@@ -183,26 +139,15 @@ function log_activity($conn, ?int $user_id, string $action, ?string $details = n
         if ($role === null) $role = $_SESSION['role'] ?? null;
     }
 
-    if ($conn instanceof mysqli) {
-        $stmt = $conn->prepare("INSERT INTO system_audit_logs (user_id, username, role, action, details, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
-        if (!$stmt) return false;
-        $stmt->bind_param('issssss', $actual_user_id, $username, $role, $action_val, $details, $ip_address, $user_agent);
-        $ok = $stmt->execute();
-        $stmt->close();
-        return $ok;
-    } elseif ($conn instanceof PDO) {
-        $stmt = $conn->prepare("INSERT INTO system_audit_logs (user_id, username, role, action, details, ip_address, user_agent, created_at) VALUES (:uid, :uname, :role, :action, :details, :ip, :ua, NOW())");
-        return $stmt->execute([
-            ':uid'     => $actual_user_id,
-            ':uname'   => $username,
-            ':role'    => $role,
-            ':action'  => $action_val,
-            ':details' => $details,
-            ':ip'      => $ip_address,
-            ':ua'      => $user_agent
-        ]);
-    }
-
-    return false;
+    $stmt = $conn->prepare("INSERT INTO system_audit_logs (user_id, username, role, action, details, ip_address, user_agent, created_at) VALUES (:uid, :uname, :role, :action, :details, :ip, :ua, NOW())");
+    return $stmt->execute([
+        ':uid'     => $actual_user_id,
+        ':uname'   => $username,
+        ':role'    => $role,
+        ':action'  => $action_val,
+        ':details' => $details,
+        ':ip'      => $ip_address,
+        ':ua'      => $user_agent
+    ]);
 }
 ?>

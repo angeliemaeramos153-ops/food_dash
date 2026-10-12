@@ -14,9 +14,13 @@ $msg = ''; $error = '';
 
 // Match the rider account to the existing riders table by name, preserving the original schema.
 $full = trim($user_name);
-$stmt = $conn->prepare("SELECT rider_id, rider_name, status, current_order FROM riders WHERE rider_name = ? LIMIT 1");
-$stmt->bind_param('s', $full); $stmt->execute(); $r = $stmt->get_result()->fetch_assoc(); $stmt->close();
-if (!$r) $r = $conn->query("SELECT rider_id, rider_name, status, current_order FROM riders ORDER BY rider_id ASC LIMIT 1")->fetch_assoc();
+$stmt = $conn->prepare("SELECT rider_id, rider_name, status, current_order FROM riders WHERE rider_name = :rname LIMIT 1");
+$stmt->execute([':rname' => $full]);
+$r = $stmt->fetch(PDO::FETCH_ASSOC);
+if (!$r) {
+    $q = $conn->query("SELECT rider_id, rider_name, status, current_order FROM riders ORDER BY rider_id ASC LIMIT 1");
+    $r = $q ? $q->fetch(PDO::FETCH_ASSOC) : null;
+}
 $rid = $r ? (int)$r['rider_id'] : 0;
 
 // Delivery actions: claim a ready order, start the trip, mark near, then complete.
@@ -32,11 +36,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
     $order_id = (int)($input['order_id'] ?? 0);
     
     if ($order_id > 0) {
-        $stmt = $conn->prepare("SELECT order_id, customer_id, customer_name, order_ref, status, delivery_status, rider_id, total_amount FROM food_orders WHERE order_id=? LIMIT 1");
-        $stmt->bind_param('i', $order_id);
-        $stmt->execute();
-        $order = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
+        $stmt = $conn->prepare("SELECT order_id, customer_id, customer_name, order_ref, status, delivery_status, rider_id, total_amount FROM food_orders WHERE order_id = :oid LIMIT 1");
+        $stmt->execute([':oid' => $order_id]);
+        $order = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($is_ajax) {
             try {
@@ -49,17 +51,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     if (!in_array($old_st, ['READY_FOR_PICKUP', 'READY']) || (!empty($order['rider_id']) && (int)$order['rider_id'] !== 0)) {
                         throw new Exception('This order is not ready for pickup or has already been assigned.');
                     }
-                    $stmt = $conn->prepare("UPDATE food_orders SET rider_id=?, delivery_status='out_for_delivery', status='OUT_FOR_DELIVERY', updated_at=NOW() WHERE order_id=? AND UPPER(status) IN ('READY_FOR_PICKUP', 'READY') AND (rider_id IS NULL OR rider_id=0)");
-                    $stmt->bind_param('ii', $rid, $order_id);
-                    $stmt->execute();
-                    $changed = $stmt->affected_rows;
-                    $stmt->close();
+                    $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'out_for_delivery', status = 'OUT_FOR_DELIVERY', updated_at = NOW() WHERE order_id = :oid AND UPPER(status) IN ('READY_FOR_PICKUP', 'READY') AND (rider_id IS NULL OR rider_id = 0)");
+                    $stmt->execute([':rid' => $rid, ':oid' => $order_id]);
+                    $changed = $stmt->rowCount();
 
                     if ($changed) {
-                        $stmt = $conn->prepare("UPDATE riders SET status='on_delivery', current_order=? WHERE rider_id=?");
-                        $stmt->bind_param('si', $ref, $rid);
-                        $stmt->execute();
-                        $stmt->close();
+                        $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
+                        $stmt->execute([':ref' => $ref, ':rid' => $rid]);
 
                         record_order_audit_log($conn, $order_id, $old_st, 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Order claimed by rider ' . $user_name);
                         create_notification($conn, $customer_id, 'rider_assigned', 'Order Out for Delivery', 'Rider ' . $user_name . ' has picked up your order ' . $ref . ' and is on the way!', $order_id);
@@ -74,10 +72,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     }
                 } elseif ($action === 'on_way') {
                     if ((int)($order['rider_id'] ?? 0) !== $rid) throw new Exception('You are not assigned to this order.');
-                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status='on_the_way', updated_at=NOW() WHERE order_id=? AND rider_id=?");
-                    $stmt->bind_param('ii', $order_id, $rid);
-                    $stmt->execute();
-                    $stmt->close();
+                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', updated_at = NOW() WHERE order_id = :oid AND rider_id = :rid");
+                    $stmt->execute([':oid' => $order_id, ':rid' => $rid]);
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Rider is en route to customer');
                     create_notification($conn, $customer_id, 'rider_on_way', 'Rider On the Way', 'Rider ' . $user_name . ' is actively heading towards your delivery address.', $order_id);
@@ -88,10 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     exit();
                 } elseif ($action === 'near') {
                     if ((int)($order['rider_id'] ?? 0) !== $rid) throw new Exception('You are not assigned to this order.');
-                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status='near_customer', updated_at=NOW() WHERE order_id=? AND rider_id=?");
-                    $stmt->bind_param('ii', $order_id, $rid);
-                    $stmt->execute();
-                    $stmt->close();
+                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'near_customer', updated_at = NOW() WHERE order_id = :oid AND rider_id = :rid");
+                    $stmt->execute([':oid' => $order_id, ':rid' => $rid]);
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Rider is near customer drop-off');
                     create_notification($conn, $customer_id, 'rider_near', 'Rider Arriving Soon', 'Your rider is near your delivery address. Please prepare to receive ' . $ref . '.', $order_id);
@@ -102,15 +96,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     exit();
                 } elseif ($action === 'delivered') {
                     if ((int)($order['rider_id'] ?? 0) !== $rid) throw new Exception('You are not assigned to this order.');
-                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status='delivered', status='DELIVERED', updated_at=NOW() WHERE order_id=? AND rider_id=?");
-                    $stmt->bind_param('ii', $order_id, $rid);
-                    $stmt->execute();
-                    $stmt->close();
+                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', updated_at = NOW() WHERE order_id = :oid AND rider_id = :rid");
+                    $stmt->execute([':oid' => $order_id, ':rid' => $rid]);
 
-                    $stmt = $conn->prepare("UPDATE riders SET status='waiting', current_order='None' WHERE rider_id=?");
-                    $stmt->bind_param('i', $rid);
-                    $stmt->execute();
-                    $stmt->close();
+                    $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid");
+                    $stmt->execute([':rid' => $rid]);
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'DELIVERED', $user_id, 'rider', 'Order successfully delivered to customer by ' . $user_name);
                     create_notification($conn, $customer_id, 'delivered', 'Order Delivered!', 'Your order ' . $ref . ' has been marked delivered. Enjoy your meal!', $order_id);
@@ -140,15 +130,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
 
                 if ($action === 'claim') {
                     if (in_array($old_st, ['READY_FOR_PICKUP', 'READY']) && (empty($order['rider_id']) || (int)$order['rider_id'] === 0)) {
-                        $stmt = $conn->prepare("UPDATE food_orders SET rider_id=?, delivery_status='out_for_delivery', status='OUT_FOR_DELIVERY', updated_at=NOW() WHERE order_id=?");
-                        $stmt->bind_param('ii', $rid, $order_id);
-                        $stmt->execute();
-                        $stmt->close();
+                        $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'out_for_delivery', status = 'OUT_FOR_DELIVERY', updated_at = NOW() WHERE order_id = :oid");
+                        $stmt->execute([':rid' => $rid, ':oid' => $order_id]);
 
-                        $stmt = $conn->prepare("UPDATE riders SET status='on_delivery', current_order=? WHERE rider_id=?");
-                        $stmt->bind_param('si', $ref, $rid);
-                        $stmt->execute();
-                        $stmt->close();
+                        $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
+                        $stmt->execute([':ref' => $ref, ':rid' => $rid]);
 
                         record_order_audit_log($conn, $order_id, $old_st, 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Order claimed by rider ' . $user_name);
                         create_notification($conn, $customer_id, 'rider_assigned', 'Order Out for Delivery', 'Rider ' . $user_name . ' has picked up your order ' . $ref . '.', $order_id);
@@ -157,33 +143,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                         $error = 'Order is already assigned or not ready.';
                     }
                 } elseif ($action === 'on_way' && (int)($order['rider_id'] ?? 0) === $rid) {
-                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status='on_the_way', updated_at=NOW() WHERE order_id=?");
-                    $stmt->bind_param('i', $order_id);
-                    $stmt->execute();
-                    $stmt->close();
+                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', updated_at = NOW() WHERE order_id = :oid");
+                    $stmt->execute([':oid' => $order_id]);
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Rider en route');
                     create_notification($conn, $customer_id, 'rider_on_way', 'Rider on the way', 'Your order ' . $ref . ' is on the way.', $order_id);
                     $msg = 'Customer notified that you are on the way.';
                 } elseif ($action === 'near' && (int)($order['rider_id'] ?? 0) === $rid) {
-                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status='near_customer', updated_at=NOW() WHERE order_id=?");
-                    $stmt->bind_param('i', $order_id);
-                    $stmt->execute();
-                    $stmt->close();
+                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'near_customer', updated_at = NOW() WHERE order_id = :oid");
+                    $stmt->execute([':oid' => $order_id]);
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Rider near customer');
                     create_notification($conn, $customer_id, 'rider_near', 'Rider near', 'Your rider is near.', $order_id);
                     $msg = 'Customer notified that you are near.';
                 } elseif ($action === 'delivered' && (int)($order['rider_id'] ?? 0) === $rid) {
-                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status='delivered', status='DELIVERED', updated_at=NOW() WHERE order_id=?");
-                    $stmt->bind_param('i', $order_id);
-                    $stmt->execute();
-                    $stmt->close();
+                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', updated_at = NOW() WHERE order_id = :oid");
+                    $stmt->execute([':oid' => $order_id]);
 
-                    $stmt = $conn->prepare("UPDATE riders SET status='waiting', current_order='None' WHERE rider_id=?");
-                    $stmt->bind_param('i', $rid);
-                    $stmt->execute();
-                    $stmt->close();
+                    $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid");
+                    $stmt->execute([':rid' => $rid]);
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'DELIVERED', $user_id, 'rider', 'Order delivered by ' . $user_name);
                     create_notification($conn, $customer_id, 'delivered', 'Order delivered', 'Your order ' . $ref . ' has been delivered.', $order_id);
@@ -198,28 +176,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
     if (isset($input['action_status'])) {
         $status = ($input['status'] ?? '') === 'on_delivery' ? 'on_delivery' : 'waiting';
         $current = trim($input['current_order'] ?? ''); if ($status==='waiting') $current='None';
-        $stmt=$conn->prepare("UPDATE riders SET status=?, current_order=? WHERE rider_id=?"); $stmt->bind_param('ssi',$status,$current,$rid); $stmt->execute(); $stmt->close();
+        $stmt=$conn->prepare("UPDATE riders SET status = :st, current_order = :cur WHERE rider_id = :rid");
+        $stmt->execute([':st' => $status, ':cur' => $current, ':rid' => $rid]);
         $msg='Delivery status updated.';
     }
 }
 
 if ($r) {
-    $stmt=$conn->prepare("SELECT rider_id, rider_name, status, current_order FROM riders WHERE rider_id=?"); $stmt->bind_param('i',$rid); $stmt->execute(); $r=$stmt->get_result()->fetch_assoc(); $stmt->close();
+    $stmt=$conn->prepare("SELECT rider_id, rider_name, status, current_order FROM riders WHERE rider_id = :rid");
+    $stmt->execute([':rid' => $rid]);
+    $r = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
 $ready_orders=[]; $my_orders=[];
 if ($rid) {
-    $res=$conn->query("SELECT order_id,order_ref,customer_name,store_name,items_summary,total_amount,status,delivery_status,rider_id,created_at FROM food_orders WHERE (UPPER(status) IN ('READY_FOR_PICKUP', 'READY') AND (rider_id IS NULL OR rider_id=0)) OR (rider_id=".$rid." AND UPPER(status) IN ('OUT_FOR_DELIVERY','ON_DELIVERY','ON_THE_WAY','NEAR_CUSTOMER')) ORDER BY order_id DESC LIMIT 30");
-    if($res) {
-        while($o=$res->fetch_assoc()) {
-            if((int)($o['rider_id']??0)===$rid) $my_orders[]=$o;
-            else $ready_orders[]=$o;
-        }
+    $stmt = $conn->prepare("SELECT order_id,order_ref,customer_name,store_name,items_summary,total_amount,status,delivery_status,rider_id,created_at FROM food_orders WHERE (UPPER(status) IN ('READY_FOR_PICKUP', 'READY') AND (rider_id IS NULL OR rider_id=0)) OR (rider_id = :rid AND UPPER(status) IN ('OUT_FOR_DELIVERY','ON_DELIVERY','ON_THE_WAY','NEAR_CUSTOMER')) ORDER BY order_id DESC LIMIT 30");
+    $stmt->execute([':rid' => $rid]);
+    while($o = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        if((int)($o['rider_id']??0)===$rid) $my_orders[]=$o;
+        else $ready_orders[]=$o;
     }
 }
-$total_riders=(int)($conn->query("SELECT COUNT(*) c FROM riders")->fetch_assoc()['c']??0);
-$waiting=(int)($conn->query("SELECT COUNT(*) c FROM riders WHERE status='waiting'")->fetch_assoc()['c']??0);
-$on_delivery=(int)($conn->query("SELECT COUNT(*) c FROM riders WHERE status='on_delivery'")->fetch_assoc()['c']??0);
+$total_riders = (int)($conn->query("SELECT COUNT(*) AS c FROM riders")->fetchColumn() ?: 0);
+$waiting = (int)($conn->query("SELECT COUNT(*) AS c FROM riders WHERE status='waiting'")->fetchColumn() ?: 0);
+$on_delivery = (int)($conn->query("SELECT COUNT(*) AS c FROM riders WHERE status='on_delivery'")->fetchColumn() ?: 0);
 ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Food Dash - Rider</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"><style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
