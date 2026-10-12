@@ -88,11 +88,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $item_name = trim($_POST['item_name']);
         $shop_id = intval($_POST['shop_id']);
         $price = floatval($_POST['price']);
-        $is_recommended = isset($_POST['is_recommended']) ? 1 : 0;
+        $is_recommended = !empty($_POST['is_recommended']);
 
         if (!empty($item_name) && $shop_id > 0 && $price > 0) {
             $stmt = $conn->prepare("INSERT INTO menu_items (shop_id, item_name, price, is_recommended) VALUES (?, ?, ?, ?)");
-            $stmt->execute([$shop_id, $item_name, $price, $is_recommended]);
+            $stmt->bindValue(1, $shop_id, PDO::PARAM_INT);
+            $stmt->bindValue(2, $item_name, PDO::PARAM_STR);
+            $stmt->bindValue(3, $price);
+            $stmt->bindValue(4, $is_recommended, PDO::PARAM_BOOL);
+            $stmt->execute();
             $action_msg = "Menu item added!";
         }
     }
@@ -103,11 +107,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $item_name = trim($_POST['item_name']);
         $shop_id = intval($_POST['shop_id']);
         $price = floatval($_POST['price']);
-        $is_recommended = isset($_POST['is_recommended']) ? 1 : 0;
+        $is_recommended = !empty($_POST['is_recommended']);
 
         if ($item_id > 0 && !empty($item_name) && $shop_id > 0 && $price > 0) {
             $stmt = $conn->prepare("UPDATE menu_items SET shop_id = ?, item_name = ?, price = ?, is_recommended = ? WHERE item_id = ?");
-            $stmt->execute([$shop_id, $item_name, $price, $is_recommended, $item_id]);
+            $stmt->bindValue(1, $shop_id, PDO::PARAM_INT);
+            $stmt->bindValue(2, $item_name, PDO::PARAM_STR);
+            $stmt->bindValue(3, $price);
+            $stmt->bindValue(4, $is_recommended, PDO::PARAM_BOOL);
+            $stmt->bindValue(5, $item_id, PDO::PARAM_INT);
+            $stmt->execute();
             $action_msg = "Menu item updated!";
         }
     }
@@ -1459,14 +1468,17 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
                   <td><?php echo htmlspecialchars($m['shop_name']); ?></td>
                   <td>₱<?php echo number_format($m['price'], 2); ?></td>
                   <td>
-                    <?php if($m['is_recommended']): ?>
+                    <?php 
+                    $is_rec = !empty($m['is_recommended']) && $m['is_recommended'] !== 'f' && $m['is_recommended'] !== false;
+                    if ($is_rec): 
+                    ?>
                       <span class="badge-recommended">Recommended</span>
                     <?php else: ?>
                       <span style="font-size:0.7rem; color:#b87b85;">Standard</span>
                     <?php endif; ?>
                   </td>
                   <td>
-                    <button class="btn-edit" onclick="openEditItemModal(<?php echo $m['item_id']; ?>, '<?php echo addslashes($m['item_name']); ?>', <?php echo $m['shop_id']; ?>, <?php echo $m['price']; ?>, <?php echo $m['is_recommended']; ?>)"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                    <button class="btn-edit" onclick="openEditItemModal(<?php echo $m['item_id']; ?>, '<?php echo addslashes($m['item_name']); ?>', <?php echo $m['shop_id']; ?>, <?php echo $m['price']; ?>, <?php echo $is_rec ? 1 : 0; ?>)"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
                     <form method="POST" style="display:inline;" onclick="return confirmAdminAction('Remove item?', 'Are you sure you want to remove this menu item?', this);">
                       <input type="hidden" name="item_id" value="<?php echo $m['item_id']; ?>">
                       <button type="submit" name="action_delete_item" class="btn-delete"><i class="fa-solid fa-trash"></i> Remove</button>
@@ -2110,7 +2122,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       document.getElementById('edit_item_name').value = name;
       document.getElementById('edit_item_shop_id').value = shopId;
       document.getElementById('edit_item_price').value = price;
-      document.getElementById('edit_item_recommended').checked = (isRecommended == 1);
+      document.getElementById('edit_item_recommended').checked = (isRecommended == 1 || isRecommended === true || isRecommended == 't');
       openModal('editItemModal');
     }
 

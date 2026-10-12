@@ -72,10 +72,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'toggle_stock') {
         $item_id = isset($_POST['item_id']) ? (int)$_POST['item_id'] : 0;
-        $is_available = isset($_POST['is_available']) ? (int)$_POST['is_available'] : 1;
+        $avail_input = $_POST['is_available'] ?? null;
+        $is_available = ($avail_input === true || $avail_input === 'true' || $avail_input === 1 || $avail_input === '1' || $avail_input === 't');
         $stmt = $conn->prepare("UPDATE menu_items SET is_available = :avail WHERE item_id = :iid");
         if ($stmt) {
-            $stmt->execute([':avail' => $is_available, ':iid' => $item_id]);
+            $stmt->bindValue(':avail', $is_available, PDO::PARAM_BOOL);
+            $stmt->bindValue(':iid', $item_id, PDO::PARAM_INT);
+            $stmt->execute();
             if (ob_get_level()) ob_clean();
             header('Content-Type: application/json');
             echo json_encode(array('success' => true, 'message' => 'Availability updated!'));
@@ -97,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $conn->prepare("UPDATE menu_items SET shop_id = :sid, item_name = :iname, price = :price WHERE item_id = :iid");
             $ok = $stmt->execute([':sid' => $shop_id, ':iname' => $item_name, ':price' => $price, ':iid' => $item_id]);
         } else {
-            $stmt = $conn->prepare("INSERT INTO menu_items (shop_id, item_name, price, is_available) VALUES (:sid, :iname, :price, 1)");
+            $stmt = $conn->prepare("INSERT INTO menu_items (shop_id, item_name, price, is_available) VALUES (:sid, :iname, :price, TRUE)");
             $ok = $stmt->execute([':sid' => $shop_id, ':iname' => $item_name, ':price' => $price]);
         }
         if ($ok) {
@@ -778,7 +781,7 @@ html, body {
       <?php if (empty($menu_items)): ?>
         <div class="card"><p style="font-size:10px;color:var(--muted);text-align:center;">No menu items listed.</p></div>
       <?php else: foreach ($menu_items as $item): 
-        $avail = !isset($item['is_available']) || (int)$item['is_available'] === 1;
+        $avail = !isset($item['is_available']) || in_array($item['is_available'], [true, 1, '1', 't', 'true', 'TRUE'], true);
       ?>
         <div class="card">
           <div class="card-header">

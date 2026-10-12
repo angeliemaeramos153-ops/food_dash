@@ -14,8 +14,8 @@ $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'GET') {
     $action = $_GET['action'] ?? '';
     
-    // Quick unread count check
-    $stmt2 = $conn->prepare("SELECT COUNT(*) AS c FROM notifications WHERE user_id = :uid AND is_read = 0");
+    // Quick unread count check (PostgreSQL boolean: is_read = FALSE)
+    $stmt2 = $conn->prepare("SELECT COUNT(*) AS c FROM notifications WHERE user_id = :uid AND is_read = FALSE");
     $stmt2->execute([':uid' => $user_id]);
     $unread = (int)($stmt2->fetchColumn() ?: 0);
     
@@ -31,7 +31,9 @@ if ($method === 'GET') {
     $stmt->execute();
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$r) {
-        $r['status'] = ((int)$r['is_read'] === 0) ? 'unread' : 'read';
+        $is_read_bool = (!empty($r['is_read']) && $r['is_read'] !== 'f' && $r['is_read'] !== false);
+        $r['status'] = $is_read_bool ? 'read' : 'unread';
+        $r['is_read'] = $is_read_bool ? 1 : 0;
     }
     unset($r);
 
@@ -48,13 +50,13 @@ $payload = json_decode(file_get_contents('php://input'), true) ?: $_POST;
 $action = $payload['action'] ?? '';
 if ($action === 'mark_read') {
     $id = (int)($payload['notification_id'] ?? 0);
-    $stmt = $conn->prepare("UPDATE notifications SET is_read = 1 WHERE notification_id = :nid AND user_id = :uid");
+    $stmt = $conn->prepare("UPDATE notifications SET is_read = TRUE WHERE notification_id = :nid AND user_id = :uid");
     $ok = $stmt->execute([':nid' => $id, ':uid' => $user_id]);
     echo json_encode(['success' => (bool)$ok]);
     exit;
 }
 if ($action === 'mark_all_read') {
-    $stmt = $conn->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = :uid AND is_read = 0");
+    $stmt = $conn->prepare("UPDATE notifications SET is_read = TRUE WHERE user_id = :uid AND is_read = FALSE");
     $ok = $stmt->execute([':uid' => $user_id]);
     echo json_encode(['success' => (bool)$ok]);
     exit;

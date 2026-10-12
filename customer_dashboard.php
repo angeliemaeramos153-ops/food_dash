@@ -36,10 +36,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $categories = [];
         
         if ($shop_id > 0) {
-            $stmt = $conn->prepare("SELECT DISTINCT category FROM menu_items WHERE shop_id = ? AND is_available = 1 AND category IS NOT NULL AND TRIM(category) != '' ORDER BY category ASC");
+            $stmt = $conn->prepare("SELECT DISTINCT category FROM menu_items WHERE shop_id = ? AND is_available = TRUE AND category IS NOT NULL AND TRIM(category) != '' ORDER BY category ASC");
             $stmt->execute([$shop_id]);
         } else {
-            $stmt = $conn->prepare("SELECT DISTINCT m.category FROM menu_items m JOIN shops s ON m.shop_id = s.shop_id WHERE s.shop_name = ? AND m.is_available = 1 AND m.category IS NOT NULL AND TRIM(m.category) != '' ORDER BY m.category ASC");
+            $stmt = $conn->prepare("SELECT DISTINCT m.category FROM menu_items m JOIN shops s ON m.shop_id = s.shop_id WHERE s.shop_name = ? AND m.is_available = TRUE AND m.category IS NOT NULL AND TRIM(m.category) != '' ORDER BY m.category ASC");
             $stmt->execute([$shop_name]);
         }
         
@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             SELECT m.item_id, m.shop_id, s.shop_name, m.item_name, m.category, m.price, m.description, m.icon, m.is_recommended 
             FROM menu_items m 
             JOIN shops s ON m.shop_id = s.shop_id 
-            WHERE (s.shop_name = ? OR m.shop_id = ?) AND m.is_available = 1 
+            WHERE (s.shop_name = ? OR m.shop_id = ?) AND m.is_available = TRUE 
             ORDER BY m.is_recommended DESC, m.item_name ASC
         ");
         if ($stmt) {
@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'icon'        => !empty($m_row['icon']) ? $m_row['icon'] : '🍴',
                     'desc'        => !empty($m_row['description']) ? $m_row['description'] : '',
                     'category'    => !empty($m_row['category']) ? $m_row['category'] : 'Main',
-                    'recommended' => (int)$m_row['is_recommended']
+                    'recommended' => (!empty($m_row['is_recommended']) && $m_row['is_recommended'] !== 'f' && $m_row['is_recommended'] !== false) ? 1 : 0
                 ];
             }
         }
@@ -290,7 +290,7 @@ $menu_items_res = $conn->query("
     SELECT m.item_id, m.shop_id, s.shop_name, m.item_name, m.category, m.price, m.description, m.icon, m.is_recommended, m.is_available 
     FROM menu_items m 
     INNER JOIN shops s ON m.shop_id = s.shop_id 
-    WHERE m.is_available = 1 
+    WHERE m.is_available = TRUE 
     ORDER BY m.shop_id ASC, m.is_recommended DESC, m.item_name ASC
 ");
 if ($menu_items_res) {
@@ -312,7 +312,7 @@ if ($menu_items_res) {
             'icon'        => !empty($mi['icon']) ? $mi['icon'] : '🍴',
             'desc'        => !empty($mi['description']) ? $mi['description'] : 'Fresh and delicious meal prepared to order.',
             'category'    => $cat,
-            'recommended' => (int)$mi['is_recommended']
+            'recommended' => (!empty($mi['is_recommended']) && $mi['is_recommended'] !== 'f' && $mi['is_recommended'] !== false) ? 1 : 0
         ];
     }
 }
@@ -1031,7 +1031,7 @@ async function loadNotifications() {
     const el = document.getElementById('customerNoteList');
     if (el) {
       el.innerHTML = d.notifications.length ? d.notifications.map(n => `
-        <div class="fd-note-item ${n.is_read == 0 ? 'unread' : ''}" onclick="readNote(${n.notification_id})">
+        <div class="fd-note-item ${n.is_read == 0 || n.is_read === false || n.is_read == 'f' || n.status === 'unread' ? 'unread' : ''}" onclick="readNote(${n.notification_id})">
           <strong>${esc(n.title)}</strong>
           <p>${esc(n.message)}</p>
           <small>${esc(n.created_at)}</small>

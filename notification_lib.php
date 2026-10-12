@@ -3,7 +3,7 @@
 
 function create_notification($conn, int $user_id, string $type, string $title, string $message, ?int $order_id = null): bool {
     if (!($conn instanceof PDO)) return false;
-    $stmt = $conn->prepare("INSERT INTO notifications (user_id, order_id, notification_type, title, message, is_read, created_at) VALUES (:uid, :oid, :type, :title, :msg, 0, NOW())");
+    $stmt = $conn->prepare("INSERT INTO notifications (user_id, order_id, notification_type, title, message, is_read, created_at) VALUES (:uid, :oid, :type, :title, :msg, FALSE, NOW())");
     return $stmt->execute([
         ':uid'   => $user_id,
         ':oid'   => $order_id,
