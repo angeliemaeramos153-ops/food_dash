@@ -1,0 +1,437 @@
+<?php
+session_start();
+require_once 'db_connect.php';
+require_once 'notification_lib.php';
+
+header('Content-Type: application/json; charset=utf-8');
+
+function respond(bool $success, string $message = '', array $extra = [], int $status = 200): never {
+    http_response_code($status);
+    echo json_encode(array_merge(['success' => $success, 'message' => $message], $extra), JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if (!isset($_SESSION['user_id'], $_SESSION['role'])) {
+    respond(false, 'Your session has expired. Please log in again.', [], 401);
+}
+
+$role = strtolower(trim((string)$_SESSION['role']));
+$user_id = (int)$_SESSION['user_id'];
+$user_name = $_SESSION['full_name'] ?? ucfirst($role);
+$method = $_SERVER['REQUEST_METHOD'];
+
+// Helper to normalize status strings to uppercase canonical values
+function normalize_status(string $status): string {
+    $s = strtoupper(trim(str_replace([' ', '-'], '_', $status)));
+    $map = [
+        'SUBMITTED'       => 'PENDING',
+        'PENDING'         => 'PENDING',
+        'ACCEPTED'        => 'PREPARING',
+        'PREPARING'       => 'PREPARING',
+        'READY'           => 'READY_FOR_PICKUP',
+        'READY_FOR_PICKUP'=> 'READY_FOR_PICKUP',
+        'PICKUP_READY'    => 'READY_FOR_PICKUP',
+        'ASSIGNED'        => 'OUT_FOR_DELIVERY',
+        'ON_DELIVERY'     => 'OUT_FOR_DELIVERY',
+        'ON_THE_WAY'      => 'OUT_FOR_DELIVERY',
+        'OUT_FOR_DELIVERY'=> 'OUT_FOR_DELIVERY',
+        'NEAR_CUSTOMER'   => 'OUT_FOR_DELIVERY',
+        'IN_TRANSIT'      => 'OUT_FOR_DELIVERY',
+        'DELIVERED'       => 'DELIVERED',
+        'COMPLETED'       => 'DELIVERED',
+        'SETTLED'         => 'SETTLED',
+        'RECONCILED'      => 'SETTLED',
+        'CANCELLED'       => 'CANCELLED',
+    ];
+    return $map[$s] ?? $s;
+}
+
+if ($method === 'POST') {
+    $payload = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($payload)) $payload = $_POST;
+    $action = trim((string)($payload['action'] ?? ''));
+
+    // 1. CUSTOMER: Create Order (Initial status: PENDING)
+    if ($action === 'create_order' || $action === 'checkout') {
+        if ($role !== 'customer') {
+            respond(false, 'Only Customer accounts can place orders.', [], 403);
+        }
+
+        $cart = $payload['cart'] ?? [];
+        if (!is_array($cart) || count($cart) === 0) {
+            respond(false, 'Your cart is empty.', [], 422);
+        }
+
+        $clean = [];
+        $subtotal = 0.00;
+        $stores = [];
+
+        foreach ($cart as $item) {
+            $name = trim((string)($item['name'] ?? ''));
+            $store = trim((string)($item['store'] ?? 'Food Dash'));
+            $price = (float)($item['price'] ?? 0);
+            $qty = (int)($item['qty'] ?? 0);
+            $icon = trim((string)($item['icon'] ?? '🍴'));
+
+            if ($name === '' || $price <= 0 || $qty <= 0 || $qty > 50) continue;
+
+            $line = round($price * $qty, 2);
+            $subtotal += $line;
+            $stores[$store] = true;
+            $clean[] = [
+                'name'  => $name,
+                'store' => $store,
+                'price' => $price,
+                'qty'   => $qty,
+                'line'  => $line,
+                'icon'  => $icon,
+            ];
+        }
+
+        if (empty($clean)) {
+            respond(false, 'No valid items found in cart.', [], 422);
+        }
+
+        $delivery_fee = isset($payload['delivery_fee']) ? (float)$payload['delivery_fee'] : 30.00;
+        $total_amount = round($subtotal + $delivery_fee, 2);
+        $store_name = implode(', ', array_keys($stores));
+        $order_ref = '#FD-' . date('ymd') . '-' . random_int(1000, 9999);
+        $customer_name = !empty($_SESSION['full_name']) ? $_SESSION['full_name'] : 'Customer';
+
+        $customer_lat = isset($payload['customer_lat']) && is_numeric($payload['customer_lat']) ? (float)$payload['customer_lat'] : null;
+        $customer_lng = isset($payload['customer_lng']) && is_numeric($payload['customer_lng']) ? (float)$payload['customer_lng'] : null;
+        if ($customer_lat !== null && ($customer_lat < -90 || $customer_lat > 90)) $customer_lat = null;
+        if ($customer_lng !== null && ($customer_lng < -180 || $customer_lng > 180)) $customer_lng = null;
+
+        $items_summary = implode(', ', array_map(fn($x) => $x['qty'] . 'x ' . $x['name'], $clean));
+
+        // Resolve shop_id if matching a registered shop
+        $shop_id = 0;
+        $first_store = array_key_first($stores);
+        if ($first_store) {
+            $s_stmt = $conn->prepare("SELECT shop_id FROM shops WHERE LOWER(shop_name) = LOWER(?) LIMIT 1");
+            if ($s_stmt) {
+                $s_stmt->bind_param('s', $first_store);
+                $s_stmt->execute();
+                $s_res = $s_stmt->get_result()->fetch_assoc();
+                if ($s_res) $shop_id = (int)$s_res['shop_id'];
+                $s_stmt->close();
+            }
+        }
+
+        $conn->begin_transaction();
+        try {
+            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, customer_lat, customer_lng, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'waiting', 'Delivery', ?, ?, NOW())");
+            if (!$stmt) throw new Exception('Failed to prepare order query: ' . $conn->error);
+            $stmt->bind_param('iissssddddd', $shop_id, $user_id, $customer_name, $order_ref, $store_name, $items_summary, $subtotal, $delivery_fee, $total_amount, $customer_lat, $customer_lng);
+            if (!$stmt->execute()) throw new Exception('Failed to save order: ' . $stmt->error);
+            $order_id = $stmt->insert_id;
+            $stmt->close();
+
+            // Insert into food_order_items
+            $item_stmt = $conn->prepare("INSERT INTO food_order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            if ($item_stmt) {
+                foreach ($clean as $x) {
+                    $item_stmt->bind_param('issidds', $order_id, $x['name'], $x['store'], $x['qty'], $x['price'], $x['line'], $x['icon']);
+                    $item_stmt->execute();
+                }
+                $item_stmt->close();
+            }
+
+            // Insert into order_items compatibility table
+            $c_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            if ($c_stmt) {
+                foreach ($clean as $x) {
+                    $c_stmt->bind_param('issidds', $order_id, $x['name'], $x['store'], $x['qty'], $x['price'], $x['line'], $x['icon']);
+                    $c_stmt->execute();
+                }
+                $c_stmt->close();
+            }
+
+            // Audit Log: PENDING
+            record_order_audit_log($conn, $order_id, null, 'PENDING', $user_id, 'customer', 'Order submitted by customer');
+
+            // Security & Activity Audit Log: ORDER_PLACED
+            log_activity($conn, $user_id, 'ORDER_PLACED', "Order {$order_ref} placed for total ₱" . number_format($total_amount, 2) . " at {$store_name}.");
+
+            // Notify Chef / Kitchen
+            notify_role($conn, 'chef', 'new_order', 'New Customer Order', "{$order_ref} from {$customer_name} is ready to be prepared.", $order_id);
+
+            $conn->commit();
+            respond(true, 'Order placed successfully.', [
+                'order_id'     => $order_id,
+                'order_ref'    => $order_ref,
+                'status'       => 'PENDING',
+                'total_amount' => $total_amount,
+                'store_name'   => $store_name
+            ]);
+        } catch (Throwable $e) {
+            $conn->rollback();
+            respond(false, $e->getMessage(), [], 500);
+        }
+    }
+
+    // 2. LIFECYCLE TRANSITION: update_status across all 4 roles
+    if ($action === 'update_status' || $action === 'update_order_status' || in_array($action, ['chef_accept', 'chef_ready', 'claim', 'on_way', 'near', 'delivered', 'reconcile', 'settle'], true)) {
+        $order_id = (int)($payload['order_id'] ?? 0);
+        if ($order_id <= 0) respond(false, 'Invalid order ID.', [], 400);
+
+        // Fetch current order state
+        $stmt = $conn->prepare("SELECT order_id, shop_id, customer_id, customer_name, order_ref, store_name, subtotal, delivery_fee, total_amount, status, delivery_status, chef_id, rider_id FROM food_orders WHERE order_id = ? LIMIT 1 FOR UPDATE");
+        $conn->begin_transaction();
+        $stmt->bind_param('i', $order_id);
+        $stmt->execute();
+        $order = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$order) {
+            $conn->rollback();
+            respond(false, 'Order not found.', [], 404);
+        }
+
+        $current_canonical = normalize_status($order['status']);
+        $target_status = '';
+
+        // Derive target status from action or explicit status parameter
+        if (!empty($payload['status'])) {
+            $target_status = normalize_status((string)$payload['status']);
+        } elseif ($action === 'chef_accept') {
+            $target_status = 'PREPARING';
+        } elseif ($action === 'chef_ready') {
+            $target_status = 'READY_FOR_PICKUP';
+        } elseif ($action === 'claim') {
+            $target_status = 'OUT_FOR_DELIVERY';
+        } elseif ($action === 'on_way') {
+            $target_status = 'OUT_FOR_DELIVERY';
+        } elseif ($action === 'near') {
+            $target_status = 'OUT_FOR_DELIVERY';
+        } elseif ($action === 'delivered') {
+            $target_status = 'DELIVERED';
+        } elseif ($action === 'reconcile' || $action === 'settle') {
+            $target_status = 'SETTLED';
+        }
+
+        if ($target_status === '') {
+            $conn->rollback();
+            respond(false, 'No valid target status specified.', [], 422);
+        }
+
+        $allowed = false;
+        $notes = '';
+        $new_delivery_status = $order['delivery_status'];
+
+        // Role authorization and state validation
+        if ($role === 'admin') {
+            // Admin can execute any valid lifecycle step or force reconcile
+            $allowed = true;
+            $notes = 'Admin state transition to ' . $target_status;
+        } elseif ($role === 'chef' || $role === 'manager') {
+            if ($target_status === 'PREPARING' && in_array($current_canonical, ['PENDING'], true)) {
+                $allowed = true;
+                $new_delivery_status = 'preparing';
+                $notes = 'Chef accepted order and started kitchen preparation';
+            } elseif ($target_status === 'READY_FOR_PICKUP' && in_array($current_canonical, ['PREPARING'], true)) {
+                $allowed = true;
+                $new_delivery_status = 'ready_for_pickup';
+                $notes = 'Food prepared and packed, ready for rider pickup';
+            }
+        } elseif ($role === 'rider') {
+            if ($target_status === 'OUT_FOR_DELIVERY') {
+                if (in_array($current_canonical, ['READY_FOR_PICKUP', 'READY'], true)) {
+                    if (!empty($order['rider_id']) && (int)$order['rider_id'] !== $user_id) {
+                        $conn->rollback();
+                        respond(false, 'Order is already assigned to another rider.', [], 409);
+                    }
+                    $allowed = true;
+                    $new_delivery_status = 'out_for_delivery';
+                    $notes = 'Rider accepted order dispatch and claimed delivery trip';
+                } elseif (in_array($current_canonical, ['OUT_FOR_DELIVERY'], true)) {
+                    // Sub-states: on the way or near customer
+                    $sub = strtolower(trim((string)($payload['sub_status'] ?? $action)));
+                    $allowed = true;
+                    if ($sub === 'near') {
+                        $new_delivery_status = 'near_customer';
+                        $notes = 'Rider is near customer location';
+                    } else {
+                        $new_delivery_status = 'on_the_way';
+                        $notes = 'Rider is on the way to customer';
+                    }
+                }
+            } elseif ($target_status === 'DELIVERED' && in_array($current_canonical, ['OUT_FOR_DELIVERY'], true)) {
+                $allowed = true;
+                $new_delivery_status = 'delivered';
+                $notes = 'Order delivered to customer successfully';
+            }
+        } elseif ($role === 'customer') {
+            if ($target_status === 'DELIVERED' && in_array($current_canonical, ['OUT_FOR_DELIVERY'], true)) {
+                $allowed = true;
+                $new_delivery_status = 'delivered';
+                $notes = 'Customer confirmed order receipt';
+            } elseif ($target_status === 'CANCELLED' && in_array($current_canonical, ['PENDING'], true)) {
+                $allowed = true;
+                $new_delivery_status = 'cancelled';
+                $notes = 'Order cancelled by customer';
+            }
+        }
+
+        if (!$allowed) {
+            $conn->rollback();
+            respond(false, "Invalid transition from {$current_canonical} to {$target_status} for role {$role}.", [
+                'current_status'   => $current_canonical,
+                'target_status'    => $target_status,
+                'role'             => $role
+            ], 403);
+        }
+
+        try {
+            // Role assignment updates
+            $chef_id_val = $order['chef_id'];
+            $rider_id_val = $order['rider_id'];
+
+            if (($role === 'chef' || $role === 'manager') && empty($chef_id_val)) {
+                $chef_id_val = $user_id;
+            }
+            if ($role === 'rider' && $target_status === 'OUT_FOR_DELIVERY') {
+                $rider_id_val = $user_id;
+
+                // Sync with riders table
+                $u_rider = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = ? WHERE user_id = ? OR rider_id = ?");
+                if ($u_rider) {
+                    $u_rider->bind_param('sii', $order['order_ref'], $user_id, $user_id);
+                    $u_rider->execute();
+                    $u_rider->close();
+                }
+            }
+            if ($target_status === 'DELIVERED' && $rider_id_val) {
+                // Free up rider status
+                $u_rider = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE user_id = ? OR rider_id = ?");
+                if ($u_rider) {
+                    $u_rider->bind_param('ii', $rider_id_val, $rider_id_val);
+                    $u_rider->execute();
+                    $u_rider->close();
+                }
+            }
+
+            // Update food_orders record
+            $upd = $conn->prepare("UPDATE food_orders SET status = ?, delivery_status = ?, chef_id = ?, rider_id = ?, updated_at = NOW() WHERE order_id = ?");
+            if (!$upd) throw new Exception('Failed to prepare status update query: ' . $conn->error);
+            $upd->bind_param('ssiii', $target_status, $new_delivery_status, $chef_id_val, $rider_id_val, $order_id);
+            if (!$upd->execute()) throw new Exception('Failed to execute status update: ' . $upd->error);
+            $upd->close();
+
+            // Settle transaction if target is SETTLED
+            if ($target_status === 'SETTLED') {
+                $settle_stmt = $conn->prepare("INSERT INTO settlements (order_id, admin_id, subtotal, delivery_fee, total_amount, payment_method, status, notes, reconciled_at) VALUES (?, ?, ?, ?, ?, 'Cash on Delivery', 'SETTLED', ?, NOW()) ON DUPLICATE KEY UPDATE status = 'SETTLED', reconciled_at = NOW(), notes = VALUES(notes)");
+                if ($settle_stmt) {
+                    $admin_id_val = ($role === 'admin') ? $user_id : 14;
+                    $sub_val = (float)$order['subtotal'];
+                    $del_val = (float)$order['delivery_fee'];
+                    $tot_val = (float)$order['total_amount'];
+                    $notes_val = 'Reconciled & settled by ' . $user_name;
+                    $settle_stmt->bind_param('iiddds', $order_id, $admin_id_val, $sub_val, $del_val, $tot_val, $notes_val);
+                    $settle_stmt->execute();
+                    $settle_stmt->close();
+                }
+            }
+
+            // Record audit log entry
+            record_order_audit_log($conn, $order_id, $current_canonical, $target_status, $user_id, $role, $notes);
+
+            // Trigger contextual in-app notifications
+            $cust_id = (int)$order['customer_id'];
+            $ref = $order['order_ref'];
+
+            if ($target_status === 'PREPARING') {
+                create_notification($conn, $cust_id, 'chef_preparing', 'Kitchen Preparing Order', "Your order {$ref} is now being prepared by the Chef.", $order_id);
+                log_activity($conn, $user_id, 'ORDER_PREPARED', "Order {$ref} accepted and preparation started by {$user_name} ({$role}).");
+            } elseif ($target_status === 'READY_FOR_PICKUP') {
+                create_notification($conn, $cust_id, 'order_ready', 'Order Ready for Pickup', "Your food for {$ref} is freshly prepared and ready for rider pickup.", $order_id);
+                notify_role($conn, 'rider', 'pickup_ready', 'Order Ready for Pickup', "{$ref} at {$order['store_name']} is ready for dispatch.", $order_id);
+                log_activity($conn, $user_id, 'ORDER_PREPARED', "Order {$ref} prepared and marked ready for pickup by {$user_name}.");
+            } elseif ($target_status === 'OUT_FOR_DELIVERY') {
+                if ($new_delivery_status === 'near_customer') {
+                    create_notification($conn, $cust_id, 'rider_near', 'Rider is Near You', "Your rider is arriving shortly with {$ref}.", $order_id);
+                } elseif ($new_delivery_status === 'on_the_way') {
+                    create_notification($conn, $cust_id, 'rider_on_way', 'Rider on the Way', "Your rider has picked up {$ref} and is on the way.", $order_id);
+                } else {
+                    create_notification($conn, $cust_id, 'rider_assigned', 'Rider Out for Delivery', "A rider has claimed {$ref} and is out for delivery.", $order_id);
+                }
+                log_activity($conn, $user_id, 'ORDER_DISPATCHED', "Order {$ref} dispatched ({$new_delivery_status}) with rider {$user_name}.");
+            } elseif ($target_status === 'DELIVERED') {
+                create_notification($conn, $cust_id, 'delivered', 'Order Delivered', "Your order {$ref} has been delivered. Enjoy your meal!", $order_id);
+                notify_role($conn, 'admin', 'order_delivered', 'Order Delivered - Ready for Settlement', "Order {$ref} delivered. Ready for admin reconciliation.", $order_id);
+                log_activity($conn, $user_id, 'ORDER_DELIVERED', "Order {$ref} marked delivered to customer by {$user_name} ({$role}).");
+            } elseif ($target_status === 'SETTLED') {
+                create_notification($conn, $cust_id, 'settled', 'Order Settled', "Transaction for {$ref} has been verified and settled.", $order_id);
+                if ($rider_id_val) {
+                    create_notification($conn, (int)$rider_id_val, 'settled', 'Delivery Settled', "Order {$ref} delivery payment settled.", $order_id);
+                }
+                log_activity($conn, $user_id, 'SETTLEMENT_CLOSED', "Order {$ref} reconciled and settled by Admin {$user_name}. Total: ₱" . number_format((float)$order['total_amount'], 2));
+            }
+
+            $conn->commit();
+            respond(true, "Order status updated to {$target_status}.", [
+                'order_id'        => $order_id,
+                'order_ref'       => $ref,
+                'status'          => $target_status,
+                'delivery_status' => $new_delivery_status,
+                'previous_status' => $current_canonical
+            ]);
+        } catch (Throwable $e) {
+            $conn->rollback();
+            respond(false, 'Transaction failed: ' . $e->getMessage(), [], 500);
+        }
+    }
+
+    respond(false, 'Unknown transaction action: ' . $action, [], 400);
+}
+
+// GET REQUESTS
+if ($method === 'GET') {
+    $action = trim((string)($_GET['action'] ?? ''));
+
+    // Customer orders
+    if ($action === 'my_orders') {
+        if ($role !== 'customer') respond(false, 'Unauthorized.', [], 403);
+        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, rider_id, rider_lat, rider_lng, customer_lat, customer_lng, DATE_FORMAT(created_at, '%b %d, %Y • %h:%i %p') AS created_at FROM food_orders WHERE customer_id = ? ORDER BY order_id DESC LIMIT 40");
+        $stmt->bind_param('i', $user_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $orders = [];
+        while ($r = $res->fetch_assoc()) $orders[] = $r;
+        $stmt->close();
+        respond(true, '', ['orders' => $orders]);
+    }
+
+    // Audit logs for a given order or overall
+    if ($action === 'audit_logs') {
+        $order_id = (int)($_GET['order_id'] ?? 0);
+        if ($order_id > 0) {
+            $stmt = $conn->prepare("SELECT a.log_id, a.order_id, o.order_ref, a.old_status, a.new_status, a.action_by_user_id, a.action_by_role, u.full_name AS action_by_name, a.notes, DATE_FORMAT(a.created_at, '%b %d, %Y • %h:%i:%s %p') AS created_at FROM order_audit_logs a LEFT JOIN food_orders o ON a.order_id = o.order_id LEFT JOIN users u ON a.action_by_user_id = u.user_id WHERE a.order_id = ? ORDER BY a.log_id ASC");
+            $stmt->bind_param('i', $order_id);
+        } else {
+            if ($role !== 'admin') respond(false, 'Only Admin can view complete audit logs.', [], 403);
+            $stmt = $conn->prepare("SELECT a.log_id, a.order_id, o.order_ref, o.store_name, a.old_status, a.new_status, a.action_by_user_id, a.action_by_role, u.full_name AS action_by_name, a.notes, DATE_FORMAT(a.created_at, '%b %d, %Y • %h:%i:%s %p') AS created_at FROM order_audit_logs a LEFT JOIN food_orders o ON a.order_id = o.order_id LEFT JOIN users u ON a.action_by_user_id = u.user_id ORDER BY a.log_id DESC LIMIT 100");
+        }
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $logs = [];
+        while ($row = $res->fetch_assoc()) $logs[] = $row;
+        $stmt->close();
+        respond(true, '', ['audit_logs' => $logs]);
+    }
+
+    // Settlements list
+    if ($action === 'settlements') {
+        if ($role !== 'admin') respond(false, 'Only Admin can view settlements.', [], 403);
+        $res = $conn->query("SELECT s.*, o.order_ref, o.store_name, o.customer_name, u.full_name AS admin_name, DATE_FORMAT(s.reconciled_at, '%b %d, %Y • %h:%i %p') AS formatted_reconciled_at FROM settlements s LEFT JOIN food_orders o ON s.order_id = o.order_id LEFT JOIN users u ON s.admin_id = u.user_id ORDER BY s.settlement_id DESC LIMIT 100");
+        $settlements = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) $settlements[] = $row;
+        }
+        respond(true, '', ['settlements' => $settlements]);
+    }
+}
+
+respond(false, 'Invalid request.', [], 400);
+?>

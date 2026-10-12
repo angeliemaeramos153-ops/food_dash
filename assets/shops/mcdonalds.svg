@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="100%" height="100%">
+  <rect width="160" height="160" rx="32" fill="#DA291C"/>
+  <rect x="7" y="7" width="146" height="146" rx="27" fill="none" stroke="#FFC72C" stroke-width="2" stroke-opacity="0.5"/>
+  <!-- Official Golden Arches "M" Geometry -->
+  <g transform="translate(80, 78)">
+    <path d="M -46 36 C -46 2, -36 -28, -24 -28 C -14 -28, -6 -10, -2 12 C 2 -10, 10 -28, 20 -28 C 32 -28, 42 2, 42 36 L 31 36 C 31 10, 24 -14, 18 -14 C 11 -14, 4 6, 2 24 L -6 24 C -8 6, -15 -14, -22 -14 C -28 -14, -35 10, -35 36 Z" fill="#FFC72C"/>
+  </g>
+  <text x="80" y="138" font-family="'Poppins', 'Arial Black', sans-serif" font-size="11" font-weight="800" fill="#FFFFFF" text-anchor="middle" letter-spacing="1.5">McDonald's</text>
+</svg>

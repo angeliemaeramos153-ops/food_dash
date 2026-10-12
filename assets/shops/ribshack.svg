@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="100%" height="100%">
+  <rect width="160" height="160" rx="32" fill="#2B1A13"/>
+  <rect x="7" y="7" width="146" height="146" rx="27" fill="none" stroke="#D88F2A" stroke-width="2"/>
+  
+  <g transform="translate(80, 64)">
+    <!-- Shield / Shack Emblem -->
+    <path d="M -30 -20 L 30 -20 L 26 18 L 0 32 L -26 18 Z" fill="#8D2817" stroke="#D88F2A" stroke-width="2"/>
+    <!-- Ribs bones & fire -->
+    <path d="M -16 -6 C -8 -16, 8 -16, 16 -6 C 8 2, -8 2, -16 -6 Z" fill="#FFF8E7"/>
+    <path d="M -18 6 C -10 -4, 10 -4, 18 6 C 10 14, -10 14, -18 6 Z" fill="#FFF8E7"/>
+    <!-- Crossed fire knives -->
+    <line x1="-16" y1="-18" x2="16" y2="18" stroke="#D88F2A" stroke-width="2" stroke-linecap="round"/>
+    <line x1="16" y1="-18" x2="-16" y2="18" stroke="#D88F2A" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  
+  <text x="80" y="126" font-family="'Poppins', sans-serif" font-size="12" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="1">RIBSHACK</text>
+  <text x="80" y="141" font-family="'Poppins', sans-serif" font-size="8" font-weight="700" fill="#D88F2A" text-anchor="middle" letter-spacing="1.5">GRILL &amp; BBQ</text>
+</svg>

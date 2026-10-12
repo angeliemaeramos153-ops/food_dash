@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="100%" height="100%">
+  <rect width="160" height="160" rx="32" fill="#007A3D"/>
+  <rect x="7" y="7" width="146" height="146" rx="27" fill="none" stroke="#FFB81C" stroke-width="2.5"/>
+  
+  <!-- Inasal Grill Skewer & Flame Motif -->
+  <g transform="translate(80, 62)">
+    <circle cx="0" cy="0" r="32" fill="#FFB81C"/>
+    <circle cx="0" cy="0" r="28" fill="#D32F2F"/>
+    
+    <!-- Skewer / Chicken Inasal silhouette -->
+    <path d="M -18 10 C -22 -4, -6 -18, 0 -22 C 6 -18, 22 -4, 18 10 C 12 16, -12 16, -18 10 Z" fill="#FFB81C"/>
+    <path d="M -12 8 C -14 -2, -4 -12, 0 -16 C 4 -12, 14 -2, 12 8 Z" fill="#923D32"/>
+    <line x1="0" y1="-26" x2="0" y2="28" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- Typography -->
+  <text x="80" y="122" font-family="'Poppins', sans-serif" font-size="11" font-weight="900" fill="#FFB81C" text-anchor="middle" letter-spacing="1">MANG INASAL</text>
+  <rect x="36" y="130" width="88" height="15" rx="4" fill="#FFB81C"/>
+  <text x="80" y="141" font-family="'Poppins', sans-serif" font-size="8" font-weight="900" fill="#007A3D" text-anchor="middle" letter-spacing="1.5">NUAN SA SARAP</text>
+</svg>
