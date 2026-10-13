@@ -5,28 +5,38 @@ header('Access-Control-Allow-Origin: *');
 require_once 'db_connect.php';
 
 try {
+    // Select all columns from menu_items dynamically to avoid missing column errors
     $stmt = $conn->prepare("
         SELECT 
-            m.item_id,
-            m.name,
-            m.description,
-            m.price,
-            m.category,
-            m.image_url,
-            s.name AS shop_name
+            m.*,
+            COALESCE(s.name, s.shop_name, 'Food Dash') AS shop_display_name
         FROM menu_items m
         LEFT JOIN shops s ON m.shop_id = s.shop_id
-        WHERE m.is_available = TRUE
-        ORDER BY m.category ASC, m.name ASC
+        WHERE m.is_available = TRUE OR m.is_available = 't' OR m.is_available = '1'
+        ORDER BY m.item_id ASC
     ");
     $stmt->execute();
-    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $rawItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Normalize field names so the frontend gets consistent data
+    $normalized = array_map(function($item) {
+        return [
+            'item_id'     => $item['item_id'] ?? $item['id'] ?? null,
+            'name'        => $item['item_name'] ?? $item['name'] ?? 'Unnamed Item',
+            'description' => $item['description'] ?? '',
+            'price'       => (float)($item['price'] ?? 0),
+            'category'    => $item['category'] ?? 'General',
+            'image_url'   => $item['image_url'] ?? $item['image'] ?? null,
+            'shop_name'   => $item['shop_display_name'] ?? 'Food Dash'
+        ];
+    }, $rawItems);
 
     echo json_encode([
         'status' => 'success',
-        'count'  => count($items),
-        'data'   => $items
-    ]);
+        'count'  => count($normalized),
+        'data'   => $normalized
+    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode([
