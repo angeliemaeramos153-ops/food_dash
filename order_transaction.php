@@ -98,10 +98,13 @@ if ($method === 'POST') {
         $order_ref = '#FD-' . date('ymd') . '-' . random_int(1000, 9999);
         $customer_name = !empty($_SESSION['full_name']) ? $_SESSION['full_name'] : 'Customer';
 
-        $customer_lat = isset($payload['customer_lat']) && is_numeric($payload['customer_lat']) ? (float)$payload['customer_lat'] : null;
-        $customer_lng = isset($payload['customer_lng']) && is_numeric($payload['customer_lng']) ? (float)$payload['customer_lng'] : null;
-        if ($customer_lat !== null && ($customer_lat < -90 || $customer_lat > 90)) $customer_lat = null;
-        if ($customer_lng !== null && ($customer_lng < -180 || $customer_lng > 180)) $customer_lng = null;
+        $delivery_address = trim((string)($payload['delivery_address'] ?? ''));
+        $delivery_lat = isset($payload['delivery_lat']) && is_numeric($payload['delivery_lat']) ? (float)$payload['delivery_lat'] : (isset($payload['customer_lat']) && is_numeric($payload['customer_lat']) ? (float)$payload['customer_lat'] : null);
+        $delivery_lng = isset($payload['delivery_lng']) && is_numeric($payload['delivery_lng']) ? (float)$payload['delivery_lng'] : (isset($payload['customer_lng']) && is_numeric($payload['customer_lng']) ? (float)$payload['customer_lng'] : null);
+        if ($delivery_lat !== null && ($delivery_lat < -90 || $delivery_lat > 90)) $delivery_lat = null;
+        if ($delivery_lng !== null && ($delivery_lng < -180 || $delivery_lng > 180)) $delivery_lng = null;
+        $customer_lat = $delivery_lat;
+        $customer_lng = $delivery_lng;
 
         $items_summary = implode(', ', array_map(fn($x) => $x['qty'] . 'x ' . $x['name'], $clean));
 
@@ -117,7 +120,7 @@ if ($method === 'POST') {
 
         $conn->beginTransaction();
         try {
-            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, customer_lat, customer_lng, created_at) VALUES (:shop_id, :cust_id, :cust_name, :ref, :store_name, :summary, :subtotal, :fee, :total, 'PENDING', 'waiting', 'Delivery', :lat, :lng, NOW())");
+            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :cust_id, :cust_name, :ref, :store_name, :summary, :subtotal, :fee, :total, 'PENDING', 'waiting', 'Delivery', :addr, :dlat, :dlng, :lat, :lng, NOW())");
             $stmt->execute([
                 ':shop_id'    => $shop_id,
                 ':cust_id'    => $user_id,
@@ -128,6 +131,9 @@ if ($method === 'POST') {
                 ':subtotal'   => $subtotal,
                 ':fee'        => $delivery_fee,
                 ':total'      => $total_amount,
+                ':addr'       => !empty($delivery_address) ? $delivery_address : null,
+                ':dlat'       => $delivery_lat,
+                ':dlng'       => $delivery_lng,
                 ':lat'        => $customer_lat,
                 ':lng'        => $customer_lng,
             ]);
@@ -395,10 +401,16 @@ if ($method === 'POST') {
 if ($method === 'GET') {
     $action = trim((string)($_GET['action'] ?? ''));
 
+    $driver = $conn->getAttribute(PDO::ATTR_DRIVER_NAME);
+    $isPg = ($driver === 'pgsql');
+
     // Customer orders
     if ($action === 'my_orders') {
         if ($role !== 'customer') respond(false, 'Unauthorized.', [], 403);
-        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, rider_id, rider_lat, rider_lng, customer_lat, customer_lng, TO_CHAR(created_at, 'Mon DD, YYYY • HH12:MI AM') AS created_at FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
+        $dateSql = $isPg 
+            ? "TO_CHAR(created_at, 'Mon DD, YYYY • HH12:MI AM') AS created_at" 
+            : "DATE_FORMAT(created_at, '%b %d, %Y • %h:%i %p') AS created_at";
+        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, rider_id, delivery_address, delivery_lat, delivery_lng, rider_lat, rider_lng, customer_lat, customer_lng, {$dateSql} FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
         $stmt->execute([':cid' => $user_id]);
         $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
         respond(true, '', ['orders' => $orders]);
@@ -406,13 +418,16 @@ if ($method === 'GET') {
 
     // Audit logs for a given order or overall
     if ($action === 'audit_logs') {
+        $dateSql = $isPg 
+            ? "TO_CHAR(a.created_at, 'Mon DD, YYYY • HH12:MI:SS AM') AS created_at" 
+            : "DATE_FORMAT(a.created_at, '%b %d, %Y • %h:%i:%s %p') AS created_at";
         $order_id = (int)($_GET['order_id'] ?? 0);
         if ($order_id > 0) {
-            $stmt = $conn->prepare("SELECT a.log_id, a.order_id, o.order_ref, a.old_status, a.new_status, a.action_by_user_id, a.action_by_role, u.full_name AS action_by_name, a.notes, TO_CHAR(a.created_at, 'Mon DD, YYYY • HH12:MI:SS AM') AS created_at FROM order_audit_logs a LEFT JOIN food_orders o ON a.order_id = o.order_id LEFT JOIN users u ON a.action_by_user_id = u.user_id WHERE a.order_id = :oid ORDER BY a.log_id ASC");
+            $stmt = $conn->prepare("SELECT a.log_id, a.order_id, o.order_ref, a.old_status, a.new_status, a.action_by_user_id, a.action_by_role, u.full_name AS action_by_name, a.notes, {$dateSql} FROM order_audit_logs a LEFT JOIN food_orders o ON a.order_id = o.order_id LEFT JOIN users u ON a.action_by_user_id = u.user_id WHERE a.order_id = :oid ORDER BY a.log_id ASC");
             $stmt->execute([':oid' => $order_id]);
         } else {
             if ($role !== 'admin') respond(false, 'Only Admin can view complete audit logs.', [], 403);
-            $stmt = $conn->prepare("SELECT a.log_id, a.order_id, o.order_ref, o.store_name, a.old_status, a.new_status, a.action_by_user_id, a.action_by_role, u.full_name AS action_by_name, a.notes, TO_CHAR(a.created_at, 'Mon DD, YYYY • HH12:MI:SS AM') AS created_at FROM order_audit_logs a LEFT JOIN food_orders o ON a.order_id = o.order_id LEFT JOIN users u ON a.action_by_user_id = u.user_id ORDER BY a.log_id DESC LIMIT 100");
+            $stmt = $conn->prepare("SELECT a.log_id, a.order_id, o.order_ref, o.store_name, a.old_status, a.new_status, a.action_by_user_id, a.action_by_role, u.full_name AS action_by_name, a.notes, {$dateSql} FROM order_audit_logs a LEFT JOIN food_orders o ON a.order_id = o.order_id LEFT JOIN users u ON a.action_by_user_id = u.user_id ORDER BY a.log_id DESC LIMIT 100");
             $stmt->execute();
         }
         $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -422,7 +437,10 @@ if ($method === 'GET') {
     // Settlements list
     if ($action === 'settlements') {
         if ($role !== 'admin') respond(false, 'Only Admin can view settlements.', [], 403);
-        $stmt = $conn->query("SELECT s.*, o.order_ref, o.store_name, o.customer_name, u.full_name AS admin_name, TO_CHAR(s.reconciled_at, 'Mon DD, YYYY • HH12:MI AM') AS formatted_reconciled_at FROM settlements s LEFT JOIN food_orders o ON s.order_id = o.order_id LEFT JOIN users u ON s.admin_id = u.user_id ORDER BY s.settlement_id DESC LIMIT 100");
+        $dateSql = $isPg 
+            ? "TO_CHAR(s.reconciled_at, 'Mon DD, YYYY • HH12:MI AM') AS formatted_reconciled_at" 
+            : "DATE_FORMAT(s.reconciled_at, '%b %d, %Y • %h:%i %p') AS formatted_reconciled_at";
+        $stmt = $conn->query("SELECT s.*, o.order_ref, o.store_name, o.customer_name, u.full_name AS admin_name, {$dateSql} FROM settlements s LEFT JOIN food_orders o ON s.order_id = o.order_id LEFT JOIN users u ON s.admin_id = u.user_id ORDER BY s.settlement_id DESC LIMIT 100");
         $settlements = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
         respond(true, '', ['settlements' => $settlements]);
     }

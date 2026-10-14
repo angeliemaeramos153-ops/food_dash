@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS food_orders (
     total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     payment_method VARCHAR(50) DEFAULT 'Cash on Delivery',
     delivery_address TEXT DEFAULT NULL,
+    delivery_lat DECIMAL(10,8) DEFAULT NULL,
+    delivery_lng DECIMAL(11,8) DEFAULT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
     delivery_status VARCHAR(30) NOT NULL DEFAULT 'waiting',
     order_type VARCHAR(30) NOT NULL DEFAULT 'Delivery',

@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
     $order_id = (int)($input['order_id'] ?? 0);
     
     if ($order_id > 0) {
-        $stmt = $conn->prepare("SELECT order_id, customer_id, customer_name, order_ref, status, delivery_status, rider_id, total_amount FROM food_orders WHERE order_id = :oid LIMIT 1");
+        $stmt = $conn->prepare("SELECT order_id, customer_id, customer_name, order_ref, status, delivery_status, rider_id, total_amount, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng FROM food_orders WHERE order_id = :oid LIMIT 1");
         $stmt->execute([':oid' => $order_id]);
         $order = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -190,7 +190,7 @@ if ($r) {
 
 $ready_orders=[]; $my_orders=[];
 if ($rid) {
-    $stmt = $conn->prepare("SELECT order_id,order_ref,customer_name,store_name,items_summary,total_amount,status,delivery_status,rider_id,created_at FROM food_orders WHERE (UPPER(status) IN ('READY_FOR_PICKUP', 'READY') AND (rider_id IS NULL OR rider_id=0)) OR (rider_id = :rid AND UPPER(status) IN ('OUT_FOR_DELIVERY','ON_DELIVERY','ON_THE_WAY','NEAR_CUSTOMER')) ORDER BY order_id DESC LIMIT 30");
+    $stmt = $conn->prepare("SELECT order_id,order_ref,customer_name,store_name,items_summary,total_amount,status,delivery_status,rider_id,delivery_address,delivery_lat,delivery_lng,customer_lat,customer_lng,created_at FROM food_orders WHERE (UPPER(status) IN ('READY_FOR_PICKUP', 'READY') AND (rider_id IS NULL OR rider_id=0)) OR (rider_id = :rid AND UPPER(status) IN ('OUT_FOR_DELIVERY','ON_DELIVERY','ON_THE_WAY','NEAR_CUSTOMER')) ORDER BY order_id DESC LIMIT 30");
     $stmt->execute([':rid' => $rid]);
     while($o = $stmt->fetch(PDO::FETCH_ASSOC)) {
         if((int)($o['rider_id']??0)===$rid) $my_orders[]=$o;
@@ -295,6 +295,101 @@ main{padding:16px;flex:1;overflow-x:hidden}
 .btn.warn{background:var(--harvest-sun);color:#fff}
 .btn.success{background:var(--sagebrush);color:#fff}
 .btn.full{grid-column:1/-1}
+
+/* Prominent Delivery Address Card & Google Maps Navigation */
+.rider-address-card {
+  background: #fdfbf7;
+  border: 1.5px solid #d4c5a5;
+  border-left: 4.5px solid var(--harvest-sun);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 10px 0 8px;
+  text-align: left;
+  box-shadow: 0 2px 8px rgba(75, 83, 32, 0.05);
+}
+.rider-address-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--olive-shadow);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.rider-address-title i {
+  color: var(--harvest-sun);
+  font-size: 0.8rem;
+}
+.rider-address-text {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.45;
+  word-break: break-word;
+}
+.rider-gps-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.65rem;
+  color: var(--olive-shadow);
+  background: rgba(120, 138, 110, 0.15);
+  border: 1px solid rgba(120, 138, 110, 0.25);
+  padding: 3px 8px;
+  border-radius: 6px;
+  margin-top: 6px;
+  font-weight: 600;
+}
+.btn-maps {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #1a73e8;
+  color: #ffffff !important;
+  text-decoration: none;
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  box-shadow: 0 4px 14px rgba(26, 115, 232, 0.28);
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+.btn-maps:hover {
+  background: #1557b0;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(26, 115, 232, 0.38);
+}
+.btn-maps i {
+  font-size: 0.92rem;
+}
+.btn-maps-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #eef3fc;
+  color: #1a73e8 !important;
+  border: 1.5px solid #c2d7fa;
+  text-decoration: none;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.btn-maps-outline:hover {
+  background: #1a73e8;
+  color: #ffffff !important;
+  border-color: #1a73e8;
+}
+
 .empty{font-size:.76rem;color:var(--muted);text-align:center;padding:18px}
 .bottom {
   position: sticky;
@@ -343,8 +438,31 @@ main{padding:16px;flex:1;overflow-x:hidden}
 <section class="section" id="delivery"><div class="section-title"><h2><i class="fa-solid fa-box"></i> My Delivery</h2></div><div class="card"><?php if($my_orders): foreach($my_orders as $o): 
   $ord_st = strtoupper($o['status'] ?? '');
   $del_st = strtolower($o['delivery_status'] ?? '');
-?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div class="actions"><?php if($del_st === 'near_customer'): ?><button class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')">✓ Complete Delivery (Delivered)</button><?php elseif($del_st === 'on_the_way'): ?><button class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')">📍 I'm Near Customer</button><button class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')">✓ Complete Delivery</button><button type="button" class="btn secondary full" onclick="startLiveLocation(<?=$o['order_id']?>)">📡 Share Live Location</button><?php else: ?><button class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'on_way')">🚚 I'm On The Way</button><button class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')">✓ Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
-<section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): ?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>₱<?=number_format((float)$o['total_amount'],2)?></div><button class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'claim')">Accept Delivery</button></div><?php endforeach; else: ?><div class="empty">No unassigned ready orders.</div><?php endif; ?></div></section>
+  $addr = trim((string)($o['delivery_address'] ?? ''));
+  $lat = $o['delivery_lat'] ?? $o['customer_lat'] ?? null;
+  $lng = $o['delivery_lng'] ?? $o['customer_lng'] ?? null;
+  $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng));
+  if ($has_coords) {
+      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . urlencode($lat . ',' . $lng);
+  } elseif (!empty($addr)) {
+      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . urlencode($addr);
+  } else {
+      $maps_url = "https://www.google.com/maps";
+  }
+?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="margin: 10px 0 6px;"><a href="<?=htmlspecialchars($maps_url)?>" target="_blank" rel="noopener noreferrer" class="btn btn-maps full"><i class="fa-solid fa-diamond-turn-right"></i> Navigate / Open in Maps</a></div><div class="actions"><?php if($del_st === 'near_customer'): ?><button class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')">✓ Complete Delivery (Delivered)</button><?php elseif($del_st === 'on_the_way'): ?><button class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')">📍 I'm Near Customer</button><button class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')">✓ Complete Delivery</button><button type="button" class="btn secondary full" onclick="startLiveLocation(<?=$o['order_id']?>)">📡 Share Live Location</button><?php else: ?><button class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'on_way')">🚚 I'm On The Way</button><button class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')">✓ Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
+<section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
+  $addr = trim((string)($o['delivery_address'] ?? ''));
+  $lat = $o['delivery_lat'] ?? $o['customer_lat'] ?? null;
+  $lng = $o['delivery_lng'] ?? $o['customer_lng'] ?? null;
+  $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng));
+  if ($has_coords) {
+      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . urlencode($lat . ',' . $lng);
+  } elseif (!empty($addr)) {
+      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . urlencode($addr);
+  } else {
+      $maps_url = "https://www.google.com/maps";
+  }
+?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>₱<?=number_format((float)$o['total_amount'],2)?></div><div class="rider-address-card" style="margin:8px 0 10px;"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No delivery address provided')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="display:flex;gap:7px;"><button class="btn" style="flex:1" onclick="doDeliveryAction(<?=$o['order_id']?>, 'claim')">Accept Delivery</button><a href="<?=htmlspecialchars($maps_url)?>" target="_blank" rel="noopener noreferrer" class="btn btn-maps-outline" title="Open Destination in Google Maps"><i class="fa-solid fa-diamond-turn-right"></i> Maps</a></div></div><?php endforeach; else: ?><div class="empty">No unassigned ready orders.</div><?php endif; ?></div></section>
 <section class="section" id="live"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">📡 Live Location</h2><div id="gpsStatus" class="meta">Live location is off. Tap Share Live Location after starting a delivery.</div><button type="button" class="btn full" style="margin-top:10px" onclick="stopLiveLocation()">Stop Sharing</button></div></section><section class="section" id="guide"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">Customer Notification Flow</h2><div class="meta">When you accept an order, the customer is notified. When you start the trip, they receive an <b>On the Way</b> notification. When you tap <b>I'm Near Customer</b>, they receive the near-arrival notification. When delivered, the customer receives a final delivery notice.</div></div></section></main><nav class="bottom"><a class="active" href="#delivery"><i class="fa-solid fa-box"></i>Delivery</a><a href="#available"><i class="fa-solid fa-motorcycle"></i>Pickup</a><a href="#live"><i class="fa-solid fa-location-crosshairs"></i>Live</a><a href="#guide"><i class="fa-solid fa-circle-info"></i>Guide</a><a href="#" onclick="openLogout();return false"><i class="fa-solid fa-right-from-bracket"></i>Logout</a></nav></div>
 <div class="modal" id="noteModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Notifications</h3><div id="notificationList" class="notification-list"><div class="empty">Loading...</div></div><div class="box-actions"><button class="close" onclick="markAllRead()">Mark all read</button><button class="close" onclick="closeNotifications()">Close</button></div></div></div>
 <div class="modal" id="logoutModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out.</p><div class="box-actions"><button class="close" onclick="closeLogout()">Cancel</button><a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>

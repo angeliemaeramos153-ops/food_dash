@@ -118,6 +118,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'checkout' || $action === 'create_order') {
         $cart_items = $input['cart'] ?? [];
         $delivery_fee = (float)($input['delivery_fee'] ?? 30.00);
+        $delivery_address = trim((string)($input['delivery_address'] ?? ''));
+        $delivery_lat = isset($input['delivery_lat']) && is_numeric($input['delivery_lat']) ? (float)$input['delivery_lat'] : (isset($input['customer_lat']) && is_numeric($input['customer_lat']) ? (float)$input['customer_lat'] : null);
+        $delivery_lng = isset($input['delivery_lng']) && is_numeric($input['delivery_lng']) ? (float)$input['delivery_lng'] : (isset($input['customer_lng']) && is_numeric($input['customer_lng']) ? (float)$input['customer_lng'] : null);
+
+        if ($delivery_lat !== null && ($delivery_lat < -90 || $delivery_lat > 90)) $delivery_lat = null;
+        if ($delivery_lng !== null && ($delivery_lng < -180 || $delivery_lng > 180)) $delivery_lng = null;
+        $customer_lat = $delivery_lat;
+        $customer_lng = $delivery_lng;
         
         if (empty($cart_items)) {
             api_response(['success' => false, 'message' => 'Your cart is empty.'], 400);
@@ -189,17 +197,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $cname = !empty($full_name) ? $full_name : 'Customer';
                 
                 // Insert order with initial status 'PENDING'
-                $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, store_name, customer_id, customer_name, order_ref, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, created_at) VALUES (:shop_id, :store_name, :customer_id, :customer_name, :order_ref, :items_summary, :subtotal, :delivery_fee, :total_amount, 'PENDING', 'waiting', 'Delivery', NOW())");
+                $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, store_name, customer_id, customer_name, order_ref, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :store_name, :customer_id, :customer_name, :order_ref, :items_summary, :subtotal, :delivery_fee, :total_amount, 'PENDING', 'waiting', 'Delivery', :delivery_address, :delivery_lat, :delivery_lng, :customer_lat, :customer_lng, NOW())");
                 $stmt->execute([
-                    ':shop_id'       => $shop_id,
-                    ':store_name'    => $store_name,
-                    ':customer_id'   => $user_id,
-                    ':customer_name' => $cname,
-                    ':order_ref'     => $unique_ref,
-                    ':items_summary' => $items_summary,
-                    ':subtotal'      => $subtotal,
-                    ':delivery_fee'  => $delivery_fee,
-                    ':total_amount'  => $total_amount
+                    ':shop_id'          => $shop_id,
+                    ':store_name'       => $store_name,
+                    ':customer_id'      => $user_id,
+                    ':customer_name'    => $cname,
+                    ':order_ref'        => $unique_ref,
+                    ':items_summary'    => $items_summary,
+                    ':subtotal'         => $subtotal,
+                    ':delivery_fee'     => $delivery_fee,
+                    ':total_amount'     => $total_amount,
+                    ':delivery_address' => !empty($delivery_address) ? $delivery_address : null,
+                    ':delivery_lat'     => $delivery_lat,
+                    ':delivery_lng'     => $delivery_lng,
+                    ':customer_lat'     => $customer_lat,
+                    ':customer_lng'     => $customer_lng,
                 ]);
                 $new_order_id = (int)$conn->lastInsertId();
                 
@@ -262,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $db_orders = [];
 $ontheway_count = 0;
 
-$stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, status, delivery_status, order_type, created_at FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
+$stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
 if ($stmt) {
     $stmt->execute([':cid' => $user_id]);
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) { 
@@ -630,6 +643,105 @@ button{cursor:pointer}
 .cart-info{flex:1}.cart-info strong{font-size:10px}.cart-info small{font-size:8px;color:var(--muted);display:block}.cart-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:5px}
 .summary{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}.sumrow{display:flex;justify-content:space-between;font-size:9px;padding:4px 0}.sumrow.total{font-size:12px;font-weight:700;color:var(--olive-dark);padding-top:8px}
 
+/* Delivery Address & GPS Component */
+.delivery-address-section {
+  background: #FAF6EE;
+  border: 1px solid var(--sandstone);
+  border-radius: 14px;
+  padding: 12px;
+  margin: 12px 0 10px;
+}
+.delivery-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.delivery-section-header label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--olive-dark);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.delivery-section-header label i {
+  color: var(--harvest-sun);
+}
+.gps-detect-btn {
+  background: white;
+  border: 1px solid var(--sandstone);
+  color: var(--olive);
+  font-size: 8.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.gps-detect-btn:hover {
+  background: var(--harvest-sun);
+  color: white;
+  border-color: var(--harvest-sun);
+}
+.delivery-textarea {
+  width: 100%;
+  border: 1px solid var(--sandstone);
+  background: white;
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-size: 9.5px;
+  color: #20241a;
+  outline: none;
+  resize: vertical;
+  min-height: 52px;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.delivery-textarea:focus {
+  border-color: var(--harvest-sun);
+  box-shadow: 0 0 0 2px rgba(216, 143, 42, 0.15);
+}
+.delivery-textarea.input-error {
+  border-color: var(--earth-clay) !important;
+  background: #fff6f5 !important;
+  animation: shake 0.3s ease-in-out;
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.gps-status-pill {
+  font-size: 8px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.3;
+}
+.gps-status-pill.success {
+  background: rgba(120, 138, 110, 0.15);
+  color: var(--olive-dark);
+  border: 1px solid rgba(120, 138, 110, 0.3);
+}
+.gps-status-pill.loading {
+  background: rgba(216, 143, 42, 0.12);
+  color: var(--harvest-sun);
+  border: 1px solid rgba(216, 143, 42, 0.25);
+}
+.gps-status-pill.error {
+  background: rgba(146, 61, 50, 0.1);
+  color: var(--earth-clay);
+  border: 1px solid rgba(146, 61, 50, 0.2);
+}
+
 .profile{background:white;border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;gap:11px;align-items:center}.profile-pic{width:52px;height:52px;border-radius:50%;background:#eee5c8;display:grid;place-items:center;font-size:22px}.profile strong{font-size:12px}.profile small{font-size:8px;color:var(--muted);display:block}
 .menu{margin-top:10px;border:1px solid var(--line);border-radius:15px;background:#fff;overflow:hidden}.menu a{display:flex;justify-content:space-between;align-items:center;padding:13px;border-bottom:1px solid #f0eadb;text-decoration:none;color:#303429;font-size:9px}.menu a:last-child{border:0}.menu i{color:var(--olive);margin-right:8px}
 
@@ -811,12 +923,28 @@ button{cursor:pointer}
   <div class="section-title"><h3>My Cart</h3><i class="fa-regular fa-trash-can" style="cursor:pointer" onclick="clearCart()"></i></div>
   <div id="cartList"></div>
   <div id="cartSummary" style="display:none">
+    <!-- Customer Delivery Destination Section -->
+    <div class="delivery-address-section">
+      <div class="delivery-section-header">
+        <label for="deliveryAddressInput">
+          <i class="fa-solid fa-location-dot"></i> Delivery Address
+        </label>
+        <button type="button" class="gps-detect-btn" id="btnDetectGps" onclick="detectCustomerGps(false)">
+          <i class="fa-solid fa-crosshairs"></i> Auto-detect GPS
+        </button>
+      </div>
+      <textarea id="deliveryAddressInput" class="delivery-textarea" placeholder="Enter complete delivery address (e.g. Unit/House No., Street, Brgy, City, Landmark)" rows="2"></textarea>
+      <div id="gpsLocationStatus" class="gps-status-pill" style="display:none;"></div>
+      <input type="hidden" id="deliveryLatInput" value="">
+      <input type="hidden" id="deliveryLngInput" value="">
+    </div>
+
     <div class="summary">
       <div class="sumrow"><span>Subtotal</span><span id="subtotal">₱0.00</span></div>
       <div class="sumrow"><span>Delivery Fee</span><span>₱30.00</span></div>
       <div class="sumrow total"><span>Total</span><span id="total">₱30.00</span></div>
     </div>
-    <button class="primary" style="margin-top:12px" onclick="checkout()">Checkout</button>
+    <button class="primary" style="margin-top:12px" id="btnCheckoutSubmit" onclick="checkout()">Checkout</button>
   </div>
 </section>
 
@@ -855,6 +983,9 @@ button{cursor:pointer}
           <strong><?= htmlspecialchars($ord['order_ref']) ?></strong>
           <small><?= htmlspecialchars($ord['store_name']) ?> • <?= htmlspecialchars($ord['items_summary']) ?></small>
           <small><?= htmlspecialchars(date('M d, Y • g:i A', strtotime($ord['created_at']))) ?> • ₱<?= number_format((float)$ord['total_amount'], 2) ?></small>
+          <?php if (!empty($ord['delivery_address'])): ?>
+            <small style="color: var(--olive-dark); font-weight: 500; margin-top: 3px; white-space: normal; line-height: 1.35;"><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> <?= htmlspecialchars($ord['delivery_address']) ?></small>
+          <?php endif; ?>
           
           <div style="margin-top: 5px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span class="status-badge status-<?= htmlspecialchars($norm_status) ?>" id="status-tag-<?= $ord['order_id'] ?>">
@@ -896,6 +1027,30 @@ button{cursor:pointer}
   </div>
   <button class="logout" type="button" onclick="openLogout()">Log Out</button>
 </section>
+
+<!-- Delivery Address Prompt Modal -->
+<div class="fd-modal" id="addressPromptModal" onclick="if(event.target===this)closeAddressPromptModal()">
+  <div class="fd-modal-box">
+    <div class="fd-modal-header">
+      <h3><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> Delivery Address</h3>
+      <button class="fd-modal-close" onclick="closeAddressPromptModal()">&times;</button>
+    </div>
+    <div style="font-size: 9.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.4;">
+      Please confirm where our rider should deliver your food order.
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+      <button type="button" class="gps-detect-btn" id="modalBtnDetectGps" onclick="detectCustomerGps(true)">
+        <i class="fa-solid fa-crosshairs"></i> Auto-detect GPS
+      </button>
+    </div>
+    <textarea id="modalDeliveryAddress" class="delivery-textarea" placeholder="Unit/House No., Street, Barangay, City, Landmark..." rows="3"></textarea>
+    <div id="modalGpsStatus" class="gps-status-pill" style="display:none;"></div>
+    <div class="fd-modal-actions">
+      <button class="btn-fd-secondary" onclick="closeAddressPromptModal()">Cancel</button>
+      <button class="btn-fd-primary" id="btnModalConfirmOrder" onclick="confirmModalAddressAndCheckout()">Confirm & Order</button>
+    </div>
+  </div>
+</div>
 
 <!-- In-App Notifications Modal (Food Dash Palette) -->
 <div class="fd-modal" id="customerNoteModal" onclick="if(event.target===this)closeNotifications()">
@@ -1329,6 +1484,13 @@ function renderCart(){
   document.getElementById('subtotal').textContent = money(subtotal);
   document.getElementById('total').textContent = money(total);
   summaryBox.style.display = 'block';
+
+  // Pre-fill delivery address from localStorage if available
+  const addrInput = document.getElementById('deliveryAddressInput');
+  if (addrInput && !addrInput.value) {
+    const saved = localStorage.getItem('foodDashDeliveryAddress');
+    if (saved) addrInput.value = saved;
+  }
 }
 
 function updateCartQty(index, change) {
@@ -1352,17 +1514,189 @@ function clearCart() {
   toast('Cart cleared');
 }
 
+let currentCustomerLat = null;
+let currentCustomerLng = null;
+
+function detectCustomerGps(isModal = false) {
+    const statusEl = document.getElementById(isModal ? 'modalGpsStatus' : 'gpsLocationStatus');
+    const addrInput = document.getElementById(isModal ? 'modalDeliveryAddress' : 'deliveryAddressInput');
+    const btn = document.getElementById(isModal ? 'modalBtnDetectGps' : 'btnDetectGps');
+
+    if (!navigator.geolocation) {
+        toast('Geolocation is not supported by your browser');
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Detecting...';
+    }
+    if (statusEl) {
+        statusEl.style.display = 'flex';
+        statusEl.className = 'gps-status-pill loading';
+        statusEl.innerHTML = '<i class="fa-solid fa-satellite-dish fa-spin"></i> Detecting GPS coordinates...';
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        async (position) => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-crosshairs"></i> Auto-detect GPS';
+            }
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            
+            currentCustomerLat = lat;
+            currentCustomerLng = lng;
+            
+            const latInput = document.getElementById('deliveryLatInput');
+            const lngInput = document.getElementById('deliveryLngInput');
+            if (latInput) latInput.value = lat.toFixed(7);
+            if (lngInput) lngInput.value = lng.toFixed(7);
+            
+            const statusText = `<i class="fa-solid fa-circle-check"></i> GPS Detected: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            if (statusEl) {
+                statusEl.className = 'gps-status-pill success';
+                statusEl.innerHTML = statusText;
+            }
+
+            // Sync with other status element if present
+            const otherStatusEl = document.getElementById(isModal ? 'gpsLocationStatus' : 'modalGpsStatus');
+            if (otherStatusEl) {
+                otherStatusEl.style.display = 'flex';
+                otherStatusEl.className = 'gps-status-pill success';
+                otherStatusEl.innerHTML = statusText;
+            }
+
+            // Try reverse geocoding via OpenStreetMap Nominatim
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.display_name) {
+                        const formatted = data.display_name;
+                        if (!addrInput.value.trim() || addrInput.value.startsWith('GPS Location:')) {
+                            addrInput.value = formatted;
+                            localStorage.setItem('foodDashDeliveryAddress', formatted);
+                            const mainAddr = document.getElementById('deliveryAddressInput');
+                            if (mainAddr) mainAddr.value = formatted;
+                            const modalAddr = document.getElementById('modalDeliveryAddress');
+                            if (modalAddr) modalAddr.value = formatted;
+                        }
+                    }
+                }
+            } catch (e) {
+                // Ignore network error on reverse geocode
+            }
+
+            if (!addrInput.value.trim()) {
+                const fallbackText = `GPS Location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+                addrInput.value = fallbackText;
+                localStorage.setItem('foodDashDeliveryAddress', fallbackText);
+                const mainAddr = document.getElementById('deliveryAddressInput');
+                if (mainAddr) mainAddr.value = fallbackText;
+            }
+            toast('GPS location auto-detected successfully!');
+        },
+        (error) => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-crosshairs"></i> Auto-detect GPS';
+            }
+            let errMsg = 'Location permission denied or unavailable.';
+            if (error.code === error.PERMISSION_DENIED) {
+                errMsg = 'Location permission denied. Please enter address manually.';
+            } else if (error.code === error.TIMEOUT) {
+                errMsg = 'Location request timed out. Please enter address manually.';
+            }
+            if (statusEl) {
+                statusEl.className = 'gps-status-pill error';
+                statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${errMsg}`;
+            }
+            toast(errMsg);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+}
+
+function openAddressPromptModal() {
+    const mainAddr = document.getElementById('deliveryAddressInput');
+    const modalAddr = document.getElementById('modalDeliveryAddress');
+    if (mainAddr && modalAddr) {
+        modalAddr.value = mainAddr.value.trim() || localStorage.getItem('foodDashDeliveryAddress') || '';
+    }
+    const modal = document.getElementById('addressPromptModal');
+    if (modal) modal.classList.add('show');
+    if (modalAddr) modalAddr.focus();
+}
+
+function closeAddressPromptModal() {
+    const modal = document.getElementById('addressPromptModal');
+    if (modal) modal.classList.remove('show');
+}
+
+function confirmModalAddressAndCheckout() {
+    const modalAddr = document.getElementById('modalDeliveryAddress');
+    const address = (modalAddr ? modalAddr.value : '').trim();
+    if (!address) {
+        if (modalAddr) {
+            modalAddr.classList.add('input-error');
+            setTimeout(() => modalAddr.classList.remove('input-error'), 2000);
+        }
+        toast('Please enter your delivery address');
+        return;
+    }
+    const mainAddr = document.getElementById('deliveryAddressInput');
+    if (mainAddr) mainAddr.value = address;
+    localStorage.setItem('foodDashDeliveryAddress', address);
+    closeAddressPromptModal();
+    checkout();
+}
+
 function checkout() {
     if (!cart.length) {
         toast('Cart is empty');
         return;
     }
     
+    const addrInput = document.getElementById('deliveryAddressInput');
+    const latInput = document.getElementById('deliveryLatInput');
+    const lngInput = document.getElementById('deliveryLngInput');
+    const address = (addrInput ? addrInput.value : '').trim();
+
+    if (!address) {
+        if (addrInput) {
+            addrInput.focus();
+            addrInput.classList.add('input-error');
+            setTimeout(() => addrInput.classList.remove('input-error'), 2500);
+        }
+        openAddressPromptModal();
+        return;
+    }
+
+    localStorage.setItem('foodDashDeliveryAddress', address);
+    
     const deliveryFee = 30;
+    const btnSubmit = document.getElementById('btnCheckoutSubmit');
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Placing Order...';
+    }
+
+    const dLat = (latInput && latInput.value) ? parseFloat(latInput.value) : currentCustomerLat;
+    const dLng = (lngInput && lngInput.value) ? parseFloat(lngInput.value) : currentCustomerLng;
+
     const payload = {
         action: 'checkout',
         cart: cart,
-        delivery_fee: deliveryFee
+        delivery_fee: deliveryFee,
+        delivery_address: address,
+        delivery_lat: dLat,
+        delivery_lng: dLng,
+        customer_lat: dLat,
+        customer_lng: dLng
     };
     
     fetch(window.location.href, {
@@ -1377,19 +1711,31 @@ function checkout() {
         return res.json();
     })
     .then(data => {
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = 'Checkout';
+        }
         if (data.success) {
-            toast('Orders placed successfully!');
+            toast('Order placed successfully!');
             cart = [];
             saveCart();
             updateBadge();
             renderCart();
-            showScreen('orders');
+            closeAddressPromptModal();
+            setTimeout(() => {
+                window.location.hash = '#orders';
+                window.location.reload();
+            }, 800);
         } else {
             toast(data.message || 'Checkout failed');
             console.error('Checkout failed:', data.message);
         }
     })
     .catch(err => {
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = 'Checkout';
+        }
         console.error('Checkout error:', err);
         toast(err.message || 'Network error during checkout');
     });
@@ -1471,8 +1817,16 @@ updateBadge();
 loadNotifications();
 setInterval(loadNotifications, 6000);
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeLogout(); closeNotifications(); }
+  if (e.key === 'Escape') { closeLogout(); closeNotifications(); closeAddressPromptModal(); }
 });
+
+// Check if navigating to a specific screen via hash (e.g. #orders, #cart)
+if (window.location.hash) {
+  const targetScreen = window.location.hash.replace('#', '');
+  if (document.getElementById(targetScreen)) {
+    showScreen(targetScreen);
+  }
+}
 </script>
 </body>
 </html>
