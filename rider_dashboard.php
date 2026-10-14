@@ -12,16 +12,26 @@ $username = $_SESSION['username'] ?? $_SESSION['user']['username'] ?? $_SESSION[
 $user_name = $_SESSION['full_name'] ?? $_SESSION['username'] ?? $_SESSION['user']['username'] ?? 'Rider';
 $msg = ''; $error = '';
 
-// Match the rider account to the existing riders table by name, preserving the original schema.
-$full = trim($user_name);
-$stmt = $conn->prepare("SELECT rider_id, rider_name, status, current_order FROM riders WHERE rider_name = :rname LIMIT 1");
-$stmt->execute([':rname' => $full]);
+// Match the rider account to riders table: user_id first, then name/Alex Gonzaga, fallback to 1
+$r = null;
+$stmt = $conn->prepare("SELECT rider_id, rider_name, status, current_order FROM riders WHERE user_id = :uid LIMIT 1");
+$stmt->execute([':uid' => $user_id]);
 $r = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$r) {
+    $full = trim($user_name);
+    $stmt = $conn->prepare("SELECT rider_id, rider_name, status, current_order FROM riders WHERE LOWER(TRIM(rider_name)) = LOWER(:rname) OR rider_name LIKE '%Alex%' LIMIT 1");
+    $stmt->execute([':rname' => $full]);
+    $r = $stmt->fetch(PDO::FETCH_ASSOC);
+}
 if (!$r) {
     $q = $conn->query("SELECT rider_id, rider_name, status, current_order FROM riders ORDER BY rider_id ASC LIMIT 1");
     $r = $q ? $q->fetch(PDO::FETCH_ASSOC) : null;
 }
-$rid = $r ? (int)$r['rider_id'] : 0;
+$rid = $r ? (int)$r['rider_id'] : 1;
+if ($r && !empty($r['rider_name'])) {
+    $user_name = $r['rider_name'];
+}
 
 // Delivery actions: claim a ready order, start the trip, mark near, then complete.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
@@ -46,30 +56,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                 $customer_id = (int)$order['customer_id'];
                 $ref = $order['order_ref'] ? $order['order_ref'] : '#' . $order['order_id'];
                 $old_st = strtoupper(trim($order['status'] ?? ''));
+                $norm_st = strtolower(trim($order['status'] ?? ''));
 
-                if ($action === 'claim') {
-                    if (!in_array($old_st, ['READY_FOR_PICKUP', 'READY']) || (!empty($order['rider_id']) && (int)$order['rider_id'] !== 0)) {
+                if ($action === 'claim' || $action === 'pickup') {
+                    $assigned_rid = (int)($order['rider_id'] ?? 0);
+                    if (!in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned', 'out_for_delivery']) || (!empty($assigned_rid) && $assigned_rid !== $rid)) {
                         throw new Exception('This order is not ready for pickup or has already been assigned.');
                     }
-                    $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'out_for_delivery', status = 'OUT_FOR_DELIVERY', updated_at = NOW() WHERE order_id = :oid AND UPPER(status) IN ('READY_FOR_PICKUP', 'READY') AND (rider_id IS NULL OR rider_id = 0)");
+                    $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'on_the_way', status = 'OUT_FOR_DELIVERY', updated_at = NOW() WHERE order_id = :oid");
                     $stmt->execute([':rid' => $rid, ':oid' => $order_id]);
-                    $changed = $stmt->rowCount();
 
-                    if ($changed) {
-                        $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
-                        $stmt->execute([':ref' => $ref, ':rid' => $rid]);
+                    $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
+                    $stmt->execute([':ref' => $ref, ':rid' => $rid]);
 
-                        record_order_audit_log($conn, $order_id, $old_st, 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Order claimed by rider ' . $user_name);
-                        create_notification($conn, $customer_id, 'rider_assigned', 'Order Out for Delivery', 'Rider ' . $user_name . ' has picked up your order ' . $ref . ' and is on the way!', $order_id);
-                        notify_role($conn, 'admin', 'Rider Dispatched', 'Rider ' . $user_name . ' claimed and dispatched order ' . $ref, $order_id);
+                    record_order_audit_log($conn, $order_id, $old_st, 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
+                    create_notification($conn, $customer_id, 'rider_assigned', 'Order Out for Delivery', 'Rider ' . $user_name . ' has picked up your order ' . $ref . ' and is on the way!', $order_id);
+                    notify_role($conn, 'admin', 'Rider Dispatched', 'Rider ' . $user_name . ' confirmed pickup and dispatched order ' . $ref, $order_id);
 
-                        if (ob_get_level()) ob_clean();
-                        header('Content-Type: application/json');
-                        echo json_encode(['success' => true, 'message' => 'Delivery accepted. Order is now OUT FOR DELIVERY.', 'order_id' => $order_id]);
-                        exit();
-                    } else {
-                        throw new Exception('Order could not be claimed. Please refresh.');
-                    }
+                    if (ob_get_level()) ob_clean();
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => true, 'message' => 'Order picked up! Status transitioned to On Delivery.', 'order_id' => $order_id]);
+                    exit();
                 } elseif ($action === 'on_way') {
                     if ((int)($order['rider_id'] ?? 0) !== $rid) throw new Exception('You are not assigned to this order.');
                     $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', updated_at = NOW() WHERE order_id = :oid AND rider_id = :rid");
@@ -127,18 +134,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                 $customer_id = (int)$order['customer_id'];
                 $ref = $order['order_ref'] ? $order['order_ref'] : '#' . $order['order_id'];
                 $old_st = strtoupper(trim($order['status'] ?? ''));
+                $norm_st = strtolower(trim($order['status'] ?? ''));
 
-                if ($action === 'claim') {
-                    if (in_array($old_st, ['READY_FOR_PICKUP', 'READY']) && (empty($order['rider_id']) || (int)$order['rider_id'] === 0)) {
-                        $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'out_for_delivery', status = 'OUT_FOR_DELIVERY', updated_at = NOW() WHERE order_id = :oid");
+                if ($action === 'claim' || $action === 'pickup') {
+                    $assigned_rid = (int)($order['rider_id'] ?? 0);
+                    if (in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned', 'out_for_delivery']) && (empty($assigned_rid) || $assigned_rid === $rid)) {
+                        $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'on_the_way', status = 'OUT_FOR_DELIVERY', updated_at = NOW() WHERE order_id = :oid");
                         $stmt->execute([':rid' => $rid, ':oid' => $order_id]);
 
                         $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
                         $stmt->execute([':ref' => $ref, ':rid' => $rid]);
 
-                        record_order_audit_log($conn, $order_id, $old_st, 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Order claimed by rider ' . $user_name);
+                        record_order_audit_log($conn, $order_id, $old_st, 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
                         create_notification($conn, $customer_id, 'rider_assigned', 'Order Out for Delivery', 'Rider ' . $user_name . ' has picked up your order ' . $ref . '.', $order_id);
-                        $msg = 'Delivery accepted. Order is now OUT FOR DELIVERY.';
+                        $msg = 'Order picked up! Status transitioned to On Delivery.';
                     } else {
                         $error = 'Order is already assigned or not ready.';
                     }
@@ -188,14 +197,26 @@ if ($r) {
     $r = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
-$ready_orders=[]; $my_orders=[];
-if ($rid) {
-    $stmt = $conn->prepare("SELECT order_id,order_ref,customer_name,store_name,items_summary,total_amount,status,delivery_status,rider_id,delivery_address,delivery_lat,delivery_lng,customer_lat,customer_lng,created_at FROM food_orders WHERE (UPPER(status) IN ('READY_FOR_PICKUP', 'READY') AND (rider_id IS NULL OR rider_id=0)) OR (rider_id = :rid AND UPPER(status) IN ('OUT_FOR_DELIVERY','ON_DELIVERY','ON_THE_WAY','NEAR_CUSTOMER')) ORDER BY order_id DESC LIMIT 30");
-    $stmt->execute([':rid' => $rid]);
-    while($o = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        if((int)($o['rider_id']??0)===$rid) $my_orders[]=$o;
-        else $ready_orders[]=$o;
-    }
+$ready_orders = [];
+$my_orders = [];
+if ($rid > 0) {
+    // 1. Orders Ready for Pickup: Unassigned orders with case-insensitive status matching ready_for_pickup, ready, or assigned
+    $stmt_ready = $conn->prepare("SELECT order_id, order_ref, customer_name, store_name, items_summary, total_amount, status, delivery_status, rider_id, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at 
+        FROM food_orders 
+        WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned') 
+          AND (rider_id IS NULL OR rider_id = 0) 
+        ORDER BY order_id DESC LIMIT 30");
+    $stmt_ready->execute();
+    $ready_orders = $stmt_ready->fetchAll(PDO::FETCH_ASSOC);
+
+    // 2. My Delivery: Orders assigned to this rider with case-insensitive status matching ready_for_pickup, ready, assigned, or active delivery
+    $stmt_my = $conn->prepare("SELECT order_id, order_ref, customer_name, store_name, items_summary, total_amount, status, delivery_status, rider_id, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at 
+        FROM food_orders 
+        WHERE rider_id = :rid 
+          AND (LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer')) 
+        ORDER BY order_id DESC LIMIT 30");
+    $stmt_my->execute([':rid' => $rid]);
+    $my_orders = $stmt_my->fetchAll(PDO::FETCH_ASSOC);
 }
 $total_riders = (int)($conn->query("SELECT COUNT(*) AS c FROM riders")->fetchColumn() ?: 0);
 $waiting = (int)($conn->query("SELECT COUNT(*) AS c FROM riders WHERE status='waiting'")->fetchColumn() ?: 0);
@@ -389,6 +410,12 @@ main{padding:16px;flex:1;overflow-x:hidden}
   color: #ffffff !important;
   border-color: #1a73e8;
 }
+.btn-gps-active {
+  background: #2e7d32 !important;
+  color: #ffffff !important;
+  border-color: #2e7d32 !important;
+  box-shadow: 0 4px 14px rgba(46, 125, 50, 0.40) !important;
+}
 
 .empty{font-size:.76rem;color:var(--muted);text-align:center;padding:18px}
 .bottom {
@@ -437,11 +464,12 @@ main{padding:16px;flex:1;overflow-x:hidden}
 </style></head><body><div class="app"><header class="hero"><div class="topline"><div class="brand"><img src="logo.jpg" alt="Food Dash"><b>FOOD DASH</b></div><button class="bell" onclick="openNotifications()"><i class="fa-regular fa-bell"></i><span id="noteBadge" class="bell-badge">0</span></button></div><div class="hello"><small>Rider Portal</small><h1>Ready to dash, <?=htmlspecialchars($user_name)?>?</h1><small>Pick up orders and keep customers updated.</small><div class="status"><span class="dot <?=$r && $r['status']==='on_delivery'?'live':''?>"></span><?=$r && $r['status']==='on_delivery'?'On Delivery':'Waiting for Delivery'?></div></div></header><main><?php if($msg):?><div class="alert">✓ <?=htmlspecialchars($msg)?></div><?php endif;?><?php if($error):?><div class="alert err">⚠ <?=htmlspecialchars($error)?></div><?php endif;?><div class="stats"><div class="stat"><i class="fa-solid fa-motorcycle"></i><strong><?=$total_riders?></strong><span>Total Riders</span></div><div class="stat"><i class="fa-solid fa-clock"></i><strong><?=$waiting?></strong><span>Waiting</span></div><div class="stat"><i class="fa-solid fa-route"></i><strong><?=$on_delivery?></strong><span>On Delivery</span></div></div>
 <section class="section" id="delivery"><div class="section-title"><h2><i class="fa-solid fa-box"></i> My Delivery</h2></div><div class="card"><?php if($my_orders): foreach($my_orders as $o): 
   $ord_st = strtoupper($o['status'] ?? '');
+  $norm_st = strtolower(trim($o['status'] ?? ''));
   $del_st = strtolower($o['delivery_status'] ?? '');
   $addr = trim((string)($o['delivery_address'] ?? ''));
   $lat = $o['delivery_lat'] ?? $o['customer_lat'] ?? null;
   $lng = $o['delivery_lng'] ?? $o['customer_lng'] ?? null;
-  $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng));
+  $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   if ($has_coords) {
       $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . urlencode($lat . ',' . $lng);
   } elseif (!empty($addr)) {
@@ -449,12 +477,13 @@ main{padding:16px;flex:1;overflow-x:hidden}
   } else {
       $maps_url = "https://www.google.com/maps";
   }
-?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="margin: 10px 0 6px;"><a href="<?=htmlspecialchars($maps_url)?>" target="_blank" rel="noopener noreferrer" class="btn btn-maps full"><i class="fa-solid fa-diamond-turn-right"></i> Navigate / Open in Maps</a></div><div class="actions"><?php if($del_st === 'near_customer'): ?><button class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')">✓ Complete Delivery (Delivered)</button><?php elseif($del_st === 'on_the_way'): ?><button class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')">📍 I'm Near Customer</button><button class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')">✓ Complete Delivery</button><button type="button" class="btn secondary full" onclick="startLiveLocation(<?=$o['order_id']?>)">📡 Share Live Location</button><?php else: ?><button class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'on_way')">🚚 I'm On The Way</button><button class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')">✓ Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
+  $is_ready_pickup = in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned']);
+?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="margin: 10px 0 6px;"><a href="<?=htmlspecialchars($maps_url)?>" target="_blank" rel="noopener noreferrer" class="btn btn-maps full"><i class="fa-solid fa-diamond-turn-right"></i> Open in Google Maps / Turn-by-Turn Navigation</a></div><div class="actions" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
   $addr = trim((string)($o['delivery_address'] ?? ''));
   $lat = $o['delivery_lat'] ?? $o['customer_lat'] ?? null;
   $lng = $o['delivery_lng'] ?? $o['customer_lng'] ?? null;
-  $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng));
+  $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   if ($has_coords) {
       $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . urlencode($lat . ',' . $lng);
   } elseif (!empty($addr)) {
@@ -462,7 +491,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
   } else {
       $maps_url = "https://www.google.com/maps";
   }
-?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>₱<?=number_format((float)$o['total_amount'],2)?></div><div class="rider-address-card" style="margin:8px 0 10px;"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No delivery address provided')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="display:flex;gap:7px;"><button class="btn" style="flex:1" onclick="doDeliveryAction(<?=$o['order_id']?>, 'claim')">Accept Delivery</button><a href="<?=htmlspecialchars($maps_url)?>" target="_blank" rel="noopener noreferrer" class="btn btn-maps-outline" title="Open Destination in Google Maps"><i class="fa-solid fa-diamond-turn-right"></i> Maps</a></div></div><?php endforeach; else: ?><div class="empty">No unassigned ready orders.</div><?php endif; ?></div></section>
+?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>₱<?=number_format((float)$o['total_amount'],2)?></div><div class="rider-address-card" style="margin:8px 0 10px;"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No delivery address provided')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="display:flex;gap:7px;"><button type="button" class="btn" style="flex:1" onclick="doDeliveryAction(<?=$o['order_id']?>, 'claim')"><i class="fa-solid fa-motorcycle"></i> Accept / Pick Up Order</button><a href="<?=htmlspecialchars($maps_url)?>" target="_blank" rel="noopener noreferrer" class="btn btn-maps-outline" title="Open Destination in Google Maps"><i class="fa-solid fa-diamond-turn-right"></i> Maps</a></div></div><?php endforeach; else: ?><div class="empty">No unassigned ready orders.</div><?php endif; ?></div></section>
 <section class="section" id="live"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">📡 Live Location</h2><div id="gpsStatus" class="meta">Live location is off. Tap Share Live Location after starting a delivery.</div><button type="button" class="btn full" style="margin-top:10px" onclick="stopLiveLocation()">Stop Sharing</button></div></section><section class="section" id="guide"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">Customer Notification Flow</h2><div class="meta">When you accept an order, the customer is notified. When you start the trip, they receive an <b>On the Way</b> notification. When you tap <b>I'm Near Customer</b>, they receive the near-arrival notification. When delivered, the customer receives a final delivery notice.</div></div></section></main><nav class="bottom"><a class="active" href="#delivery"><i class="fa-solid fa-box"></i>Delivery</a><a href="#available"><i class="fa-solid fa-motorcycle"></i>Pickup</a><a href="#live"><i class="fa-solid fa-location-crosshairs"></i>Live</a><a href="#guide"><i class="fa-solid fa-circle-info"></i>Guide</a><a href="#" onclick="openLogout();return false"><i class="fa-solid fa-right-from-bracket"></i>Logout</a></nav></div>
 <div class="modal" id="noteModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Notifications</h3><div id="notificationList" class="notification-list"><div class="empty">Loading...</div></div><div class="box-actions"><button class="close" onclick="markAllRead()">Mark all read</button><button class="close" onclick="closeNotifications()">Close</button></div></div></div>
 <div class="modal" id="logoutModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out.</p><div class="box-actions"><button class="close" onclick="closeLogout()">Cancel</button><a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
@@ -512,21 +541,118 @@ function openNotifications(){document.getElementById('noteModal').classList.add(
 function openLogout(){document.getElementById('logoutModal').classList.add('show')}function closeLogout(){document.getElementById('logoutModal').classList.remove('show')}
 loadNotifications();setInterval(loadNotifications,5000);document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNotifications();closeLogout()}});
 
-let gpsWatchId=null, gpsOrderId=null;
-async function startLiveLocation(orderId){
-  if(!navigator.geolocation){toastGps('GPS is not supported on this device.');return;}
-  gpsOrderId=orderId;
-  document.getElementById('gpsStatus').textContent='Requesting location permission…';
-  gpsWatchId=navigator.geolocation.watchPosition(async pos=>{
-    const lat=pos.coords.latitude,lng=pos.coords.longitude;
-    try{
-      const r=await fetch('tracking_api.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_rider_location',order_id:gpsOrderId,lat,lng})});
-      const d=await r.json();
-      if(d.success){document.getElementById('gpsStatus').textContent=`Live location sharing • ${lat.toFixed(5)}, ${lng.toFixed(5)}${d.distance_km!=null?' • '+(d.distance_km<1?(d.distance_km*1000).toFixed(0)+' m':d.distance_km.toFixed(2)+' km')+' from customer':''}`;}
-    }catch(e){document.getElementById('gpsStatus').textContent='Location update failed. Retrying…'}
-  },err=>{document.getElementById('gpsStatus').textContent='GPS permission is required for automatic near-arrival alerts.';}, {enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+let gpsWatchId = null, activeGpsOrderId = null;
+
+async function sendRiderLocation(orderId, lat, lng) {
+  try {
+    const r = await fetch('tracking_api.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_rider_location', order_id: orderId, lat: lat, lng: lng })
+    });
+    const d = await r.json();
+    const gpsStatusEl = document.getElementById('gpsStatus');
+    if (d.success) {
+      if (gpsStatusEl) {
+        gpsStatusEl.textContent = `Live GPS sharing • ${lat.toFixed(5)}, ${lng.toFixed(5)}` + 
+          (d.distance_km != null ? ` • ${(d.distance_km < 1 ? (d.distance_km * 1000).toFixed(0) + ' m' : d.distance_km.toFixed(2) + ' km')} from customer` : '');
+      }
+      return true;
+    } else {
+      if (gpsStatusEl) gpsStatusEl.textContent = 'GPS update warning: ' + (d.message || 'Could not save location');
+      return false;
+    }
+  } catch (e) {
+    console.error('GPS transmission error:', e);
+    const gpsStatusEl = document.getElementById('gpsStatus');
+    if (gpsStatusEl) gpsStatusEl.textContent = 'Location update failed. Retrying…';
+    return false;
+  }
 }
-function stopLiveLocation(){if(gpsWatchId!==null){navigator.geolocation.clearWatch(gpsWatchId);gpsWatchId=null;}document.getElementById('gpsStatus').textContent='Live location is off.';}
+
+function updateGpsButtonUI(orderId, isSharing) {
+  const btn = document.getElementById('gpsToggleBtn_' + orderId);
+  const text = document.getElementById('gpsToggleText_' + orderId);
+  if (!btn) return;
+  if (isSharing) {
+    btn.classList.remove('secondary');
+    btn.classList.add('btn-gps-active');
+    if (text) text.innerHTML = '<i class="fa-solid fa-satellite fa-beat-fade"></i> Sharing Live GPS (Tap to Stop)';
+  } else {
+    btn.classList.remove('btn-gps-active');
+    btn.classList.add('secondary');
+    if (text) text.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Share Live Location / GPS';
+  }
+}
+
+function stopLiveLocation() {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+  if (activeGpsOrderId !== null) {
+    updateGpsButtonUI(activeGpsOrderId, false);
+    activeGpsOrderId = null;
+  }
+  const gpsStatusEl = document.getElementById('gpsStatus');
+  if (gpsStatusEl) gpsStatusEl.textContent = 'Live location is off.';
+  toastRider('Live GPS sharing stopped');
+}
+
+async function startLiveLocation(orderId) {
+  if (!navigator.geolocation) {
+    toastRider('GPS is not supported on this device/browser.', true);
+    return;
+  }
+  
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+    if (activeGpsOrderId !== null && activeGpsOrderId !== orderId) {
+      updateGpsButtonUI(activeGpsOrderId, false);
+    }
+  }
+  
+  activeGpsOrderId = orderId;
+  updateGpsButtonUI(orderId, true);
+  
+  const gpsStatusEl = document.getElementById('gpsStatus');
+  if (gpsStatusEl) gpsStatusEl.textContent = 'Acquiring GPS fix…';
+  toastRider('Connecting to GPS…');
+  
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const ok = await sendRiderLocation(orderId, pos.coords.latitude, pos.coords.longitude);
+      if (ok) toastRider(`GPS Active (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`);
+    },
+    (err) => {
+      console.warn('Initial GPS query warning:', err.message);
+      toastRider('GPS Notice: ' + err.message, true);
+      if (gpsStatusEl) gpsStatusEl.textContent = 'GPS permission is required for live tracking.';
+      stopLiveLocation();
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+  
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      sendRiderLocation(orderId, pos.coords.latitude, pos.coords.longitude);
+    },
+    (err) => {
+      console.warn('GPS watch error:', err.message);
+      if (gpsStatusEl) gpsStatusEl.textContent = 'GPS notice: ' + err.message;
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+  );
+}
+
+function toggleLiveLocation(orderId) {
+  if (gpsWatchId !== null && activeGpsOrderId === orderId) {
+    stopLiveLocation();
+  } else {
+    startLiveLocation(orderId);
+  }
+}
+window.addEventListener('beforeunload', () => stopLiveLocation());
 function toastGps(msg){const el=document.getElementById('gpsStatus');if(el)el.textContent=msg;}
-window.addEventListener('beforeunload',()=>stopLiveLocation());
 </script></body></html>
