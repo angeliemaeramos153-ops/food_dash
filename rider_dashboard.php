@@ -467,13 +467,13 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $norm_st = strtolower(trim($o['status'] ?? ''));
   $del_st = strtolower($o['delivery_status'] ?? '');
   $addr = trim((string)($o['delivery_address'] ?? ''));
-  $lat = $o['delivery_lat'] ?? $o['customer_lat'] ?? null;
-  $lng = $o['delivery_lng'] ?? $o['customer_lng'] ?? null;
+  $lat = (isset($o['delivery_lat']) && is_numeric($o['delivery_lat'])) ? $o['delivery_lat'] : ($o['customer_lat'] ?? null);
+  $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   if ($has_coords) {
-      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . urlencode($lat . ',' . $lng);
+      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . $lat . "," . $lng . "&travelmode=driving";
   } elseif (!empty($addr)) {
-      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . urlencode($addr);
+      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . rawurlencode($addr) . "&travelmode=driving";
   } else {
       $maps_url = "https://www.google.com/maps";
   }
@@ -481,13 +481,13 @@ main{padding:16px;flex:1;overflow-x:hidden}
 ?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="margin: 10px 0 6px;"><a href="<?=htmlspecialchars($maps_url)?>" target="_blank" rel="noopener noreferrer" class="btn btn-maps full"><i class="fa-solid fa-diamond-turn-right"></i> Open in Google Maps / Turn-by-Turn Navigation</a></div><div class="actions" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
   $addr = trim((string)($o['delivery_address'] ?? ''));
-  $lat = $o['delivery_lat'] ?? $o['customer_lat'] ?? null;
-  $lng = $o['delivery_lng'] ?? $o['customer_lng'] ?? null;
+  $lat = (isset($o['delivery_lat']) && is_numeric($o['delivery_lat'])) ? $o['delivery_lat'] : ($o['customer_lat'] ?? null);
+  $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   if ($has_coords) {
-      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . urlencode($lat . ',' . $lng);
+      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . $lat . "," . $lng . "&travelmode=driving";
   } elseif (!empty($addr)) {
-      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . urlencode($addr);
+      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . rawurlencode($addr) . "&travelmode=driving";
   } else {
       $maps_url = "https://www.google.com/maps";
   }
