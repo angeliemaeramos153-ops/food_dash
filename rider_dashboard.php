@@ -2,6 +2,7 @@
 session_start();
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
+require_once 'geocode_lib.php';
 
 if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'rider') {
     header('Location: index.php'); exit();
@@ -206,7 +207,9 @@ if ($rid > 0) {
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, o.created_at, o.shop_id,
             COALESCE(o.store_lat, s.latitude, s.lat) AS store_lat, 
-            COALESCE(o.store_lng, s.longitude, s.lng) AS store_lng
+            COALESCE(o.store_lng, s.longitude, s.lng) AS store_lng,
+            s.address AS store_address,
+            s.shop_name AS shop_record_name
         FROM food_orders o
         LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
         WHERE LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned') 
@@ -223,6 +226,8 @@ if ($rid > 0) {
             o.rider_lat, o.rider_lng, o.created_at, o.shop_id,
             COALESCE(o.store_lat, s.latitude, s.lat) AS store_lat, 
             COALESCE(o.store_lng, s.longitude, s.lng) AS store_lng,
+            s.address AS store_address,
+            s.shop_name AS shop_record_name,
             r.current_lat AS rider_current_lat,
             r.current_lng AS rider_current_lng
         FROM food_orders o
@@ -250,11 +255,48 @@ if ($first_order) {
     if ($c_lat !== null && ((float)$c_lat == 0 || $c_lat < -90 || $c_lat > 90)) $c_lat = null;
     if ($c_lng !== null && ((float)$c_lng == 0 || $c_lng < -180 || $c_lng > 180)) $c_lng = null;
 
-    // 2. Dynamic Store Origin: retrieved from joined shops table
+    // 2. Dynamic Store Origin: retrieved from store/order record; if missing or 0, dynamically geocode on the fly
     $s_lat = (isset($first_order['store_lat']) && is_numeric($first_order['store_lat'])) ? (float)$first_order['store_lat'] : null;
     $s_lng = (isset($first_order['store_lng']) && is_numeric($first_order['store_lng'])) ? (float)$first_order['store_lng'] : null;
     if ($s_lat !== null && ((float)$s_lat == 0 || $s_lat < -90 || $s_lat > 90)) $s_lat = null;
     if ($s_lng !== null && ((float)$s_lng == 0 || $s_lng < -180 || $s_lng > 180)) $s_lng = null;
+
+    // If store coordinates are missing or zero, dynamically fetch coordinates on the fly using Nominatim OpenStreetMap
+    if ($s_lat === null || $s_lng === null) {
+        $store_search_name = !empty($first_order['shop_record_name']) ? $first_order['shop_record_name'] : ($first_order['store_name'] ?? '');
+        $store_search_addr = !empty($first_order['store_address']) ? $first_order['store_address'] : '';
+        
+        $queries_to_try = [];
+        if (!empty($store_search_name) && !empty($store_search_addr)) {
+            $queries_to_try[] = $store_search_name . ', ' . $store_search_addr . ', Ormoc City, Leyte';
+            $queries_to_try[] = $store_search_addr . ', Ormoc City, Leyte';
+        } elseif (!empty($store_search_addr)) {
+            $queries_to_try[] = $store_search_addr . ', Ormoc City, Leyte';
+        }
+        if (!empty($store_search_name)) {
+            $queries_to_try[] = $store_search_name . ', Ormoc City, Leyte';
+        }
+
+        foreach ($queries_to_try as $query_str) {
+            $geo = geocode_address_fallback($query_str);
+            // Strictly require valid coordinates and reject default city center fallback
+            if ($geo && isset($geo['lat'], $geo['lng']) && is_numeric($geo['lat']) && is_numeric($geo['lng']) && ($geo['source'] ?? '') !== 'default_ormoc') {
+                $s_lat = (float)$geo['lat'];
+                $s_lng = (float)$geo['lng'];
+
+                // Persist the verified coordinates back to database
+                if (!empty($first_order['shop_id'])) {
+                    $u_stmt = $conn->prepare("UPDATE shops SET latitude = ?, longitude = ?, lat = ?, lng = ? WHERE shop_id = ?");
+                    $u_stmt->execute([$s_lat, $s_lng, $s_lat, $s_lng, (int)$first_order['shop_id']]);
+                }
+                if (!empty($first_order['order_id'])) {
+                    $u_stmt2 = $conn->prepare("UPDATE food_orders SET store_lat = ?, store_lng = ? WHERE order_id = ?");
+                    $u_stmt2->execute([$s_lat, $s_lng, (int)$first_order['order_id']]);
+                }
+                break;
+            }
+        }
+    }
 
     // 3. True Live Rider GPS: from riders table or food_orders table
     $live_rider_lat = null;
@@ -301,9 +343,12 @@ if ($first_order) {
         'order_ref' => (string)$first_order['order_ref'],
         'customer_name' => (string)($first_order['customer_name'] ?? 'Customer'),
         'store_name' => (string)($first_order['store_name'] ?? 'Restaurant'),
+        'store_address' => (string)($first_order['store_address'] ?? ''),
         'delivery_address' => (string)($first_order['delivery_address'] ?? ''),
         'customer_lat' => $c_lat,
         'customer_lng' => $c_lng,
+        'delivery_lat' => $c_lat,
+        'delivery_lng' => $c_lng,
         'store_lat' => $s_lat,
         'store_lng' => $s_lng,
         'rider_lat' => $r_lat,
@@ -632,12 +677,15 @@ const activeDeliveryData = <?= $active_delivery_json ?>;
 
 let deliveryMap = null;
 let customerMarker = null;
+let storeMarker = null;
 let riderMarker = null;
 let routePolyline = null;
-let gpsWatchId = null, activeGpsOrderId = null;
+let gpsWatchId = null;
+let activeGpsOrderId = null;
 
-function calculateDistanceKm(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth's radius in km
+// Real-world Haversine distance calculation in kilometers
+function calculateHaversineDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in kilometers
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = 
@@ -652,7 +700,7 @@ function updateRouteUI(rLat, rLng, cLat, cLng) {
   if (routePolyline) {
     routePolyline.setLatLngs([[rLat, rLng], [cLat, cLng]]);
   }
-  const distKm = calculateDistanceKm(rLat, rLng, cLat, cLng);
+  const distKm = calculateHaversineDistanceKm(rLat, rLng, cLat, cLng);
   const distEl = document.getElementById('mapRouteDistance');
   if (distEl) {
     if (distKm < 1) {
@@ -685,18 +733,50 @@ function createRiderIcon(isStore) {
   });
 }
 
-function initDeliveryMap(data) {
+async function initDeliveryMap(data) {
   if (!data || !document.getElementById('delivery-map')) return;
   if (typeof L === 'undefined') {
     console.error('Leaflet library is not loaded');
     return;
   }
 
-  const hasCustomerCoord = (data.customer_lat !== null && data.customer_lng !== null && !isNaN(data.customer_lat) && !isNaN(data.customer_lng) && Number(data.customer_lat) !== 0);
-  const hasRiderCoord = (data.rider_lat !== null && data.rider_lng !== null && !isNaN(data.rider_lat) && !isNaN(data.rider_lng) && Number(data.rider_lat) !== 0);
+  // 3. Customer Pin: Always render strictly from order delivery_lat & delivery_lng
+  const cLat = (data.delivery_lat !== null && !isNaN(data.delivery_lat)) ? Number(data.delivery_lat) : ((data.customer_lat !== null && !isNaN(data.customer_lat)) ? Number(data.customer_lat) : null);
+  const cLng = (data.delivery_lng !== null && !isNaN(data.delivery_lng)) ? Number(data.delivery_lng) : ((data.customer_lng !== null && !isNaN(data.customer_lng)) ? Number(data.customer_lng) : null);
+  const hasCustomerCoord = (cLat !== null && cLng !== null && cLat !== 0 && cLat >= -90 && cLat <= 90 && cLng >= -180 && cLng <= 180);
 
-  // If no valid coordinates exist yet, do not render a phantom marker in the sea
-  if (!hasCustomerCoord && !hasRiderCoord) {
+  // Store coordinates
+  let sLat = (data.store_lat !== null && !isNaN(data.store_lat)) ? Number(data.store_lat) : null;
+  let sLng = (data.store_lng !== null && !isNaN(data.store_lng)) ? Number(data.store_lng) : null;
+  let hasStoreCoord = (sLat !== null && sLng !== null && sLat !== 0 && sLat >= -90 && sLat <= 90 && sLng >= -180 && sLng <= 180);
+
+  // 1. Dynamic Store Pickup Pin: If store coordinates are missing or 0, dynamically fetch on the fly via Nominatim OpenStreetMap
+  if (!hasStoreCoord && (data.store_name || data.store_address)) {
+    const storeQuery = [data.store_name, data.store_address, 'Ormoc City, Leyte'].filter(Boolean).join(', ');
+    try {
+      const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(storeQuery), {
+        headers: { 'Accept': 'application/json' }
+      });
+      const results = await res.json();
+      if (results && results.length > 0 && results[0].lat && results[0].lon) {
+        sLat = parseFloat(results[0].lat);
+        sLng = parseFloat(results[0].lon);
+        data.store_lat = sLat;
+        data.store_lng = sLng;
+        hasStoreCoord = true;
+      }
+    } catch (e) {
+      console.warn('Frontend dynamic store geocoding warning:', e);
+    }
+  }
+
+  // Initial rider coordinates if previously recorded
+  const rLat = (data.rider_lat !== null && !isNaN(data.rider_lat)) ? Number(data.rider_lat) : null;
+  const rLng = (data.rider_lng !== null && !isNaN(data.rider_lng)) ? Number(data.rider_lng) : null;
+  const hasRiderCoord = (rLat !== null && rLng !== null && rLat !== 0 && rLat >= -90 && rLat <= 90 && rLng >= -180 && rLng <= 180);
+
+  // If absolutely no valid coordinates exist yet, do not render a phantom marker in the sea
+  if (!hasCustomerCoord && !hasStoreCoord && !hasRiderCoord) {
     const distEl = document.getElementById('mapRouteDistance');
     if (distEl) distEl.textContent = 'Awaiting delivery coordinates…';
     return;
@@ -714,9 +794,9 @@ function initDeliveryMap(data) {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(deliveryMap);
 
-  // Customer Destination Custom Marker
+  // 3. Customer Destination Custom Marker strictly from delivery_lat / delivery_lng
   if (hasCustomerCoord) {
-    const customerCoord = [data.customer_lat, data.customer_lng];
+    const customerCoord = [cLat, cLng];
     const customerIcon = L.divIcon({
       className: 'custom-map-marker',
       html: `
@@ -741,28 +821,27 @@ function initDeliveryMap(data) {
     `);
   }
 
-  // Dynamic Starting Store Pickup Marker (ALWAYS from dynamic store_lat & store_lng)
-  const hasStoreCoord = (data.store_lat !== null && data.store_lng !== null && !isNaN(data.store_lat) && !isNaN(data.store_lng) && Number(data.store_lat) !== 0);
+  // 1. Dynamic Starting Store Pickup Marker directly at store's real location
   if (hasStoreCoord) {
-    const storeCoord = [data.store_lat, data.store_lng];
+    const storeCoord = [sLat, sLng];
     const storeIcon = createRiderIcon(true);
-    const storeMarker = L.marker(storeCoord, { icon: storeIcon }).addTo(deliveryMap);
+    storeMarker = L.marker(storeCoord, { icon: storeIcon }).addTo(deliveryMap);
     storeMarker.bindPopup(`<b><i class="fa-solid fa-store" style="color:#D88F2A"></i> ${esc(data.store_name)}</b><br><small>Store Pickup Origin</small>`);
   }
 
   // Live Rider Location Marker
   if (hasRiderCoord && !data.is_initial_shop_origin) {
-    const riderCoord = [data.rider_lat, data.rider_lng];
+    const riderCoord = [rLat, rLng];
     const icon = createRiderIcon(false);
     riderMarker = L.marker(riderCoord, { icon: icon }).addTo(deliveryMap);
     riderMarker.bindPopup(`<b><i class="fa-solid fa-motorcycle" style="color:#2e7d32"></i> Rider Location</b><br>On Route`);
   }
 
   // Route Polyline & Bounds: Between active origin (rider live GPS or store pickup) and customer destination
-  const activeOriginCoord = hasRiderCoord ? [data.rider_lat, data.rider_lng] : (hasStoreCoord ? [data.store_lat, data.store_lng] : null);
+  const activeOriginCoord = (hasRiderCoord && !data.is_initial_shop_origin) ? [rLat, rLng] : (hasStoreCoord ? [sLat, sLng] : null);
 
   if (hasCustomerCoord && activeOriginCoord) {
-    const customerCoord = [data.customer_lat, data.customer_lng];
+    const customerCoord = [cLat, cLng];
 
     routePolyline = L.polyline([activeOriginCoord, customerCoord], {
       color: '#D88F2A',
@@ -778,11 +857,11 @@ function initDeliveryMap(data) {
     updateRouteUI(activeOriginCoord[0], activeOriginCoord[1], customerCoord[0], customerCoord[1]);
   } else if (hasCustomerCoord) {
     // Keep map centered strictly on customer destination until live GPS is acquired
-    deliveryMap.setView([data.customer_lat, data.customer_lng], 16);
+    deliveryMap.setView([cLat, cLng], 16);
     const distEl = document.getElementById('mapRouteDistance');
     if (distEl) distEl.textContent = 'Waiting for live rider GPS…';
-  } else if (hasRiderCoord) {
-    deliveryMap.setView([data.rider_lat, data.rider_lng], 16);
+  } else if (activeOriginCoord) {
+    deliveryMap.setView(activeOriginCoord, 16);
     const distEl = document.getElementById('mapRouteDistance');
     if (distEl) distEl.textContent = 'Store pickup location';
   }
@@ -790,59 +869,6 @@ function initDeliveryMap(data) {
   setTimeout(() => {
     if (deliveryMap) deliveryMap.invalidateSize();
   }, 250);
-}
-
-function updateRiderMarkerOnMap(lat, lng) {
-  if (!deliveryMap) return;
-
-  const numLat = parseFloat(lat);
-  const numLng = parseFloat(lng);
-  if (isNaN(numLat) || isNaN(numLng)) return;
-
-  const greenRiderIcon = createRiderIcon(false);
-
-  // Update green rider marker position dynamically with riderMarker.setLatLng
-  if (!riderMarker) {
-    riderMarker = L.marker([numLat, numLng], { icon: greenRiderIcon }).addTo(deliveryMap);
-  } else {
-    riderMarker.setIcon(greenRiderIcon);
-    riderMarker.setLatLng([numLat, numLng]);
-  }
-
-  riderMarker.bindPopup(`
-    <b><i class="fa-solid fa-satellite" style="color:#2e7d32"></i> Rider (Live GPS)</b><br>
-    <span>Lat: ${numLat.toFixed(5)}, Lng: ${numLng.toFixed(5)}</span><br>
-    <small style="color:#666">Updated live just now</small>
-  `);
-
-  // Recalculate route polyline directly between rider's live coordinates and customer's delivery_lat/delivery_lng
-  if (activeDeliveryData && activeDeliveryData.customer_lat !== null && activeDeliveryData.customer_lng !== null) {
-    const cLat = parseFloat(activeDeliveryData.customer_lat);
-    const cLng = parseFloat(activeDeliveryData.customer_lng);
-
-    if (!isNaN(cLat) && !isNaN(cLng)) {
-      if (!routePolyline) {
-        routePolyline = L.polyline([[numLat, numLng], [cLat, cLng]], {
-          color: '#D88F2A',
-          weight: 4,
-          opacity: 0.85,
-          dashArray: '7, 8',
-          lineCap: 'round',
-          lineJoin: 'round'
-        }).addTo(deliveryMap);
-
-        const bounds = L.latLngBounds([[numLat, numLng], [cLat, cLng]]);
-        deliveryMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
-      } else {
-        routePolyline.setLatLngs([[numLat, numLng], [cLat, cLng]]);
-      }
-
-      updateRouteUI(numLat, numLng, cLat, cLng);
-    }
-  }
-
-  const liveTag = document.getElementById('mapGpsLiveTag');
-  if (liveTag) liveTag.style.display = 'inline-flex';
 }
 
 async function sendRiderLocation(orderId, lat, lng) {
@@ -904,9 +930,10 @@ function stopLiveLocation() {
   toastRider('Live GPS sharing stopped');
 }
 
-async function startLiveLocation(orderId) {
+// 2. True Live Rider GPS (Hardware-driven)
+function startLiveLocation(orderId) {
   if (!navigator.geolocation) {
-    toastRider('GPS is not supported on this device/browser.', true);
+    alert('GPS Error: Geolocation is not supported by your browser or device.');
     return;
   }
   
@@ -922,39 +949,107 @@ async function startLiveLocation(orderId) {
   updateGpsButtonUI(orderId, true);
   
   const gpsStatusEl = document.getElementById('gpsStatus');
-  if (gpsStatusEl) gpsStatusEl.textContent = 'Acquiring GPS fix…';
-  toastRider('Connecting to GPS…');
+  if (gpsStatusEl) gpsStatusEl.textContent = 'Acquiring hardware GPS location…';
+  toastRider('Connecting to live GPS…');
   
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      updateRiderMarkerOnMap(lat, lng);
-      if (deliveryMap) deliveryMap.panTo([lat, lng]);
-      const ok = await sendRiderLocation(orderId, lat, lng);
-      if (ok) toastRider(`GPS Active (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+  const options = {
+    enableHighAccuracy: true,
+    maximumAge: 0,
+    timeout: 10000
+  };
+
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (position) => {
+      // a. Read const { latitude, longitude } = position.coords;
+      const { latitude, longitude } = position.coords;
+
+      // b. If riderMarker already exists on the map, update it immediately via riderMarker.setLatLng([latitude, longitude])
+      const greenRiderIcon = createRiderIcon(false);
+      if (riderMarker) {
+        riderMarker.setIcon(greenRiderIcon);
+        riderMarker.setLatLng([latitude, longitude]);
+      } else if (deliveryMap) {
+        riderMarker = L.marker([latitude, longitude], { icon: greenRiderIcon }).addTo(deliveryMap);
+      }
+      if (riderMarker) {
+        riderMarker.bindPopup(`
+          <b><i class="fa-solid fa-motorcycle" style="color:#2e7d32"></i> Rider (Live Hardware GPS)</b><br>
+          <span>Lat: ${latitude.toFixed(5)}, Lng: ${longitude.toFixed(5)}</span><br>
+          <small style="color:#666">Accuracy: ±${Math.round(position.coords.accuracy || 0)}m</small>
+        `);
+      }
+
+      // c. Recalculate and update the polyline route directly between [latitude, longitude] and the customer's [delivery_lat, delivery_lng]
+      const cLat = activeDeliveryData ? (activeDeliveryData.delivery_lat ?? activeDeliveryData.customer_lat) : null;
+      const cLng = activeDeliveryData ? (activeDeliveryData.delivery_lng ?? activeDeliveryData.customer_lng) : null;
+
+      if (cLat !== null && cLng !== null && !isNaN(cLat) && !isNaN(cLng) && Number(cLat) !== 0) {
+        const custCoord = [Number(cLat), Number(cLng)];
+        const riderCoord = [latitude, longitude];
+
+        if (!routePolyline && deliveryMap) {
+          routePolyline = L.polyline([riderCoord, custCoord], {
+            color: '#D88F2A',
+            weight: 4,
+            opacity: 0.85,
+            dashArray: '7, 8',
+            lineCap: 'round',
+            lineJoin: 'round'
+          }).addTo(deliveryMap);
+        } else if (routePolyline) {
+          routePolyline.setLatLngs([riderCoord, custCoord]);
+        }
+
+        if (deliveryMap) {
+          const bounds = L.latLngBounds([riderCoord, custCoord]);
+          deliveryMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+        }
+
+        // d. Calculate the real-world Haversine distance dynamically and update the "Distance" badge text
+        const distKm = calculateHaversineDistanceKm(latitude, longitude, Number(cLat), Number(cLng));
+        const distEl = document.getElementById('mapRouteDistance');
+        if (distEl) {
+          if (distKm < 1) {
+            distEl.textContent = `Distance: ${Math.round(distKm * 1000)} meters`;
+          } else {
+            distEl.textContent = `Distance: ${distKm.toFixed(2)} km`;
+          }
+        }
+      }
+
+      // Live status badge & tags
+      const liveTag = document.getElementById('mapGpsLiveTag');
+      if (liveTag) liveTag.style.display = 'inline-flex';
+      if (gpsStatusEl) {
+        gpsStatusEl.textContent = `Live GPS active • ${latitude.toFixed(5)}, ${longitude.toFixed(5)} (±${Math.round(position.coords.accuracy || 0)}m)`;
+      }
+
+      // e. Send the coordinates via POST to tracking_api.php so the database reflects the real hardware position
+      sendRiderLocation(orderId, latitude, longitude);
     },
-    (err) => {
-      console.warn('Initial GPS query warning:', err.message);
-      toastRider('GPS Notice: ' + err.message, true);
-      if (gpsStatusEl) gpsStatusEl.textContent = 'GPS permission is required for live tracking.';
+    (error) => {
+      // If watchPosition errors or is stopped, alert the user with the actual browser error rather than silently falling back to a fixed coordinate
+      console.error('watchPosition error:', error);
+      let errMsg = error.message;
+      if (!errMsg) {
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errMsg = 'Permission denied. Please allow location access in your browser.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errMsg = 'Position unavailable. GPS signal could not be acquired.';
+            break;
+          case error.TIMEOUT:
+            errMsg = 'Location request timed out. Please verify device GPS is enabled.';
+            break;
+          default:
+            errMsg = 'Unknown GPS error (code ' + error.code + ').';
+        }
+      }
+      alert('GPS Error: ' + errMsg);
       stopLiveLocation();
     },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-  );
-  
-  gpsWatchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      updateRiderMarkerOnMap(lat, lng);
-      sendRiderLocation(orderId, lat, lng);
-    },
-    (err) => {
-      console.warn('GPS watch error:', err.message);
-      if (gpsStatusEl) gpsStatusEl.textContent = 'GPS notice: ' + err.message;
-    },
-    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    options
   );
 }
 
