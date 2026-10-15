@@ -606,6 +606,169 @@ main{padding:16px;flex:1;overflow-x:hidden}
 .toast-rider{position:fixed;left:50%;bottom:88px;transform:translateX(-50%) translateY(20px);background:var(--olive-shadow);color:#fff;padding:10px 18px;border-radius:20px;font-size:11px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:200;white-space:nowrap;box-shadow:0 4px 15px rgba(75,83,32,.30)}
 .toast-rider.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast-rider.err{background:var(--earth-clay)}
+
+/* PC Testing Simulator Floating Controls Bar */
+.pc-simulator-panel {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1.5px solid var(--sandstone);
+  border-radius: 16px;
+  box-shadow: 0 12px 36px rgba(75, 83, 32, 0.22), 0 2px 8px rgba(0,0,0,0.06);
+  z-index: 1500;
+  font-family: 'Poppins', sans-serif;
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+@media (max-width: 480px) {
+  .pc-simulator-panel {
+    bottom: 74px;
+    right: 14px;
+    left: 14px;
+    width: auto;
+  }
+}
+.pc-simulator-panel.collapsed .sim-body {
+  display: none !important;
+}
+.sim-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #fdfbf7;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  user-select: none;
+}
+.sim-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--olive-shadow);
+}
+.sim-title i {
+  color: var(--harvest-sun);
+  font-size: 0.9rem;
+}
+.sim-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sim-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: rgba(216, 143, 42, 0.15);
+  color: #b45309;
+  letter-spacing: 0.3px;
+}
+.sim-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.8rem;
+  transition: transform 0.2s;
+  display: flex;
+  align-items: center;
+}
+.pc-simulator-panel.collapsed .sim-toggle-btn i {
+  transform: rotate(-90deg);
+}
+.sim-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sim-desc {
+  font-size: 0.68rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.sim-btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 2px;
+}
+.sim-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--sandstone);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #ffffff;
+  color: var(--olive-shadow);
+}
+.sim-btn:hover {
+  background: #f8f5eb;
+  border-color: var(--olive-shadow);
+}
+.sim-btn-primary {
+  background: var(--olive-shadow);
+  color: #ffffff;
+  border-color: var(--olive-shadow);
+}
+.sim-btn-primary:hover {
+  filter: brightness(1.12);
+  background: var(--olive-shadow);
+}
+.sim-btn.sim-btn-active {
+  background: #2e7d32 !important;
+  color: #ffffff !important;
+  border-color: #2e7d32 !important;
+  box-shadow: 0 3px 12px rgba(46, 125, 50, 0.40);
+}
+.sim-btn.sim-btn-active i {
+  animation: fa-beat 1.5s infinite ease-in-out;
+}
+.sim-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.66rem;
+  color: var(--muted);
+  background: #fbf9f4;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px dashed var(--sandstone);
+  margin-top: 2px;
+  word-break: break-word;
+}
+.sim-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #9ca3af;
+  flex-shrink: 0;
+}
+.sim-status-dot.active {
+  background: #16a34a;
+  box-shadow: 0 0 6px #16a34a;
+}
+.sim-status-dot.driving {
+  background: #d97706;
+  box-shadow: 0 0 6px #d97706;
+}
 </style></head><body><div class="app"><header class="hero"><div class="topline"><div class="brand"><img src="logo.jpg" alt="Food Dash"><b>FOOD DASH</b></div><button class="bell" onclick="openNotifications()"><i class="fa-regular fa-bell"></i><span id="noteBadge" class="bell-badge">0</span></button></div><div class="hello"><small>Rider Portal</small><h1>Ready to dash, <?=htmlspecialchars($user_name)?>?</h1><small>Pick up orders and keep customers updated.</small><div class="status"><span class="dot <?=$r && $r['status']==='on_delivery'?'live':''?>"></span><?=$r && $r['status']==='on_delivery'?'On Delivery':'Waiting for Delivery'?></div></div></header><main><?php if($msg):?><div class="alert">✓ <?=htmlspecialchars($msg)?></div><?php endif;?><?php if($error):?><div class="alert err">⚠ <?=htmlspecialchars($error)?></div><?php endif;?><div class="stats"><div class="stat"><i class="fa-solid fa-motorcycle"></i><strong><?=$total_riders?></strong><span>Total Riders</span></div><div class="stat"><i class="fa-solid fa-clock"></i><strong><?=$waiting?></strong><span>Waiting</span></div><div class="stat"><i class="fa-solid fa-route"></i><strong><?=$on_delivery?></strong><span>On Delivery</span></div></div>
 <section class="section" id="delivery"><div class="section-title"><h2><i class="fa-solid fa-box"></i> My Delivery</h2></div><div class="card"><?php if($my_orders): foreach($my_orders as $o): 
   $ord_st = strtoupper($o['status'] ?? '');
@@ -626,6 +789,39 @@ main{padding:16px;flex:1;overflow-x:hidden}
 <section class="section" id="live"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">📡 Live Location</h2><div id="gpsStatus" class="meta">Live location is off. Tap Share Live Location after starting a delivery.</div><button type="button" class="btn full" style="margin-top:10px" onclick="stopLiveLocation()">Stop Sharing</button></div></section><section class="section" id="guide"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">Customer Notification Flow</h2><div class="meta">When you accept an order, the customer is notified. When you start the trip, they receive an <b>On the Way</b> notification. When you tap <b>I'm Near Customer</b>, they receive the near-arrival notification. When delivered, the customer receives a final delivery notice.</div></div></section></main><nav class="bottom"><a class="active" href="#delivery"><i class="fa-solid fa-box"></i>Delivery</a><a href="#available"><i class="fa-solid fa-motorcycle"></i>Pickup</a><a href="#live"><i class="fa-solid fa-location-crosshairs"></i>Live</a><a href="#guide"><i class="fa-solid fa-circle-info"></i>Guide</a><a href="#" onclick="openLogout();return false"><i class="fa-solid fa-right-from-bracket"></i>Logout</a></nav></div>
 <div class="modal" id="noteModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Notifications</h3><div id="notificationList" class="notification-list"><div class="empty">Loading...</div></div><div class="box-actions"><button class="close" onclick="markAllRead()">Mark all read</button><button class="close" onclick="closeNotifications()">Close</button></div></div></div>
 <div class="modal" id="logoutModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out.</p><div class="box-actions"><button class="close" onclick="closeLogout()">Cancel</button><a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
+<!-- PC Testing Simulator Floating Controls Bar -->
+<div id="pcSimulatorPanel" class="pc-simulator-panel" style="display:none;">
+  <div class="sim-header" onclick="toggleSimulatorCollapse()">
+    <div class="sim-title">
+      <i class="fa-solid fa-gamepad"></i>
+      <span>PC Testing Simulator</span>
+    </div>
+    <div class="sim-header-actions">
+      <span class="sim-badge">Dev / PC</span>
+      <button type="button" class="sim-toggle-btn" aria-label="Toggle simulator collapse">
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+    </div>
+  </div>
+  <div class="sim-body" id="simBody">
+    <div class="sim-desc">Simulate live delivery without GPS hardware. Actions sync to backend in real time.</div>
+    <div class="sim-btn-group">
+      <button type="button" id="btnAutoDrive" class="sim-btn sim-btn-primary" onclick="toggleAutoDriveSimulation()">
+        <i class="fa-solid fa-play"></i> <span id="autoDriveLabel">Start Auto-Drive Simulation</span>
+      </button>
+      <button type="button" id="btnTapRelocate" class="sim-btn" onclick="toggleMapTapRelocate()">
+        <i class="fa-solid fa-location-crosshairs"></i> <span id="tapRelocateLabel">Tap Map to Relocate</span>
+      </button>
+      <button type="button" id="btnResetStore" class="sim-btn" onclick="resetRiderToStore()">
+        <i class="fa-solid fa-rotate-left"></i> <span>Reset to Store</span>
+      </button>
+    </div>
+    <div class="sim-status-bar">
+      <span class="sim-status-dot" id="simStatusDot"></span>
+      <span id="simStatusText">Simulator ready</span>
+    </div>
+  </div>
+</div>
 <div class="toast-rider" id="riderToast"></div>
 <script>
 function toastRider(msg, isError) {
@@ -683,6 +879,223 @@ let routePolyline = null;
 let gpsWatchId = null;
 let activeGpsOrderId = null;
 let isManualSimulationActive = false;
+let autoDriveTimer = null;
+let autoDriveStep = 0;
+const AUTO_DRIVE_TOTAL_STEPS = 25;
+const AUTO_DRIVE_INTERVAL_MS = 1000;
+let isTapRelocateActive = false;
+
+// PC Testing Simulator Controls
+function shouldShowSimulator() {
+  const host = (location.hostname || '').toLowerCase();
+  const isLocal = ['localhost', '127.0.0.1', '::1'].includes(host) || host.endsWith('.local');
+  const isTunnelOrDev = isLocal || host.endsWith('.trycloudflare.com') || host.includes('tunnel');
+  const isQueryForced = location.search.includes('sim=1') || location.search.includes('dev=1');
+  const noTouchHardware = !('ontouchstart' in window) || (navigator.maxTouchPoints === 0);
+  const noGpsHardware = !navigator.geolocation;
+  return isTunnelOrDev || isQueryForced || noTouchHardware || noGpsHardware;
+}
+
+function initSimulator() {
+  const panel = document.getElementById('pcSimulatorPanel');
+  if (!panel) return;
+  if (shouldShowSimulator()) {
+    panel.style.display = 'block';
+    if (!activeDeliveryData) {
+      updateSimStatus('No active delivery order claimed', 'ready');
+    } else {
+      updateSimStatus('PC Simulator ready', 'ready');
+    }
+  }
+}
+
+function toggleSimulatorCollapse() {
+  const panel = document.getElementById('pcSimulatorPanel');
+  if (panel) panel.classList.toggle('collapsed');
+}
+
+function updateSimStatus(text, type = 'ready') {
+  const txtEl = document.getElementById('simStatusText');
+  const dot = document.getElementById('simStatusDot');
+  if (txtEl) txtEl.textContent = text;
+  if (dot) {
+    dot.className = 'sim-status-dot';
+    if (type === 'driving') dot.classList.add('driving');
+    else if (type === 'active') dot.classList.add('active');
+  }
+}
+
+function toggleAutoDriveSimulation() {
+  if (autoDriveTimer !== null) {
+    stopAutoDriveSimulation();
+  } else {
+    startAutoDriveSimulation();
+  }
+}
+
+function stopAutoDriveSimulation() {
+  if (autoDriveTimer !== null) {
+    clearInterval(autoDriveTimer);
+    autoDriveTimer = null;
+  }
+  const btn = document.getElementById('btnAutoDrive');
+  if (btn) {
+    btn.classList.remove('sim-btn-active');
+    btn.innerHTML = '<i class="fa-solid fa-play"></i> <span id="autoDriveLabel">Start Auto-Drive Simulation</span>';
+  }
+  updateSimStatus('Auto-drive stopped', 'ready');
+}
+
+function startAutoDriveSimulation() {
+  if (!activeDeliveryData) {
+    toastRider('No active delivery order to simulate.', true);
+    return;
+  }
+
+  const custCoord = getActiveCustomerCoord();
+  if (!custCoord) {
+    toastRider('Customer delivery coordinates not available.', true);
+    return;
+  }
+
+  // Deactivate hardware GPS watch if active so simulator doesn't conflict
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+
+  // Turn off tap relocate mode if active
+  if (isTapRelocateActive) {
+    toggleMapTapRelocate();
+  }
+
+  // Retrieve dynamic store pickup coordinates
+  let sLat = (activeDeliveryData.store_lat !== null && !isNaN(activeDeliveryData.store_lat)) ? Number(activeDeliveryData.store_lat) : (storeMarker ? storeMarker.getLatLng().lat : null);
+  let sLng = (activeDeliveryData.store_lng !== null && !isNaN(activeDeliveryData.store_lng)) ? Number(activeDeliveryData.store_lng) : (storeMarker ? storeMarker.getLatLng().lng : null);
+
+  if (sLat === null || sLng === null || isNaN(sLat) || isNaN(sLng) || sLat === 0) {
+    sLat = custCoord[0] - 0.005;
+    sLng = custCoord[1] - 0.005;
+  }
+
+  // Determine starting point:
+  // If riderMarker is already placed and not immediately at the customer destination (> 50m), start from rider position;
+  // otherwise start from store pickup.
+  let startLat = sLat;
+  let startLng = sLng;
+
+  if (riderMarker) {
+    const cur = riderMarker.getLatLng();
+    const distToCust = calculateHaversineDistanceKm(cur.lat, cur.lng, custCoord[0], custCoord[1]);
+    if (distToCust > 0.05) {
+      startLat = cur.lat;
+      startLng = cur.lng;
+    }
+  }
+
+  const destLat = custCoord[0];
+  const destLng = custCoord[1];
+
+  autoDriveStep = 0;
+  const totalSteps = AUTO_DRIVE_TOTAL_STEPS;
+
+  const btn = document.getElementById('btnAutoDrive');
+  if (btn) {
+    btn.classList.add('sim-btn-active');
+    btn.innerHTML = '<i class="fa-solid fa-pause"></i> <span id="autoDriveLabel">Pause Auto-Drive</span>';
+  }
+
+  updateSimStatus(`Auto-driving (0/${totalSteps})...`, 'driving');
+  toastRider('Auto-drive simulation started!');
+
+  // Trigger initial step immediately
+  handleRiderPositionUpdate(startLat, startLng, 'simulation');
+
+  autoDriveTimer = setInterval(() => {
+    autoDriveStep++;
+    const fraction = Math.min(1, autoDriveStep / totalSteps);
+    const currLat = startLat + (destLat - startLat) * fraction;
+    const currLng = startLng + (destLng - startLng) * fraction;
+
+    handleRiderPositionUpdate(currLat, currLng, 'simulation');
+
+    const percent = Math.round(fraction * 100);
+    updateSimStatus(`Auto-driving: ${percent}% (${autoDriveStep}/${totalSteps})`, 'driving');
+
+    if (deliveryMap) {
+      deliveryMap.panTo([currLat, currLng], { animate: true, duration: 0.5 });
+    }
+
+    if (autoDriveStep >= totalSteps) {
+      stopAutoDriveSimulation();
+      updateSimStatus('Arrived at customer destination! (100%)', 'active');
+      toastRider('Auto-drive completed: Rider arrived at customer!');
+    }
+  }, AUTO_DRIVE_INTERVAL_MS);
+}
+
+function toggleMapTapRelocate() {
+  isTapRelocateActive = !isTapRelocateActive;
+  const btn = document.getElementById('btnTapRelocate');
+  const lbl = document.getElementById('tapRelocateLabel');
+
+  if (isTapRelocateActive) {
+    if (autoDriveTimer !== null) {
+      stopAutoDriveSimulation();
+    }
+    if (btn) btn.classList.add('sim-btn-active');
+    if (lbl) lbl.textContent = 'Tap Mode Active (Click Map)';
+    if (deliveryMap && deliveryMap.getContainer()) {
+      deliveryMap.getContainer().style.cursor = 'crosshair';
+    }
+    if (riderMarker && riderMarker.dragging) {
+      riderMarker.dragging.enable();
+    }
+    updateSimStatus('Click anywhere on map to relocate rider', 'active');
+    toastRider('Tap mode active: Click anywhere on map to drop rider pin.');
+  } else {
+    if (btn) btn.classList.remove('sim-btn-active');
+    if (lbl) lbl.textContent = 'Tap Map to Relocate';
+    if (deliveryMap && deliveryMap.getContainer()) {
+      deliveryMap.getContainer().style.cursor = '';
+    }
+    updateSimStatus('Tap mode deactivated', 'ready');
+  }
+}
+
+function onMapTapRelocateHandler(e) {
+  if (!isTapRelocateActive && !isManualSimulationActive) return;
+  const { lat, lng } = e.latlng;
+  handleRiderPositionUpdate(lat, lng, isTapRelocateActive ? 'simulation' : 'manual');
+  updateSimStatus(`Relocated to ${lat.toFixed(5)}, ${lng.toFixed(5)}`, 'active');
+  toastRider(`Rider pin relocated (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+}
+
+function resetRiderToStore() {
+  stopAutoDriveSimulation();
+  if (!activeDeliveryData) {
+    toastRider('No active delivery order to reset.', true);
+    return;
+  }
+
+  const sLat = (activeDeliveryData.store_lat !== null && !isNaN(activeDeliveryData.store_lat)) ? Number(activeDeliveryData.store_lat) : (storeMarker ? storeMarker.getLatLng().lat : null);
+  const sLng = (activeDeliveryData.store_lng !== null && !isNaN(activeDeliveryData.store_lng)) ? Number(activeDeliveryData.store_lng) : (storeMarker ? storeMarker.getLatLng().lng : null);
+
+  if (sLat === null || sLng === null || isNaN(sLat) || isNaN(sLng) || sLat === 0) {
+    toastRider('Store pickup coordinates not available.', true);
+    return;
+  }
+
+  handleRiderPositionUpdate(sLat, sLng, 'reset');
+
+  if (deliveryMap) {
+    deliveryMap.panTo([sLat, sLng], { animate: true, duration: 0.6 });
+  }
+
+  const storeName = activeDeliveryData.store_name || 'Store';
+  updateSimStatus(`Reset to ${storeName}`, 'active');
+  toastRider(`Rider reset to store (${storeName})`);
+}
 
 // Real-world Haversine distance calculation in kilometers
 function calculateHaversineDistanceKm(lat1, lon1, lat2, lon2) {
@@ -787,6 +1200,9 @@ function enableManualSimulation(noticeText) {
   showGpsNotice(msg);
   toastRider(msg);
 
+  const panel = document.getElementById('pcSimulatorPanel');
+  if (panel) panel.style.display = 'block';
+
   const gpsStatusEl = document.getElementById('gpsStatus');
   if (gpsStatusEl) {
     gpsStatusEl.innerHTML = `<span style="color:#b45309;font-weight:600;"><i class="fa-solid fa-hand-pointer"></i> ${esc(msg)}</span>`;
@@ -818,12 +1234,7 @@ function enableManualSimulation(noticeText) {
   // Allow clicking anywhere on the map to position the rider
   if (deliveryMap && !deliveryMap._clickSimulationAttached) {
     deliveryMap._clickSimulationAttached = true;
-    deliveryMap.on('click', (e) => {
-      if (isManualSimulationActive) {
-        const { lat, lng } = e.latlng;
-        handleRiderPositionUpdate(lat, lng, 'manual');
-      }
-    });
+    deliveryMap.on('click', onMapTapRelocateHandler);
   }
 
   if (activeGpsOrderId) {
@@ -841,7 +1252,7 @@ function handleRiderPositionUpdate(latitude, longitude, source = 'gps', accuracy
   // Update or create rider marker
   if (!riderMarker) {
     if (deliveryMap) {
-      riderMarker = L.marker([numLat, numLng], { icon: greenRiderIcon, draggable: isManualSimulationActive }).addTo(deliveryMap);
+      riderMarker = L.marker([numLat, numLng], { icon: greenRiderIcon, draggable: (isManualSimulationActive || isTapRelocateActive) }).addTo(deliveryMap);
       attachRiderMarkerDragHandlers();
     }
   } else {
@@ -851,7 +1262,11 @@ function handleRiderPositionUpdate(latitude, longitude, source = 'gps', accuracy
 
   if (riderMarker) {
     const accuracyText = accuracy ? `<br><small style="color:#666">Accuracy: ±${Math.round(accuracy)}m</small>` : '';
-    const modeText = source === 'manual' ? 'Manual Movement (Drag/Tap)' : 'Live Hardware GPS';
+    let modeText = 'Live Hardware GPS';
+    if (source === 'simulation') modeText = 'PC Auto-Drive Simulation';
+    else if (source === 'manual') modeText = 'Manual Map Tap / Drag';
+    else if (source === 'reset') modeText = 'Reset to Store Origin';
+
     riderMarker.bindPopup(`
       <b><i class="fa-solid fa-motorcycle" style="color:#2e7d32"></i> Rider (${modeText})</b><br>
       <span>Lat: ${numLat.toFixed(5)}, Lng: ${numLng.toFixed(5)}</span>${accuracyText}
@@ -891,8 +1306,8 @@ function handleRiderPositionUpdate(latitude, longitude, source = 'gps', accuracy
   const liveTag = document.getElementById('mapGpsLiveTag');
   if (liveTag) {
     liveTag.style.display = 'inline-flex';
-    if (source === 'manual') {
-      liveTag.innerHTML = '<i class="fa-solid fa-hand-pointer"></i> Manual Drag Movement';
+    if (source === 'simulation' || source === 'manual' || source === 'reset') {
+      liveTag.innerHTML = '<i class="fa-solid fa-gamepad"></i> PC Simulator Active';
     } else {
       liveTag.innerHTML = '<i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking';
     }
@@ -900,8 +1315,12 @@ function handleRiderPositionUpdate(latitude, longitude, source = 'gps', accuracy
 
   const gpsStatusEl = document.getElementById('gpsStatus');
   if (gpsStatusEl) {
-    if (source === 'manual') {
+    if (source === 'simulation') {
+      gpsStatusEl.innerHTML = `<span style="color:#b45309;font-weight:600;"><i class="fa-solid fa-gamepad"></i> Auto-drive simulation active • ${numLat.toFixed(5)}, ${numLng.toFixed(5)}</span>`;
+    } else if (source === 'manual') {
       gpsStatusEl.innerHTML = `<span style="color:#b45309;font-weight:600;"><i class="fa-solid fa-hand-pointer"></i> Manual simulation active • ${numLat.toFixed(5)}, ${numLng.toFixed(5)}</span>`;
+    } else if (source === 'reset') {
+      gpsStatusEl.innerHTML = `<span style="color:#b45309;font-weight:600;"><i class="fa-solid fa-rotate-left"></i> Reset to store • ${numLat.toFixed(5)}, ${numLng.toFixed(5)}</span>`;
     } else {
       gpsStatusEl.textContent = `Live GPS active • ${numLat.toFixed(5)}, ${numLng.toFixed(5)}` + (accuracy ? ` (±${Math.round(accuracy)}m)` : '');
     }
@@ -1048,6 +1467,11 @@ async function initDeliveryMap(data) {
     if (distEl) distEl.textContent = 'Store pickup location';
   }
 
+  if (deliveryMap) {
+    deliveryMap.on('click', onMapTapRelocateHandler);
+  }
+  initSimulator();
+
   setTimeout(() => {
     if (deliveryMap) deliveryMap.invalidateSize();
   }, 250);
@@ -1103,6 +1527,10 @@ function updateGpsButtonUI(orderId, isSharing, isManual = false) {
 }
 
 function stopLiveLocation() {
+  stopAutoDriveSimulation();
+  if (isTapRelocateActive) {
+    toggleMapTapRelocate();
+  }
   if (gpsWatchId !== null) {
     navigator.geolocation.clearWatch(gpsWatchId);
     gpsWatchId = null;
@@ -1126,6 +1554,10 @@ function stopLiveLocation() {
 
 // 2. True Live Rider GPS (Hardware-driven over HTTPS, with non-blocking manual simulation fallback)
 function startLiveLocation(orderId) {
+  stopAutoDriveSimulation();
+  if (isTapRelocateActive) {
+    toggleMapTapRelocate();
+  }
   if (gpsWatchId !== null) {
     navigator.geolocation.clearWatch(gpsWatchId);
     gpsWatchId = null;
@@ -1203,11 +1635,13 @@ if (document.readyState === 'loading') {
     if (activeDeliveryData && document.getElementById('delivery-map')) {
       initDeliveryMap(activeDeliveryData);
     }
+    initSimulator();
   });
 } else {
   if (activeDeliveryData && document.getElementById('delivery-map')) {
     initDeliveryMap(activeDeliveryData);
   }
+  initSimulator();
 }
 
 window.addEventListener('resize', () => {
