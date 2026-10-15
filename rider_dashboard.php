@@ -204,7 +204,7 @@ if ($rid > 0) {
     // 1. Orders Ready for Pickup: Joined with shops table for real store coordinates
     $stmt_ready = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.customer_id, o.customer_name, 
-            COALESCE(o.customer_phone, cu.phone, '+63 928 555 0148') AS customer_phone,
+            COALESCE(o.customer_phone, cu.phone, '+63 917 123 4567') AS customer_phone,
             o.store_name, o.items_summary, o.total_amount, 
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, o.created_at, o.shop_id,
@@ -224,7 +224,7 @@ if ($rid > 0) {
     // 2. My Delivery: Joined with shops table for real store coordinates and riders table for true live rider GPS
     $stmt_my = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.customer_id, o.customer_name, 
-            COALESCE(o.customer_phone, cu.phone, '+63 928 555 0148') AS customer_phone,
+            COALESCE(o.customer_phone, cu.phone, '+63 917 123 4567') AS customer_phone,
             o.store_name, o.items_summary, o.total_amount, 
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, 
@@ -1042,6 +1042,118 @@ main{padding:16px;flex:1;overflow-x:hidden}
   flex-shrink: 0;
   box-shadow: 0 2px 6px rgba(21, 128, 61, 0.25);
 }
+/* Outgoing Call Modal */
+.rider-call-box {
+  text-align: center;
+  padding: 24px 20px;
+  background: #ffffff;
+  border-radius: 18px;
+  max-width: 360px;
+  width: 90%;
+  margin: auto;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.22);
+}
+.call-avatar-pulse {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 14px;
+}
+.call-pulse-circle {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: rgba(46, 125, 50, 0.2);
+  animation: callPulse 1.8s infinite;
+}
+@keyframes callPulse {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  50% { transform: scale(1.25); opacity: 0.3; }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+.call-avatar-icon {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(22, 163, 74, 0.45);
+}
+.call-badge-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.modal-call-phone {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 6px;
+}
+.modal-call-status {
+  font-size: 0.82rem;
+  color: #64748b;
+  line-height: 1.45;
+  margin-bottom: 16px;
+}
+.modal-call-timer {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #16a34a;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 14px;
+}
+.call-modal-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.call-sim-btn {
+  background: #f8fafc;
+  color: #0f172a;
+  border: 1.5px solid #cbd5e1;
+  font-weight: 600;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.call-sim-btn:hover { background: #f1f5f9; }
+.call-native-btn {
+  background: #2563eb;
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 10px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.call-native-btn:hover { background: #1d4ed8; }
+.call-end-btn {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+.call-end-btn:hover { background: #b91c1c !important; }
 </style></head><body><div class="app"><header class="hero"><div class="topline"><div class="brand"><img src="logo.jpg" alt="Food Dash"><b>FOOD DASH</b></div><button class="bell" onclick="openNotifications()"><i class="fa-regular fa-bell"></i><span id="noteBadge" class="bell-badge">0</span></button></div><div class="hello"><small>Rider Portal</small><h1>Ready to dash, <?=htmlspecialchars($user_name)?>?</h1><small>Pick up orders and keep customers updated.</small><div class="status"><span class="dot <?=$r && $r['status']==='on_delivery'?'live':''?>"></span><?=$r && $r['status']==='on_delivery'?'On Delivery':'Waiting for Delivery'?></div></div></header><main><?php if($msg):?><div class="alert">✓ <?=htmlspecialchars($msg)?></div><?php endif;?><?php if($error):?><div class="alert err">⚠ <?=htmlspecialchars($error)?></div><?php endif;?><div class="stats"><div class="stat"><i class="fa-solid fa-motorcycle"></i><strong><?=$total_riders?></strong><span>Total Riders</span></div><div class="stat"><i class="fa-solid fa-clock"></i><strong><?=$waiting?></strong><span>Waiting</span></div><div class="stat"><i class="fa-solid fa-route"></i><strong><?=$on_delivery?></strong><span>On Delivery</span></div></div>
 <section class="section" id="delivery"><div class="section-title"><h2><i class="fa-solid fa-box"></i> My Delivery</h2></div><div class="card"><?php if($my_orders): foreach($my_orders as $o): 
   $ord_st = strtoupper($o['status'] ?? '');
@@ -1053,11 +1165,11 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   $is_ready_pickup = in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned']);
 ?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><?php
-  $c_phone_val = !empty($o['customer_phone']) ? trim($o['customer_phone']) : '+63 928 555 0148';
+  $c_phone_val = !empty($o['customer_phone']) ? trim($o['customer_phone']) : '+63 917 123 4567';
   $c_dial = preg_replace('/[^\+0-9]/', '', $c_phone_val);
-  if (empty($c_dial)) $c_dial = '+639285550148';
-  $c_name_val = $o['customer_name'] ?: 'Customer';
-?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><a href="tel:<?=htmlspecialchars($c_dial)?>" class="contact-action-btn call-action-btn" title="Call customer directly via phone dialer"><i class="fa-solid fa-phone"></i> Call Customer</a><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div id="delivery-map" style="height: 320px; width: 100%; border-radius: 12px; margin-top: 12px;"></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div id="gpsNoticeBanner" style="display:none;margin-top:8px;padding:9px 12px;background:#fff8e6;border:1.5px solid #d97706;border-radius:10px;font-size:0.73rem;color:#78350f;line-height:1.45;"><div style="display:flex;align-items:flex-start;gap:8px;"><i class="fa-solid fa-triangle-exclamation" style="color:#d97706;font-size:0.9rem;margin-top:2px;"></i><div style="flex:1;" id="gpsNoticeText">GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.</div></div></div><div class="actions" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
+  if (empty($c_dial)) $c_dial = '+639171234567';
+  $c_name_val = !empty($o['customer_name']) ? trim($o['customer_name']) : 'Customer';
+?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div id="delivery-map" style="height: 320px; width: 100%; border-radius: 12px; margin-top: 12px;"></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div id="gpsNoticeBanner" style="display:none;margin-top:8px;padding:9px 12px;background:#fff8e6;border:1.5px solid #d97706;border-radius:10px;font-size:0.73rem;color:#78350f;line-height:1.45;"><div style="display:flex;align-items:flex-start;gap:8px;"><i class="fa-solid fa-triangle-exclamation" style="color:#d97706;font-size:0.9rem;margin-top:2px;"></i><div style="flex:1;" id="gpsNoticeText">GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.</div></div></div><div class="actions" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
   $addr = trim((string)($o['delivery_address'] ?? ''));
   $lat = (isset($o['delivery_lat']) && is_numeric($o['delivery_lat'])) ? $o['delivery_lat'] : ($o['customer_lat'] ?? null);
@@ -1069,6 +1181,8 @@ main{padding:16px;flex:1;overflow-x:hidden}
 <div class="modal" id="logoutModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out.</p><div class="box-actions"><button class="close" onclick="closeLogout()">Cancel</button><a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
 <!-- Rider Chat / Quick Message Modal -->
 <div class="modal" id="riderChatModal"><div class="chat-modal-box"><div class="chat-modal-header"><div style="display:flex;align-items:center;gap:8px;"><div class="chat-header-avatar"><i class="fa-solid fa-user"></i></div><div><h4 id="chatCustomerName" style="margin:0;font-size:13px;color:var(--olive-shadow);">Customer</h4><small id="chatCustomerPhone" style="font-size:10px;color:var(--muted);">+63 ...</small></div></div><button class="chat-close-btn" onclick="closeOrderChat()"><i class="fa-solid fa-xmark"></i></button></div><div class="quick-status-section"><div class="quick-title"><i class="fa-solid fa-bolt"></i> Quick Delivery Updates:</div><div class="quick-pills"><button type="button" class="quick-pill" onclick="sendQuickUpdate('I\'ve arrived outside with your order! 🛵')">🛵 I've arrived outside</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Traffic delay, on my way! 🚦')">🚦 Traffic delay, on my way</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Food picked up! Heading to your address now 🍱')">🍱 Heading to your address</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Please be ready at the gate/lobby 🚪')">🚪 Please be ready at gate</button></div></div><div id="chatMessagesList" class="chat-messages-container"><div class="chat-empty-hint">Loading conversation...</div></div><div class="chat-input-bar"><input type="text" id="chatInputText" placeholder="Type delivery message..." oninput="updateChatSmsLink(this.value)" onkeydown="if(event.key==='Enter') sendChatMessage()"><button type="button" class="chat-send-btn" onclick="sendChatMessage()" title="Send in App"><i class="fa-solid fa-paper-plane"></i></button><a href="#" id="chatSmsLink" class="chat-sms-btn" target="_blank" title="Send via native SMS"><i class="fa-solid fa-comment-dots"></i> SMS</a></div></div></div>
+<!-- Desktop / Simulator Outgoing Call Modal -->
+<div class="modal" id="riderCallModal" onclick="if(event.target===this)endRiderCall()"><div class="box rider-call-box"><div class="call-avatar-pulse"><div class="call-pulse-circle"></div><div class="call-avatar-icon"><i class="fa-solid fa-phone-volume"></i></div></div><div class="call-badge-live"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> IN-APP CALL ACTIVE</div><h3 id="modalCallCustName" style="margin:0 0 4px;font-size:1.25rem;">Customer</h3><div class="modal-call-phone" id="modalCallCustPhone">+63 917 123 4567</div><p id="modalCallStatusText" class="modal-call-status">Ringing customer's device in real-time... (Incoming call banner displayed on customer map)</p><div class="modal-call-timer" id="modalCallTimer" style="display:none;">00:00</div><div class="call-modal-buttons"><button type="button" class="btn call-sim-btn" id="btnSimulateConnect" onclick="simulateCallConnect()"><i class="fa-solid fa-headset"></i> Test Connected Call</button><a href="#" id="modalCallNativeTelBtn" class="btn call-native-btn" title="Open native phone dialer"><i class="fa-solid fa-mobile-screen-button"></i> Open Native Dialer</a><button type="button" class="btn call-end-btn" onclick="endRiderCall()"><i class="fa-solid fa-phone-slash"></i> End Call</button></div></div></div>
 <!-- PC Testing Simulator Floating Controls Bar -->
 <div id="pcSimulatorPanel" class="pc-simulator-panel" style="display:none;">
   <div class="sim-header" onclick="toggleSimulatorCollapse()">
@@ -2233,6 +2347,122 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+let currentRiderCallId = null;
+let riderCallTimer = null;
+let riderCallSeconds = 0;
+
+async function initiateCustomerCall(orderId, customerName, customerPhone) {
+  const cleanPhone = String(customerPhone || '+639171234567').replace(/[^\+0-9]/g, '') || '+639171234567';
+
+  // 1. Trigger active incoming call state in the database for that order_id
+  try {
+    const res = await fetch('order_communication_api.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'trigger_call',
+        order_id: orderId
+      })
+    });
+    const data = await res.json();
+    if (data.success && data.call_id) {
+      currentRiderCallId = data.call_id;
+    }
+  } catch (err) {
+    console.warn('Failed to trigger call in communication API:', err);
+  }
+
+  // 2. Mobile vs Desktop behavior
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  if (isMobile) {
+    // Native phone dialer on mobile
+    window.location.href = `tel:${cleanPhone}`;
+  } else {
+    // Desktop / PC preview: Show clean modal without browser raw prompt
+    openDesktopCallModal(orderId, customerName, customerPhone, cleanPhone);
+  }
+}
+
+function openDesktopCallModal(orderId, customerName, customerPhone, cleanPhone) {
+  const modal = document.getElementById('riderCallModal');
+  if (!modal) return;
+  
+  const nameEl = document.getElementById('modalCallCustName');
+  if (nameEl) nameEl.textContent = customerName || 'Customer';
+
+  const phoneEl = document.getElementById('modalCallCustPhone');
+  if (phoneEl) phoneEl.textContent = customerPhone || '+63 917 123 4567';
+
+  const statusEl = document.getElementById('modalCallStatusText');
+  if (statusEl) statusEl.textContent = 'Ringing customer in real-time... Customer screen is displaying an animated incoming call alert.';
+
+  const timerEl = document.getElementById('modalCallTimer');
+  if (timerEl) {
+    timerEl.style.display = 'none';
+    timerEl.textContent = '00:00';
+  }
+
+  const telLink = document.getElementById('modalCallNativeTelBtn');
+  if (telLink) telLink.href = `tel:${cleanPhone}`;
+
+  const connectBtn = document.getElementById('btnSimulateConnect');
+  if (connectBtn) {
+    connectBtn.style.display = 'inline-flex';
+    connectBtn.innerHTML = '<i class="fa-solid fa-headset"></i> Test Connected Call';
+  }
+
+  modal.classList.add('show');
+}
+
+function simulateCallConnect() {
+  const statusEl = document.getElementById('modalCallStatusText');
+  if (statusEl) statusEl.textContent = 'Call connected (Voice line simulation active).';
+
+  const timerEl = document.getElementById('modalCallTimer');
+  if (timerEl) timerEl.style.display = 'block';
+
+  const connectBtn = document.getElementById('btnSimulateConnect');
+  if (connectBtn) connectBtn.style.display = 'none';
+
+  riderCallSeconds = 0;
+  if (riderCallTimer) clearInterval(riderCallTimer);
+  riderCallTimer = setInterval(() => {
+    riderCallSeconds++;
+    const m = String(Math.floor(riderCallSeconds / 60)).padStart(2, '0');
+    const s = String(riderCallSeconds % 60).padStart(2, '0');
+    if (timerEl) timerEl.textContent = `${m}:${s}`;
+  }, 1000);
+
+  // Mark call accepted in backend
+  if (currentRiderCallId) {
+    fetch('order_communication_api.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'respond_call', call_id: currentRiderCallId, status: 'accepted' })
+    }).catch(() => {});
+  }
+}
+
+async function endRiderCall() {
+  if (riderCallTimer) {
+    clearInterval(riderCallTimer);
+    riderCallTimer = null;
+  }
+  if (currentRiderCallId) {
+    try {
+      await fetch('order_communication_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'end_call', call_id: currentRiderCallId })
+      });
+    } catch (e) {}
+    currentRiderCallId = null;
+  }
+  const modal = document.getElementById('riderCallModal');
+  if (modal) modal.classList.remove('show');
+  toastRider('Call ended.');
 }
 
 function toastGps(msg){const el=document.getElementById('gpsStatus');if(el)el.textContent=msg;}

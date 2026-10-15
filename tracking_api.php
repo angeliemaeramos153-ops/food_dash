@@ -187,8 +187,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     $o['longitude'] = $rider_lng;
 
     // Fallback phones guaranteed non-null
-    if (empty($o['customer_phone'])) $o['customer_phone'] = '+63 928 555 0148';
+    if (empty($o['customer_phone'])) $o['customer_phone'] = '+63 917 123 4567';
     if (empty($o['rider_phone'])) $o['rider_phone'] = '+63 917 555 0192';
+
+    // Check for active ringing call created within the last 45 seconds
+    $active_call = null;
+    try {
+        $call_stmt = $conn->prepare("SELECT call_id, order_id, caller_role, caller_id, caller_name, caller_phone, receiver_role, receiver_id, status, created_at, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS elapsed_seconds FROM order_calls WHERE order_id = :oid AND status = 'ringing' AND created_at >= (NOW() - INTERVAL 45 SECOND) ORDER BY call_id DESC LIMIT 1");
+        $call_stmt->execute([':oid' => $order_id]);
+        $c = $call_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($c) {
+            $c['call_id'] = (int)$c['call_id'];
+            $c['elapsed_seconds'] = (int)$c['elapsed_seconds'];
+            $active_call = $c;
+        }
+    } catch (Throwable $e) {}
+
+    // Check for latest message for real-time delivery toasts
+    $latest_message = null;
+    try {
+        $m_stmt = $conn->prepare("SELECT message_id, order_id, sender_role, sender_id, sender_name, message_text, created_at FROM order_messages WHERE order_id = :oid ORDER BY message_id DESC LIMIT 1");
+        $m_stmt->execute([':oid' => $order_id]);
+        $latest_message = $m_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($latest_message) {
+            $latest_message['message_id'] = (int)$latest_message['message_id'];
+        }
+    } catch (Throwable $e) {}
 
     // Calculate distance between rider and destination
     $distance = null;
@@ -233,6 +257,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         'rider_name'         => $o['rider_name'],
         'rider_phone'        => $o['rider_phone'],
         'customer_phone'     => $o['customer_phone'],
+        'active_call'        => $active_call,
+        'latest_message'     => $latest_message,
     ]);
 }
 

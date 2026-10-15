@@ -262,10 +262,250 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
   70% { transform: scale(1.6); opacity: 0; }
   100% { transform: scale(1.6); opacity: 0; }
 }
+
+/* Incoming Call Floating Overlay Modal */
+.incoming-call-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.25s ease-out;
+}
+.incoming-call-card {
+  position: relative;
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 30px 24px 26px;
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  animation: scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+@keyframes scaleUp {
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.incoming-call-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+  box-shadow: 0 0 0 10px rgba(22, 163, 74, 0.2), 0 0 0 20px rgba(22, 163, 74, 0.08);
+  animation: callGlow 1.8s infinite;
+}
+@keyframes callGlow {
+  0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.45); }
+  70% { box-shadow: 0 0 0 22px rgba(22, 163, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+.incoming-call-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+  letter-spacing: 0.6px;
+}
+.incoming-call-card h3 {
+  margin: 0 0 4px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.incoming-call-card p {
+  margin: 0 0 10px;
+  font-size: 0.88rem;
+  color: #64748b;
+  font-weight: 600;
+}
+.incoming-call-status {
+  font-size: 0.8rem;
+  color: #0284c7;
+  background: #f0f9ff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 20px;
+}
+.incoming-call-actions {
+  display: flex;
+  gap: 12px;
+}
+.btn-decline-call, .btn-accept-call {
+  flex: 1;
+  padding: 13px 14px;
+  border-radius: 14px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.btn-decline-call {
+  background: #ef4444;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+}
+.btn-decline-call:active { transform: scale(0.96); }
+.btn-accept-call {
+  background: #16a34a;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.4);
+}
+.btn-accept-call:active { transform: scale(0.96); }
+.incoming-connected-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.call-timer {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #16a34a;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Live Rider Message Banner */
+.live-rider-msg-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999998;
+  width: calc(100% - 32px);
+  max-width: 440px;
+  background: #1e293b;
+  color: #ffffff;
+  border-radius: 16px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  animation: bannerSlideDown 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+@keyframes bannerSlideDown {
+  0% { transform: translate(-50%, -40px); opacity: 0; }
+  100% { transform: translate(-50%, 0); opacity: 1; }
+}
+.msg-banner-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.4);
+}
+.msg-banner-content {
+  flex: 1;
+  min-width: 0;
+}
+.msg-banner-title {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.msg-banner-body {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tap-reply-pill {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 5px 9px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
 </style>
 </head>
 <body>
 <div class="app-container">
+
+  <!-- Incoming Call Floating Overlay Modal -->
+  <div id="incomingCallModal" class="incoming-call-modal" style="display:none;">
+    <div class="incoming-call-card">
+      <div class="incoming-call-avatar">
+        <i class="fa-solid fa-phone-volume fa-shake"></i>
+      </div>
+      <div class="incoming-call-badge"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> INCOMING CALL</div>
+      <h3 id="incomingCallerName">Rider</h3>
+      <p id="incomingCallerPhone">+63 917 555 0192</p>
+      <div id="incomingCallStatus" class="incoming-call-status">Rider is calling regarding your delivery...</div>
+      <div class="incoming-call-actions" id="incomingCallActions">
+        <button type="button" class="btn-decline-call" onclick="declineIncomingCall()">
+          <i class="fa-solid fa-phone-slash"></i> Decline
+        </button>
+        <button type="button" class="btn-accept-call" onclick="acceptIncomingCall()">
+          <i class="fa-solid fa-phone"></i> Accept
+        </button>
+      </div>
+      <div class="incoming-connected-actions" id="incomingConnectedActions" style="display:none;">
+        <span class="call-timer" id="callConnectedTimer">00:00</span>
+        <div style="font-size:0.8rem; color:#16a34a; font-weight:600;"><i class="fa-solid fa-headset"></i> Voice Line Active</div>
+        <button type="button" class="btn-decline-call" onclick="endConnectedCall()" style="margin-top:8px;">
+          <i class="fa-solid fa-phone-slash"></i> End Call
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Rider Message Banner -->
+  <div id="liveRiderMessageBanner" class="live-rider-msg-banner" style="display:none;" onclick="openChatFromBanner()">
+    <div class="msg-banner-avatar"><i class="fa-solid fa-motorcycle"></i></div>
+    <div class="msg-banner-content">
+      <div class="msg-banner-title">
+        <span>New message from your rider</span>
+        <span class="msg-banner-time">Just now</span>
+      </div>
+      <div class="msg-banner-body" id="liveMsgBannerText">I'm outside with your order! 🛵</div>
+    </div>
+    <div class="msg-banner-action">
+      <span class="tap-reply-pill">Reply <i class="fa-solid fa-chevron-right"></i></span>
+    </div>
+  </div>
 
   <!-- Header -->
   <header class="track-header">
@@ -577,6 +817,18 @@ async function pollRiderLocation() {
     }
     updateEtaBadge(distKm);
 
+    // Check for active incoming call from rider
+    if (data.active_call && data.active_call.status === 'ringing') {
+      handleIncomingCallAlert(data.active_call);
+    } else {
+      dismissIncomingCallIfRinging();
+    }
+
+    // Check for new message from rider to show live banner
+    if (data.latest_message && data.latest_message.sender_role === 'rider') {
+      handleLiveRiderMessage(data.latest_message);
+    }
+
     // Update Rider contact details if refreshed
     if (data.rider_name) {
       const nameEl = document.getElementById('riderNameDisplay');
@@ -595,6 +847,229 @@ async function pollRiderLocation() {
   } catch (err) {
     console.warn('Poll tracking error:', err);
   }
+}
+
+// -------------------------------------------------------------
+// INCOMING CALL & LIVE MESSAGE REAL-TIME HANDLERS
+// -------------------------------------------------------------
+let ringtoneAudioCtx = null;
+let ringtoneInterval = null;
+let currentIncomingCall = null;
+let callConnectedTimer = null;
+let callConnectedSeconds = 0;
+let lastSeenRiderMsgId = 0;
+let msgBannerTimeout = null;
+
+function startRingtone() {
+  try {
+    if (!ringtoneAudioCtx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      ringtoneAudioCtx = new AudioCtx();
+    }
+    if (ringtoneAudioCtx.state === 'suspended') {
+      ringtoneAudioCtx.resume();
+    }
+
+    function playBeep() {
+      if (!ringtoneAudioCtx || ringtoneAudioCtx.state === 'closed') return;
+      const now = ringtoneAudioCtx.currentTime;
+      const osc1 = ringtoneAudioCtx.createOscillator();
+      const osc2 = ringtoneAudioCtx.createOscillator();
+      const gain = ringtoneAudioCtx.createGain();
+
+      osc1.type = 'sine'; osc1.frequency.value = 440;
+      osc2.type = 'sine'; osc2.frequency.value = 480;
+
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ringtoneAudioCtx.destination);
+
+      osc1.start(now); osc1.stop(now + 1.2);
+      osc2.start(now); osc2.stop(now + 1.2);
+    }
+
+    playBeep();
+    if (ringtoneInterval) clearInterval(ringtoneInterval);
+    ringtoneInterval = setInterval(playBeep, 2400);
+
+    if ('vibrate' in navigator) {
+      navigator.vibrate([400, 200, 400, 200, 400]);
+    }
+  } catch (e) {
+    console.warn('Ringtone audio notice:', e);
+  }
+}
+
+function stopRingtone() {
+  if (ringtoneInterval) {
+    clearInterval(ringtoneInterval);
+    ringtoneInterval = null;
+  }
+  if ('vibrate' in navigator) {
+    navigator.vibrate(0);
+  }
+}
+
+function handleIncomingCallAlert(call) {
+  if (currentIncomingCall && currentIncomingCall.call_id === call.call_id) {
+    return;
+  }
+  currentIncomingCall = call;
+
+  const modal = document.getElementById('incomingCallModal');
+  if (!modal) return;
+
+  const nameEl = document.getElementById('incomingCallerName');
+  if (nameEl) nameEl.textContent = call.caller_name || 'Your Rider';
+
+  const phoneEl = document.getElementById('incomingCallerPhone');
+  if (phoneEl) phoneEl.textContent = call.caller_phone || '+63 917 555 0192';
+
+  const statusEl = document.getElementById('incomingCallStatus');
+  if (statusEl) statusEl.textContent = 'Rider is calling regarding your delivery...';
+
+  const actionsEl = document.getElementById('incomingCallActions');
+  if (actionsEl) actionsEl.style.display = 'flex';
+
+  const connectedEl = document.getElementById('incomingConnectedActions');
+  if (connectedEl) connectedEl.style.display = 'none';
+
+  modal.style.display = 'flex';
+  startRingtone();
+}
+
+function dismissIncomingCallIfRinging() {
+  if (currentIncomingCall && !currentIncomingCall.connected) {
+    const modal = document.getElementById('incomingCallModal');
+    if (modal) modal.style.display = 'none';
+    stopRingtone();
+    currentIncomingCall = null;
+  }
+}
+
+async function acceptIncomingCall() {
+  stopRingtone();
+  if (currentIncomingCall) {
+    currentIncomingCall.connected = true;
+    try {
+      await fetch('order_communication_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'respond_call', call_id: currentIncomingCall.call_id, status: 'accepted' })
+      });
+    } catch (e) {}
+  }
+
+  const statusEl = document.getElementById('incomingCallStatus');
+  if (statusEl) statusEl.textContent = 'Call Connected (Voice Line Active)';
+
+  const actionsEl = document.getElementById('incomingCallActions');
+  if (actionsEl) actionsEl.style.display = 'none';
+
+  const connectedEl = document.getElementById('incomingConnectedActions');
+  if (connectedEl) connectedEl.style.display = 'flex';
+
+  callConnectedSeconds = 0;
+  if (callConnectedTimer) clearInterval(callConnectedTimer);
+  callConnectedTimer = setInterval(() => {
+    callConnectedSeconds++;
+    const m = String(Math.floor(callConnectedSeconds / 60)).padStart(2, '0');
+    const s = String(callConnectedSeconds % 60).padStart(2, '0');
+    const tEl = document.getElementById('callConnectedTimer');
+    if (tEl) tEl.textContent = `${m}:${s}`;
+  }, 1000);
+}
+
+async function declineIncomingCall() {
+  stopRingtone();
+  if (currentIncomingCall) {
+    try {
+      await fetch('order_communication_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'respond_call', call_id: currentIncomingCall.call_id, status: 'declined' })
+      });
+    } catch (e) {}
+  }
+  const modal = document.getElementById('incomingCallModal');
+  if (modal) modal.style.display = 'none';
+  currentIncomingCall = null;
+}
+
+async function endConnectedCall() {
+  if (callConnectedTimer) {
+    clearInterval(callConnectedTimer);
+    callConnectedTimer = null;
+  }
+  stopRingtone();
+  if (currentIncomingCall) {
+    try {
+      await fetch('order_communication_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'end_call', call_id: currentIncomingCall.call_id })
+      });
+    } catch (e) {}
+  }
+  const modal = document.getElementById('incomingCallModal');
+  if (modal) modal.style.display = 'none';
+  currentIncomingCall = null;
+}
+
+function handleLiveRiderMessage(msg) {
+  if (!msg || !msg.message_id) return;
+  if (lastSeenRiderMsgId === 0) {
+    lastSeenRiderMsgId = msg.message_id;
+    return;
+  }
+
+  if (msg.message_id > lastSeenRiderMsgId) {
+    lastSeenRiderMsgId = msg.message_id;
+
+    const banner = document.getElementById('liveRiderMessageBanner');
+    const textEl = document.getElementById('liveMsgBannerText');
+    if (banner && textEl) {
+      textEl.textContent = msg.message_text;
+      banner.style.display = 'flex';
+
+      playMessageChime();
+
+      if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
+      msgBannerTimeout = setTimeout(() => {
+        banner.style.display = 'none';
+      }, 7000);
+    }
+  }
+}
+
+function openChatFromBanner() {
+  window.location.href = `customer_dashboard.php?track=${orderId}`;
+}
+
+function playMessageChime() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.35);
+  } catch (e) {}
 }
 
 document.addEventListener('DOMContentLoaded', () => {
