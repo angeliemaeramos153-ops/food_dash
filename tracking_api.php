@@ -3,6 +3,9 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
 header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 function out(bool $ok, string $message = '', array $data = [], int $code = 200): never {
     http_response_code($code);
@@ -166,13 +169,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         out(false, 'Access denied.', [], 403);
     }
 
-    // Cast and normalize numeric coordinates
-    $store_lat = (isset($o['store_lat']) && is_numeric($o['store_lat'])) ? (float)$o['store_lat'] : null;
-    $store_lng = (isset($o['store_lng']) && is_numeric($o['store_lng'])) ? (float)$o['store_lng'] : null;
-    $dest_lat = (isset($o['destination_lat']) && is_numeric($o['destination_lat'])) ? (float)$o['destination_lat'] : null;
-    $dest_lng = (isset($o['destination_lng']) && is_numeric($o['destination_lng'])) ? (float)$o['destination_lng'] : null;
-    $rider_lat = (isset($o['rider_lat']) && is_numeric($o['rider_lat'])) ? (float)$o['rider_lat'] : null;
-    $rider_lng = (isset($o['rider_lng']) && is_numeric($o['rider_lng'])) ? (float)$o['rider_lng'] : null;
+    // Cast and normalize numeric coordinates with high precision (at least 6 decimal places)
+    $store_lat = (isset($o['store_lat']) && is_numeric($o['store_lat'])) ? round((float)$o['store_lat'], 7) : null;
+    $store_lng = (isset($o['store_lng']) && is_numeric($o['store_lng'])) ? round((float)$o['store_lng'], 7) : null;
+    $dest_lat  = (isset($o['destination_lat']) && is_numeric($o['destination_lat'])) ? round((float)$o['destination_lat'], 7) : null;
+    $dest_lng  = (isset($o['destination_lng']) && is_numeric($o['destination_lng'])) ? round((float)$o['destination_lng'], 7) : null;
+    $rider_lat = (isset($o['rider_lat']) && is_numeric($o['rider_lat'])) ? round((float)$o['rider_lat'], 7) : null;
+    $rider_lng = (isset($o['rider_lng']) && is_numeric($o['rider_lng'])) ? round((float)$o['rider_lng'], 7) : null;
 
     $o['store_lat'] = $store_lat;
     $o['store_lng'] = $store_lng;
@@ -180,6 +183,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     $o['destination_lng'] = $dest_lng;
     $o['rider_lat'] = $rider_lat;
     $o['rider_lng'] = $rider_lng;
+    $o['latitude']  = $rider_lat;
+    $o['longitude'] = $rider_lng;
 
     // Fallback phones guaranteed non-null
     if (empty($o['customer_phone'])) $o['customer_phone'] = '+63 928 555 0148';
@@ -219,6 +224,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         'store_lng'          => $store_lng,
         'destination_lat'    => $dest_lat,
         'destination_lng'    => $dest_lng,
+        'latitude'           => $rider_lat,
+        'longitude'          => $rider_lng,
         'lat'                => $rider_lat,
         'lng'                => $rider_lng,
         'rider_lat'          => $rider_lat,

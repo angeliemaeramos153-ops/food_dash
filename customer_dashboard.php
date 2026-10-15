@@ -2874,36 +2874,91 @@ function calculateHaversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function updateCustomerEtaBadge(dKm) {
+// Fallback street corridor generator so route polyline never cuts straight across buildings
+function generateFallbackStreetCorridor(startLat, startLng, destLat, destLng) {
+  const midLat = startLat + (destLat - startLat) * 0.5;
+  const midLng = startLng + (destLng - startLng) * 0.5;
+  return [
+    [startLat, startLng],
+    [startLat, midLng],
+    [destLat, midLng],
+    [destLat, destLng]
+  ];
+}
+
+// Smooth marker interpolation so motorcycle pin glides without abrupt snapping
+function animateMarkerTo(marker, newLat, newLng, durationMs = 1500) {
+  if (!marker) return;
+  const startLatLng = marker.getLatLng();
+  const startLat = startLatLng.lat;
+  const startLng = startLatLng.lng;
+
+  const deltaLat = newLat - startLat;
+  const deltaLng = newLng - startLng;
+
+  if (Math.abs(deltaLat) < 0.0000001 && Math.abs(deltaLng) < 0.0000001) {
+    return;
+  }
+  if (Math.abs(deltaLat) > 0.05 || Math.abs(deltaLng) > 0.05) {
+    marker.setLatLng([newLat, newLng]);
+    return;
+  }
+
+  if (marker._animFrameId) {
+    cancelAnimationFrame(marker._animFrameId);
+    marker._animFrameId = null;
+  }
+
+  const startTime = performance.now();
+
+  function step(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / durationMs, 1);
+    const ease = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
+
+    const curLat = startLat + deltaLat * ease;
+    const curLng = startLng + deltaLng * ease;
+    marker.setLatLng([curLat, curLng]);
+
+    if (progress < 1) {
+      marker._animFrameId = requestAnimationFrame(step);
+    } else {
+      marker.setLatLng([newLat, newLng]);
+      marker._animFrameId = null;
+    }
+  }
+
+  marker._animFrameId = requestAnimationFrame(step);
+}
+
+// Display exact OSRM driving distance and road ETA matching the rider dashboard
+function updateCustomerEtaBadge(dKm, distMeters = null) {
   const badgeEl = document.getElementById('custTrackEtaBadgeText');
   const distTextEl = document.getElementById('custTrackDistText');
   const etaTextEl = document.getElementById('custTrackEtaText');
   if (dKm === null || isNaN(dKm)) return;
 
   const d = parseFloat(dKm);
+  const meters = (distMeters !== null && !isNaN(distMeters)) ? Math.round(distMeters) : Math.round(d * 1000);
+
   let badgeStr = '';
   let distStr = '';
   let etaStr = '';
 
-  if (d <= 0.05) {
+  if (meters <= 50) {
     badgeStr = 'Arrived at your door! • 0 mins';
-    distStr = 'Arrived!';
+    distStr = 'Road Distance: Arrived!';
     etaStr = 'Rider is outside now! 🛵';
-  } else if (d < 0.2) {
-    const meters = Math.round(d * 1000);
-    badgeStr = `${meters}m away • ~1 min`;
-    distStr = `${meters} m away`;
-    etaStr = 'Arriving in ~1 min 🛵';
-  } else if (d < 1.0) {
-    const meters = Math.round(d * 1000);
-    const mins = Math.max(1, Math.round(d * 4));
+  } else if (meters < 1000) {
+    const mins = Math.max(1, Math.round((meters / 1000) * 4));
     badgeStr = `${meters}m away • ~${mins} mins`;
-    distStr = `${meters} m away`;
+    distStr = `Road Distance: ${meters} meters`;
     etaStr = `Arriving in ~${mins} mins`;
   } else {
-    const mins = Math.max(3, Math.round(d * 3.5));
-    badgeStr = `${d.toFixed(1)} km away • ~${mins} mins`;
-    distStr = `${d.toFixed(1)} km away`;
+    const kmStr = (meters / 1000).toFixed(2);
+    const mins = Math.max(3, Math.round((meters / 1000) * 3.5));
+    badgeStr = `${kmStr} km away • ~${mins} mins`;
+    distStr = `Road Distance: ${kmStr} km`;
     etaStr = `Estimated ~${mins} mins`;
   }
 
@@ -2912,9 +2967,72 @@ function updateCustomerEtaBadge(dKm) {
   if (etaTextEl) etaTextEl.textContent = etaStr;
 }
 
+let lastCustRouteKey = '';
+
+// Unified OSRM Driving Routing API matching rider_dashboard.php
+async function fetchCustOsrmRoute(startLat, startLng, destLat, destLng) {
+  const routeKey = `${startLat.toFixed(5)},${startLng.toFixed(5)}_${destLat.toFixed(5)},${destLng.toFixed(5)}`;
+  if (routeKey === lastCustRouteKey && custRoutePolyline) return;
+  lastCustRouteKey = routeKey;
+
+  const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${destLng},${destLat}?overview=full&geometries=geojson`;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates)) {
+        // OSRM returns [longitude, latitude], convert to Leaflet [latitude, longitude]
+        const leafletCoords = data.routes[0].geometry.coordinates.map(pt => [pt[1], pt[0]]);
+        if (custTrackingMap) {
+          if (!custRoutePolyline) {
+            custRoutePolyline = L.polyline(leafletCoords, {
+              color: '#4B5320',
+              weight: 5,
+              opacity: 0.9,
+              lineCap: 'round',
+              lineJoin: 'round'
+            }).addTo(custTrackingMap);
+          } else {
+            custRoutePolyline.setLatLngs(leafletCoords);
+          }
+        }
+        if (typeof data.routes[0].distance === 'number') {
+          updateCustomerEtaBadge(data.routes[0].distance / 1000, data.routes[0].distance);
+        }
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn('Customer OSRM road fetch fallback:', e);
+  }
+
+  // Fallback: Manhattan street corridor so route stays along street axes
+  const fallback = generateFallbackStreetCorridor(startLat, startLng, destLat, destLng);
+  if (custTrackingMap) {
+    if (!custRoutePolyline) {
+      custRoutePolyline = L.polyline(fallback, {
+        color: '#4B5320',
+        weight: 5,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(custTrackingMap);
+    } else {
+      custRoutePolyline.setLatLngs(fallback);
+    }
+  }
+}
+
 async function fetchCustomerLiveTracking(orderId, isInitial) {
   try {
-    const res = await fetch(`tracking_api.php?action=get_location&order_id=${orderId}`);
+    // Append timestamp and no-cache to prevent browser / proxy caching
+    const res = await fetch(`tracking_api.php?action=get_location&order_id=${orderId}&_t=${Date.now()}`, {
+      cache: 'no-store'
+    });
     const data = await res.json();
     if (!data.success || !data.order) {
       console.warn('Tracking API response:', data.message);
@@ -2926,9 +3044,10 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     const storeLng = parseFloat(data.store_lng || ord.store_lng);
     const destLat = parseFloat(data.destination_lat || ord.destination_lat || ord.customer_lat);
     const destLng = parseFloat(data.destination_lng || ord.destination_lng || ord.customer_lng);
-    // Smoothly read live rider coordinates from data.lat/data.lng or fallback aliases
-    const riderLat = parseFloat(data.lat ?? data.rider_lat ?? ord.rider_lat);
-    const riderLng = parseFloat(data.lng ?? data.rider_lng ?? ord.rider_lng);
+
+    // Read high-precision coordinates with fallback aliases
+    const riderLat = parseFloat(data.latitude ?? data.lat ?? data.rider_lat ?? ord.rider_lat);
+    const riderLng = parseFloat(data.longitude ?? data.lng ?? data.rider_lng ?? ord.rider_lng);
 
     // Update Rider info with non-null fallbacks
     currentTrackingRiderName = data.rider_name || ord.rider_name || 'Alex Rider';
@@ -3016,7 +3135,7 @@ function renderCustomerMap(opts) {
   });
 
   const riderIcon = L.divIcon({
-    className: 'custom-map-pin',
+    className: 'custom-map-pin cust-rider-pin',
     html: `<div style="position:relative; width:40px; height:40px;">
              <div style="position:absolute; inset:0; border-radius:50%; background:rgba(22,163,74,0.3); animation:riderPulse 1.8s infinite;"></div>
              <div style="position:absolute; inset:2px; border-radius:50%; background:#16a34a; color:#ffffff; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 12px rgba(22,163,74,0.5); border:2.5px solid #ffffff; font-size:17px;"><i class="fa-solid fa-motorcycle"></i></div>
@@ -3046,35 +3165,23 @@ function renderCustomerMap(opts) {
     }
   }
 
-  // c. Rider Motorcycle Pin (live coordinates)
+  // c. Rider Motorcycle Pin (smooth gliding interpolation)
   if (validRider) {
     if (!custRiderMarker) {
       custRiderMarker = L.marker([opts.riderLat, opts.riderLng], { icon: riderIcon, zIndexOffset: 1000 }).addTo(custTrackingMap);
       custRiderMarker.bindPopup(`<b>${escapeCustHtml(opts.riderName || 'Rider')}</b><br><small>Live Motorcycle GPS</small>`);
     } else {
-      custRiderMarker.setLatLng([opts.riderLat, opts.riderLng]);
+      // Smoothly animate marker without abrupt snapping
+      animateMarkerTo(custRiderMarker, opts.riderLat, opts.riderLng, 1400);
     }
   }
 
-  // d. Dynamic connecting road polyline via OSRM
+  // d. Dynamic connecting road polyline via OSRM (never straight line)
   const polyStart = validRider ? [opts.riderLat, opts.riderLng] : (validStore ? [opts.storeLat, opts.storeLng] : null);
   const polyEnd = validDest ? [opts.destLat, opts.destLng] : null;
 
   if (polyStart && polyEnd) {
-    const latlngs = [polyStart, polyEnd];
-    if (!custRoutePolyline) {
-      custRoutePolyline = L.polyline(latlngs, {
-        color: '#4B5320',
-        weight: 5,
-        opacity: 0.9,
-        lineCap: 'round',
-        lineJoin: 'round'
-      }).addTo(custTrackingMap);
-    } else {
-      custRoutePolyline.setLatLngs(latlngs);
-    }
-
-    // Fetch and snap to OSRM real-street road geometry
+    // Snap route polyline strictly to OSRM real streets
     fetchCustOsrmRoute(polyStart[0], polyStart[1], polyEnd[0], polyEnd[1]);
   }
 
@@ -3091,33 +3198,6 @@ function renderCustomerMap(opts) {
         custTrackingMap.setView(pointsToFit[0], 15);
       }
     }, 150);
-  }
-}
-
-let lastCustRouteKey = '';
-async function fetchCustOsrmRoute(startLat, startLng, destLat, destLng) {
-  const routeKey = `${startLat.toFixed(4)},${startLng.toFixed(4)}_${destLat.toFixed(4)},${destLng.toFixed(4)}`;
-  if (routeKey === lastCustRouteKey) return;
-  lastCustRouteKey = routeKey;
-
-  const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${destLng},${destLat}?overview=full&geometries=geojson`;
-  try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates)) {
-        const leafletCoords = data.routes[0].geometry.coordinates.map(pt => [pt[1], pt[0]]);
-        if (custRoutePolyline && leafletCoords.length > 0) {
-          custRoutePolyline.setLatLngs(leafletCoords);
-        }
-        if (typeof data.routes[0].distance === 'number') {
-          const roadDistKm = data.routes[0].distance / 1000;
-          updateCustomerEtaBadge(roadDistKm);
-        }
-      }
-    }
-  } catch (e) {
-    // Silent fallback keeps existing polyline
   }
 }
 
