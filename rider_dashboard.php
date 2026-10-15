@@ -210,7 +210,7 @@ if ($rid > 0) {
     $ready_orders = $stmt_ready->fetchAll(PDO::FETCH_ASSOC);
 
     // 2. My Delivery: Orders assigned to this rider with case-insensitive status matching ready_for_pickup, ready, assigned, or active delivery
-    $stmt_my = $conn->prepare("SELECT order_id, order_ref, customer_name, store_name, items_summary, total_amount, status, delivery_status, rider_id, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at 
+    $stmt_my = $conn->prepare("SELECT order_id, order_ref, customer_name, store_name, items_summary, total_amount, status, delivery_status, rider_id, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, rider_lat, rider_lng, created_at 
         FROM food_orders 
         WHERE rider_id = :rid 
           AND (LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer')) 
@@ -218,11 +218,60 @@ if ($rid > 0) {
     $stmt_my->execute([':rid' => $rid]);
     $my_orders = $stmt_my->fetchAll(PDO::FETCH_ASSOC);
 }
+
+// Active delivery configuration for embedded Leaflet map
+$active_order_for_map = null;
+if (!empty($my_orders)) {
+    $first_order = $my_orders[0];
+    $c_lat = (isset($first_order['delivery_lat']) && is_numeric($first_order['delivery_lat'])) ? (float)$first_order['delivery_lat'] : ((isset($first_order['customer_lat']) && is_numeric($first_order['customer_lat'])) ? (float)$first_order['customer_lat'] : null);
+    $c_lng = (isset($first_order['delivery_lng']) && is_numeric($first_order['delivery_lng'])) ? (float)$first_order['delivery_lng'] : ((isset($first_order['customer_lng']) && is_numeric($first_order['customer_lng'])) ? (float)$first_order['customer_lng'] : null);
+
+    // Fallback if coordinates missing: default to area based on address or central region
+    if ($c_lat === null || $c_lng === null || ((float)$c_lat == 0 && (float)$c_lng == 0)) {
+        $addr_l = strtolower($first_order['delivery_address'] ?? '');
+        if (str_contains($addr_l, 'ormoc')) {
+            $c_lat = 11.0054;
+            $c_lng = 124.6078;
+        } else {
+            $c_lat = 14.5830;
+            $c_lng = 121.0590;
+        }
+    }
+
+    $r_lat = (isset($first_order['rider_lat']) && is_numeric($first_order['rider_lat'])) ? (float)$first_order['rider_lat'] : null;
+    $r_lng = (isset($first_order['rider_lng']) && is_numeric($first_order['rider_lng'])) ? (float)$first_order['rider_lng'] : null;
+    $is_initial_shop_origin = false;
+
+    // Initial rider position defaults to store dispatch location (~800m away) if not yet broadcast
+    if ($r_lat === null || $r_lng === null || ((float)$r_lat == 0 && (float)$r_lng == 0)) {
+        $r_lat = $c_lat - 0.0072;
+        $r_lng = $c_lng - 0.0058;
+        $is_initial_shop_origin = true;
+    }
+
+    $active_order_for_map = [
+        'order_id' => (int)$first_order['order_id'],
+        'order_ref' => (string)$first_order['order_ref'],
+        'customer_name' => (string)($first_order['customer_name'] ?? 'Customer'),
+        'store_name' => (string)($first_order['store_name'] ?? 'Restaurant'),
+        'delivery_address' => (string)($first_order['delivery_address'] ?? ''),
+        'customer_lat' => $c_lat,
+        'customer_lng' => $c_lng,
+        'rider_lat' => $r_lat,
+        'rider_lng' => $r_lng,
+        'is_initial_shop_origin' => $is_initial_shop_origin
+    ];
+}
+$active_delivery_json = $active_order_for_map ? json_encode($active_order_for_map, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) : 'null';
+
 $total_riders = (int)($conn->query("SELECT COUNT(*) AS c FROM riders")->fetchColumn() ?: 0);
 $waiting = (int)($conn->query("SELECT COUNT(*) AS c FROM riders WHERE status='waiting'")->fetchColumn() ?: 0);
 $on_delivery = (int)($conn->query("SELECT COUNT(*) AS c FROM riders WHERE status='on_delivery'")->fetchColumn() ?: 0);
 ?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Food Dash - Rider</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"><style>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Food Dash - Rider</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 :root{
   --harvest-sun:#D88F2A;
@@ -363,52 +412,54 @@ main{padding:16px;flex:1;overflow-x:hidden}
   margin-top: 6px;
   font-weight: 600;
 }
-.btn-maps {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: #1a73e8;
-  color: #ffffff !important;
-  text-decoration: none;
-  border-radius: 10px;
-  padding: 11px 14px;
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  box-shadow: 0 4px 14px rgba(26, 115, 232, 0.28);
-  transition: all 0.2s ease;
+/* Embedded Delivery Map & Custom Markers */
+#delivery-map {
+  height: 320px;
   width: 100%;
-  box-sizing: border-box;
+  border-radius: 12px;
+  margin-top: 12px;
+  border: 1.5px solid #d4c5a5;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.06);
+  position: relative;
+  z-index: 1;
 }
-.btn-maps:hover {
-  background: #1557b0;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(26, 115, 232, 0.38);
+.leaflet-control-zoom {
+  border-radius: 8px !important;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+  border: none !important;
 }
-.btn-maps i {
-  font-size: 0.92rem;
+.leaflet-popup-content-wrapper {
+  border-radius: 10px !important;
+  font-family: 'Poppins', sans-serif !important;
+  box-shadow: 0 4px 16px rgba(75,83,32,0.2) !important;
 }
-.btn-maps-outline {
-  display: inline-flex;
+.leaflet-popup-content {
+  margin: 10px 12px !important;
+  font-size: 0.72rem !important;
+  line-height: 1.45 !important;
+  color: var(--ink) !important;
+}
+.custom-map-marker {
+  background: transparent !important;
+  border: none !important;
+}
+@keyframes riderPulse {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  70% { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+.map-status-bar {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: #eef3fc;
-  color: #1a73e8 !important;
-  border: 1.5px solid #c2d7fa;
-  text-decoration: none;
-  border-radius: 10px;
-  padding: 8px 14px;
+  background: #fdfbf7;
+  border: 1px solid #d4c5a5;
+  border-radius: 8px;
+  padding: 7px 11px;
+  margin-top: 8px;
   font-size: 0.72rem;
-  font-weight: 700;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-.btn-maps-outline:hover {
-  background: #1a73e8;
-  color: #ffffff !important;
-  border-color: #1a73e8;
+  color: var(--olive-shadow);
 }
 .btn-gps-active {
   background: #2e7d32 !important;
@@ -470,28 +521,14 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $lat = (isset($o['delivery_lat']) && is_numeric($o['delivery_lat'])) ? $o['delivery_lat'] : ($o['customer_lat'] ?? null);
   $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
-  if ($has_coords) {
-      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . $lat . "," . $lng . "&travelmode=driving";
-  } elseif (!empty($addr)) {
-      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . rawurlencode($addr) . "&travelmode=driving";
-  } else {
-      $maps_url = "https://www.google.com/maps";
-  }
   $is_ready_pickup = in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned']);
-?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="margin: 10px 0 6px;"><a href="<?=htmlspecialchars($maps_url)?>" target="_blank" rel="noopener noreferrer" class="btn btn-maps full"><i class="fa-solid fa-diamond-turn-right"></i> Open in Google Maps / Turn-by-Turn Navigation</a></div><div class="actions" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
+?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div id="delivery-map" style="height: 320px; width: 100%; border-radius: 12px; margin-top: 12px;"></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div class="actions" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
   $addr = trim((string)($o['delivery_address'] ?? ''));
   $lat = (isset($o['delivery_lat']) && is_numeric($o['delivery_lat'])) ? $o['delivery_lat'] : ($o['customer_lat'] ?? null);
   $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
-  if ($has_coords) {
-      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . $lat . "," . $lng . "&travelmode=driving";
-  } elseif (!empty($addr)) {
-      $maps_url = "https://www.google.com/maps/dir/?api=1&destination=" . rawurlencode($addr) . "&travelmode=driving";
-  } else {
-      $maps_url = "https://www.google.com/maps";
-  }
-?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>₱<?=number_format((float)$o['total_amount'],2)?></div><div class="rider-address-card" style="margin:8px 0 10px;"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No delivery address provided')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="display:flex;gap:7px;"><button type="button" class="btn" style="flex:1" onclick="doDeliveryAction(<?=$o['order_id']?>, 'claim')"><i class="fa-solid fa-motorcycle"></i> Accept / Pick Up Order</button><a href="<?=htmlspecialchars($maps_url)?>" target="_blank" rel="noopener noreferrer" class="btn btn-maps-outline" title="Open Destination in Google Maps"><i class="fa-solid fa-diamond-turn-right"></i> Maps</a></div></div><?php endforeach; else: ?><div class="empty">No unassigned ready orders.</div><?php endif; ?></div></section>
+?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>₱<?=number_format((float)$o['total_amount'],2)?></div><div class="rider-address-card" style="margin:8px 0 10px;"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No delivery address provided')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="margin-top:8px;"><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'claim')"><i class="fa-solid fa-motorcycle"></i> Accept / Pick Up Order</button></div></div><?php endforeach; else: ?><div class="empty">No unassigned ready orders.</div><?php endif; ?></div></section>
 <section class="section" id="live"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">📡 Live Location</h2><div id="gpsStatus" class="meta">Live location is off. Tap Share Live Location after starting a delivery.</div><button type="button" class="btn full" style="margin-top:10px" onclick="stopLiveLocation()">Stop Sharing</button></div></section><section class="section" id="guide"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">Customer Notification Flow</h2><div class="meta">When you accept an order, the customer is notified. When you start the trip, they receive an <b>On the Way</b> notification. When you tap <b>I'm Near Customer</b>, they receive the near-arrival notification. When delivered, the customer receives a final delivery notice.</div></div></section></main><nav class="bottom"><a class="active" href="#delivery"><i class="fa-solid fa-box"></i>Delivery</a><a href="#available"><i class="fa-solid fa-motorcycle"></i>Pickup</a><a href="#live"><i class="fa-solid fa-location-crosshairs"></i>Live</a><a href="#guide"><i class="fa-solid fa-circle-info"></i>Guide</a><a href="#" onclick="openLogout();return false"><i class="fa-solid fa-right-from-bracket"></i>Logout</a></nav></div>
 <div class="modal" id="noteModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Notifications</h3><div id="notificationList" class="notification-list"><div class="empty">Loading...</div></div><div class="box-actions"><button class="close" onclick="markAllRead()">Mark all read</button><button class="close" onclick="closeNotifications()">Close</button></div></div></div>
 <div class="modal" id="logoutModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out.</p><div class="box-actions"><button class="close" onclick="closeLogout()">Cancel</button><a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
@@ -541,7 +578,148 @@ function openNotifications(){document.getElementById('noteModal').classList.add(
 function openLogout(){document.getElementById('logoutModal').classList.add('show')}function closeLogout(){document.getElementById('logoutModal').classList.remove('show')}
 loadNotifications();setInterval(loadNotifications,5000);document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNotifications();closeLogout()}});
 
+// Active Delivery Data passed from backend
+const activeDeliveryData = <?= $active_delivery_json ?>;
+
+let deliveryMap = null;
+let customerMarker = null;
+let riderMarker = null;
+let routePolyline = null;
 let gpsWatchId = null, activeGpsOrderId = null;
+
+function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function updateRouteUI(rLat, rLng, cLat, cLng) {
+  if (routePolyline) {
+    routePolyline.setLatLngs([[rLat, rLng], [cLat, cLng]]);
+  }
+  const distKm = calculateDistanceKm(rLat, rLng, cLat, cLng);
+  const distEl = document.getElementById('mapRouteDistance');
+  if (distEl) {
+    if (distKm < 1) {
+      distEl.textContent = `Distance: ${Math.round(distKm * 1000)} meters`;
+    } else {
+      distEl.textContent = `Distance: ${distKm.toFixed(2)} km`;
+    }
+  }
+}
+
+function initDeliveryMap(data) {
+  if (!data || !document.getElementById('delivery-map')) return;
+  if (typeof L === 'undefined') {
+    console.error('Leaflet library is not loaded');
+    return;
+  }
+
+  const customerCoord = [data.customer_lat, data.customer_lng];
+  const riderCoord = [data.rider_lat, data.rider_lng];
+
+  // Initialize Map
+  deliveryMap = L.map('delivery-map', {
+    zoomControl: true,
+    scrollWheelZoom: true,
+    attributionControl: false
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(deliveryMap);
+
+  // Customer Destination Custom Marker
+  const customerIcon = L.divIcon({
+    className: 'custom-map-marker',
+    html: `
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+        <div style="background:#923D32;color:#ffffff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(146,61,50,0.45);border:2.5px solid #ffffff;font-size:15px;">
+          <i class="fa-solid fa-house-chimney"></i>
+        </div>
+        <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid #923D32;margin-top:-2px;"></div>
+        <div style="background:rgba(0,0,0,0.2);width:16px;height:4px;border-radius:50%;margin-top:1px;"></div>
+      </div>
+    `,
+    iconSize: [34, 46],
+    iconAnchor: [17, 43],
+    popupAnchor: [0, -42]
+  });
+
+  customerMarker = L.marker(customerCoord, { icon: customerIcon }).addTo(deliveryMap);
+  customerMarker.bindPopup(`
+    <b><i class="fa-solid fa-location-dot" style="color:#923D32"></i> Customer Destination</b><br>
+    <strong>${esc(data.customer_name)}</strong><br>
+    <span>${esc(data.delivery_address || 'Delivery Address')}</span>
+  `);
+
+  // Rider Starting / Current Location Custom Marker
+  const riderIcon = L.divIcon({
+    className: 'custom-map-marker',
+    html: `
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+        <div id="riderPulseRing" style="position:absolute;top:-4px;left:-4px;width:42px;height:42px;border-radius:50%;background:rgba(46,125,50,0.3);animation:riderPulse 2s infinite ease-out;"></div>
+        <div style="background:#2e7d32;color:#ffffff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(46,125,50,0.45);border:2.5px solid #ffffff;font-size:15px;position:relative;z-index:2;">
+          <i class="fa-solid fa-motorcycle"></i>
+        </div>
+        <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid #2e7d32;margin-top:-2px;position:relative;z-index:2;"></div>
+        <div style="background:rgba(0,0,0,0.2);width:16px;height:4px;border-radius:50%;margin-top:1px;"></div>
+      </div>
+    `,
+    iconSize: [34, 46],
+    iconAnchor: [17, 43],
+    popupAnchor: [0, -42]
+  });
+
+  riderMarker = L.marker(riderCoord, { icon: riderIcon }).addTo(deliveryMap);
+  const riderLabel = data.is_initial_shop_origin ? `<b>${esc(data.store_name)}</b><br>Store Pickup Point` : `<b>Rider Location</b><br>On Route`;
+  riderMarker.bindPopup(riderLabel);
+
+  // Clean Polyline Route
+  routePolyline = L.polyline([riderCoord, customerCoord], {
+    color: '#D88F2A',
+    weight: 4,
+    opacity: 0.85,
+    dashArray: '7, 8',
+    lineCap: 'round',
+    lineJoin: 'round'
+  }).addTo(deliveryMap);
+
+  // Fit bounds to display both markers
+  const bounds = L.latLngBounds([riderCoord, customerCoord]);
+  deliveryMap.fitBounds(bounds, { padding: [35, 35], maxZoom: 16 });
+
+  updateRouteUI(riderCoord[0], riderCoord[1], customerCoord[0], customerCoord[1]);
+
+  setTimeout(() => {
+    if (deliveryMap) deliveryMap.invalidateSize();
+  }, 250);
+}
+
+function updateRiderMarkerOnMap(lat, lng) {
+  if (!deliveryMap || !riderMarker) return;
+  
+  riderMarker.setLatLng([lat, lng]);
+  riderMarker.bindPopup(`
+    <b><i class="fa-solid fa-satellite" style="color:#2e7d32"></i> Rider (Live GPS)</b><br>
+    <span>Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}</span><br>
+    <small style="color:#666">Updated live just now</small>
+  `);
+
+  if (activeDeliveryData) {
+    updateRouteUI(lat, lng, activeDeliveryData.customer_lat, activeDeliveryData.customer_lng);
+  }
+
+  const liveTag = document.getElementById('mapGpsLiveTag');
+  if (liveTag) liveTag.style.display = 'inline-flex';
+}
 
 async function sendRiderLocation(orderId, lat, lng) {
   try {
@@ -594,6 +772,9 @@ function stopLiveLocation() {
     updateGpsButtonUI(activeGpsOrderId, false);
     activeGpsOrderId = null;
   }
+  const liveTag = document.getElementById('mapGpsLiveTag');
+  if (liveTag) liveTag.style.display = 'none';
+
   const gpsStatusEl = document.getElementById('gpsStatus');
   if (gpsStatusEl) gpsStatusEl.textContent = 'Live location is off.';
   toastRider('Live GPS sharing stopped');
@@ -622,8 +803,12 @@ async function startLiveLocation(orderId) {
   
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
-      const ok = await sendRiderLocation(orderId, pos.coords.latitude, pos.coords.longitude);
-      if (ok) toastRider(`GPS Active (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`);
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      updateRiderMarkerOnMap(lat, lng);
+      if (deliveryMap) deliveryMap.panTo([lat, lng]);
+      const ok = await sendRiderLocation(orderId, lat, lng);
+      if (ok) toastRider(`GPS Active (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
     },
     (err) => {
       console.warn('Initial GPS query warning:', err.message);
@@ -636,7 +821,10 @@ async function startLiveLocation(orderId) {
   
   gpsWatchId = navigator.geolocation.watchPosition(
     (pos) => {
-      sendRiderLocation(orderId, pos.coords.latitude, pos.coords.longitude);
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      updateRiderMarkerOnMap(lat, lng);
+      sendRiderLocation(orderId, lat, lng);
     },
     (err) => {
       console.warn('GPS watch error:', err.message);
@@ -653,6 +841,28 @@ function toggleLiveLocation(orderId) {
     startLiveLocation(orderId);
   }
 }
+
+// In-app map initialization on load & responsiveness
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    if (activeDeliveryData && document.getElementById('delivery-map')) {
+      initDeliveryMap(activeDeliveryData);
+    }
+  });
+} else {
+  if (activeDeliveryData && document.getElementById('delivery-map')) {
+    initDeliveryMap(activeDeliveryData);
+  }
+}
+
+window.addEventListener('resize', () => {
+  if (deliveryMap) deliveryMap.invalidateSize();
+});
+window.addEventListener('hashchange', () => {
+  setTimeout(() => {
+    if (deliveryMap) deliveryMap.invalidateSize();
+  }, 200);
+});
 window.addEventListener('beforeunload', () => stopLiveLocation());
 function toastGps(msg){const el=document.getElementById('gpsStatus');if(el)el.textContent=msg;}
 </script></body></html>
