@@ -235,10 +235,9 @@ if ($rid > 0) {
     $my_orders = $stmt_my->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// Active delivery configuration for embedded Leaflet map
 $active_order_for_map = null;
-if (!empty($my_orders)) {
-    $first_order = $my_orders[0];
+$first_order = !empty($my_orders) ? $my_orders[0] : (!empty($ready_orders) ? $ready_orders[0] : null);
+if ($first_order) {
 
     // 1. Customer Destination: strictly from order delivery coordinates without arbitrary offsets
     $c_lat = (isset($first_order['delivery_lat']) && is_numeric($first_order['delivery_lat'])) 
