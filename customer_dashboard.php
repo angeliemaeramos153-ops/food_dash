@@ -348,6 +348,8 @@ if ($menu_items_res) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Food Dash — Customer</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
@@ -552,15 +554,36 @@ button{cursor:pointer}
 }
 .fd-modal.show { display: flex; }
 .fd-modal-box {
-  width: min(380px, 100%);
+  width: min(420px, 100%);
   background: #FFFDF9;
   border: 1px solid var(--sandstone);
   border-radius: 20px;
-  padding: 20px;
+  padding: 18px 20px;
   box-shadow: 0 20px 50px rgba(75, 83, 32, 0.25);
   display: flex;
   flex-direction: column;
-  max-height: 80vh;
+  max-height: 92vh;
+  overflow-y: auto;
+}
+#checkout-address-map {
+  height: 220px;
+  width: 100%;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--sandstone);
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+  position: relative;
+  z-index: 10;
+}
+.custom-map-pin {
+  background: transparent !important;
+  border: none !important;
+}
+.leaflet-control-zoom {
+  border: 1px solid var(--sandstone) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15) !important;
 }
 .fd-modal-header {
   display: flex;
@@ -940,9 +963,14 @@ button{cursor:pointer}
         <label for="deliveryAddressInput">
           <i class="fa-solid fa-location-dot"></i> Delivery Address
         </label>
-        <button type="button" class="gps-detect-btn" id="btnDetectGps" onclick="detectCustomerGps(false)">
-          <i class="fa-solid fa-crosshairs"></i> Auto-detect GPS
-        </button>
+        <div style="display:flex; gap:6px;">
+          <button type="button" class="gps-detect-btn" onclick="openAddressPromptModal()">
+            <i class="fa-solid fa-map-pin"></i> Pin on Map
+          </button>
+          <button type="button" class="gps-detect-btn" id="btnDetectGps" onclick="detectCustomerGps(false)">
+            <i class="fa-solid fa-crosshairs"></i> Locate Me
+          </button>
+        </div>
       </div>
       <textarea id="deliveryAddressInput" class="delivery-textarea" placeholder="Enter complete delivery address (e.g. Unit/House No., Street, Brgy, City, Landmark)" rows="2"></textarea>
       <div id="gpsLocationStatus" class="gps-status-pill" style="display:none;"></div>
@@ -1041,23 +1069,32 @@ button{cursor:pointer}
   <button class="logout" type="button" onclick="openLogout()">Log Out</button>
 </section>
 
-<!-- Delivery Address Prompt Modal -->
+<!-- Delivery Address Prompt Modal with Leaflet Map Pin Picker -->
 <div class="fd-modal" id="addressPromptModal" onclick="if(event.target===this)closeAddressPromptModal()">
   <div class="fd-modal-box">
     <div class="fd-modal-header">
-      <h3><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> Delivery Address</h3>
+      <h3><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> Delivery Address & Pin</h3>
       <button class="fd-modal-close" onclick="closeAddressPromptModal()">&times;</button>
     </div>
-    <div style="font-size: 9.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.4;">
-      Please confirm where our rider should deliver your food order.
+    <div style="font-size: 9.5px; color: var(--muted); margin-bottom: 8px; line-height: 1.4;">
+      Drag the pin to your exact delivery location or use your live location.
     </div>
-    <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
-      <button type="button" class="gps-detect-btn" id="modalBtnDetectGps" onclick="detectCustomerGps(true)">
-        <i class="fa-solid fa-crosshairs"></i> Auto-detect GPS
+
+    <!-- Mini Leaflet Map Container -->
+    <div id="checkout-address-map" style="height: 220px; width: 100%; border-radius: 10px; margin-bottom: 12px;"></div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px;">
+      <span style="font-size: 9.5px; font-weight: 600; color: var(--olive-dark);">
+        <i class="fa-solid fa-map-location-dot" style="color:var(--harvest-sun)"></i> Delivery Address
+      </span>
+      <button type="button" class="gps-detect-btn" id="modalBtnLocateMe" onclick="useMyExactLocation()">
+        <i class="fa-solid fa-location-crosshairs"></i> Use My Exact Location
       </button>
     </div>
-    <textarea id="modalDeliveryAddress" class="delivery-textarea" placeholder="Unit/House No., Street, Barangay, City, Landmark..." rows="3"></textarea>
-    <div id="modalGpsStatus" class="gps-status-pill" style="display:none;"></div>
+
+    <textarea id="modalDeliveryAddress" class="delivery-textarea" placeholder="Unit/House No., Street, Barangay, City, Landmark..." rows="2"></textarea>
+    <div id="modalGpsStatus" class="gps-status-pill" style="display:none; margin-top:8px;"></div>
+    
     <input type="hidden" id="modal_delivery_lat" name="delivery_lat" value="">
     <input type="hidden" id="modal_delivery_lng" name="delivery_lng" value="">
     <input type="hidden" id="modalDeliveryLat" value="">
@@ -1567,7 +1604,16 @@ function setDeliveryCoordinates(lat, lng, source = 'nominatim') {
     });
 
     const isGps = source === 'gps';
-    const statusText = `<i class="fa-solid ${isGps ? 'fa-satellite-dish' : 'fa-location-dot'}"></i> ${isGps ? 'Live GPS Pin' : 'Geocoded Pin'}: ${numLat.toFixed(5)}, ${numLng.toFixed(5)}`;
+    const isMap = source === 'map';
+    const icon = isGps ? 'fa-satellite-dish' : (isMap ? 'fa-map-pin' : 'fa-location-dot');
+    const label = isGps ? 'Exact Live GPS Pin' : (isMap ? 'Map Pin Selected' : 'Geocoded Pin');
+    const statusText = `<i class="fa-solid ${icon}"></i> ${label}: ${numLat.toFixed(5)}, ${numLng.toFixed(5)}`;
+
+    // Sync map marker if map exists and source is not direct map dragging
+    if (checkoutMarker && source !== 'map') {
+        checkoutMarker.setLatLng([numLat, numLng]);
+        if (checkoutMap) checkoutMap.setView([numLat, numLng], Math.max(checkoutMap.getZoom(), 15));
+    }
 
     ['gpsLocationStatus', 'modalGpsStatus'].forEach(id => {
         const el = document.getElementById(id);
@@ -1688,11 +1734,135 @@ function handleAddressBlur(value, isModal = false) {
     }
 }
 
-// Live GPS detection via navigator.geolocation.getCurrentPosition
-function detectCustomerGps(isModal = false) {
-    const statusEl = document.getElementById(isModal ? 'modalGpsStatus' : 'gpsLocationStatus');
-    const addrInput = document.getElementById(isModal ? 'modalDeliveryAddress' : 'deliveryAddressInput');
-    const btn = document.getElementById(isModal ? 'modalBtnDetectGps' : 'btnDetectGps');
+// Helper: Reverse-geocode coordinates to street address
+async function reverseGeocodeToAddress(lat, lng) {
+    const mainAddr = document.getElementById('deliveryAddressInput');
+    const modalAddr = document.getElementById('modalDeliveryAddress');
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.display_name) {
+                const formatted = data.display_name;
+                const currentVal = (modalAddr ? modalAddr.value : '').trim();
+                if (!currentVal || currentVal.startsWith('GPS Location') || currentVal.startsWith('Pinned Location')) {
+                    if (modalAddr) modalAddr.value = formatted;
+                    if (mainAddr) mainAddr.value = formatted;
+                    localStorage.setItem('foodDashDeliveryAddress', formatted);
+                }
+            }
+        }
+    } catch (e) {
+        // Silently ignore network error on reverse geocode
+    }
+}
+
+// Leaflet Map Picker for Customer Checkout Modal
+let checkoutMap = null;
+let checkoutMarker = null;
+
+function initCheckoutMap() {
+    const mapContainer = document.getElementById('checkout-address-map');
+    if (!mapContainer) return;
+
+    if (typeof L === 'undefined') {
+        console.warn('Leaflet library is not loaded');
+        return;
+    }
+
+    // Default center to Alta Vista / Ormoc City [11.0134, 124.6199]
+    let initialLat = 11.0134;
+    let initialLng = 124.6199;
+
+    // Use previously detected / entered coordinates if valid
+    if (currentCustomerLat && currentCustomerLng) {
+        initialLat = currentCustomerLat;
+        initialLng = currentCustomerLng;
+    } else {
+        const latEl = document.getElementById('delivery_lat') || document.getElementById('deliveryLatInput') || document.getElementById('modal_delivery_lat');
+        const lngEl = document.getElementById('delivery_lng') || document.getElementById('deliveryLngInput') || document.getElementById('modal_delivery_lng');
+        if (latEl && latEl.value && lngEl && lngEl.value) {
+            const pLat = parseFloat(latEl.value);
+            const pLng = parseFloat(lngEl.value);
+            if (!isNaN(pLat) && !isNaN(pLng)) {
+                initialLat = pLat;
+                initialLng = pLng;
+            }
+        }
+    }
+
+    if (!checkoutMap) {
+        checkoutMap = L.map('checkout-address-map', {
+            zoomControl: true,
+            scrollWheelZoom: true
+        }).setView([initialLat, initialLng], 15);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(checkoutMap);
+
+        const pinIcon = L.divIcon({
+            className: 'custom-map-pin',
+            html: `
+              <div style="position:relative;display:flex;flex-direction:column;align-items:center;cursor:grab;">
+                <div style="background:#D88F2A;color:#ffffff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(216,143,42,0.45);border:2.5px solid #ffffff;font-size:15px;">
+                  <i class="fa-solid fa-location-dot"></i>
+                </div>
+                <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid #D88F2A;margin-top:-2px;"></div>
+                <div style="background:rgba(0,0,0,0.25);width:16px;height:4px;border-radius:50%;margin-top:1px;"></div>
+              </div>
+            `,
+            iconSize: [34, 46],
+            iconAnchor: [17, 43],
+            popupAnchor: [0, -42]
+        });
+
+        checkoutMarker = L.marker([initialLat, initialLng], {
+            draggable: true,
+            icon: pinIcon
+        }).addTo(checkoutMap);
+
+        checkoutMarker.bindPopup('<b>Delivery Pin</b><br>Drag to your exact delivery location');
+
+        // When user drags marker, automatically update hidden inputs delivery_lat and delivery_lng with marker.getLatLng()
+        checkoutMarker.on('drag', function() {
+            const pos = checkoutMarker.getLatLng();
+            setDeliveryCoordinates(pos.lat, pos.lng, 'map');
+        });
+
+        checkoutMarker.on('dragend', function() {
+            const pos = checkoutMarker.getLatLng();
+            setDeliveryCoordinates(pos.lat, pos.lng, 'map');
+            reverseGeocodeToAddress(pos.lat, pos.lng);
+        });
+
+        // Clicking anywhere on map also moves the marker
+        checkoutMap.on('click', function(e) {
+            checkoutMarker.setLatLng(e.latlng);
+            setDeliveryCoordinates(e.latlng.lat, e.latlng.lng, 'map');
+            reverseGeocodeToAddress(e.latlng.lat, e.latlng.lng);
+        });
+
+        setDeliveryCoordinates(initialLat, initialLng, 'map');
+    } else {
+        checkoutMap.setView([initialLat, initialLng], 15);
+        checkoutMarker.setLatLng([initialLat, initialLng]);
+    }
+
+    setTimeout(() => {
+        if (checkoutMap) {
+            checkoutMap.invalidateSize();
+        }
+    }, 250);
+}
+
+// "Use My Exact Location" Button Action
+function useMyExactLocation() {
+    const btn = document.getElementById('modalBtnLocateMe') || document.getElementById('btnDetectGps');
+    const statusEl = document.getElementById('modalGpsStatus') || document.getElementById('gpsLocationStatus');
 
     if (!navigator.geolocation) {
         toast('Geolocation is not supported by your browser');
@@ -1701,68 +1871,49 @@ function detectCustomerGps(isModal = false) {
 
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Detecting...';
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Locating...';
     }
     if (statusEl) {
         statusEl.style.display = 'flex';
         statusEl.className = 'gps-status-pill loading';
-        statusEl.innerHTML = '<i class="fa-solid fa-satellite-dish fa-spin"></i> Grabbing live GPS pin...';
+        statusEl.innerHTML = '<i class="fa-solid fa-satellite-dish fa-spin"></i> Grabbing live device coordinates...';
     }
 
     navigator.geolocation.getCurrentPosition(
         async (position) => {
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-crosshairs"></i> Auto-detect GPS';
+                btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Use My Exact Location';
             }
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
 
-            // Automatically write live GPS pin to delivery_lat and delivery_lng
+            // Move the map view and draggable marker to their device's live coordinates
+            if (checkoutMap) {
+                checkoutMap.setView([lat, lng], 16);
+            }
+            if (checkoutMarker) {
+                checkoutMarker.setLatLng([lat, lng]);
+            }
+
+            // Sets delivery_lat and delivery_lng
             setDeliveryCoordinates(lat, lng, 'gps');
 
-            // Try reverse geocoding via OpenStreetMap Nominatim to give a friendly address name
-            try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
-                    headers: { 'Accept': 'application/json' }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && data.display_name) {
-                        const formatted = data.display_name;
-                        if (!addrInput.value.trim() || addrInput.value.startsWith('GPS Location:')) {
-                            addrInput.value = formatted;
-                            localStorage.setItem('foodDashDeliveryAddress', formatted);
-                            const mainAddr = document.getElementById('deliveryAddressInput');
-                            if (mainAddr) mainAddr.value = formatted;
-                            const modalAddr = document.getElementById('modalDeliveryAddress');
-                            if (modalAddr) modalAddr.value = formatted;
-                        }
-                    }
-                }
-            } catch (e) {
-                // Ignore network error on reverse geocode
-            }
+            // Reverse-geocode to address input
+            await reverseGeocodeToAddress(lat, lng);
 
-            if (!addrInput.value.trim()) {
-                const fallbackText = `GPS Location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
-                addrInput.value = fallbackText;
-                localStorage.setItem('foodDashDeliveryAddress', fallbackText);
-                const mainAddr = document.getElementById('deliveryAddressInput');
-                if (mainAddr) mainAddr.value = fallbackText;
-            }
-            toast('Live GPS pin acquired successfully!');
+            toast('Pinned to your exact device location!');
         },
         (error) => {
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-crosshairs"></i> Auto-detect GPS';
+                btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Use My Exact Location';
             }
             let errMsg = 'Location permission denied or unavailable.';
             if (error.code === error.PERMISSION_DENIED) {
-                errMsg = 'Location permission denied. Please enter address manually.';
+                errMsg = 'Location permission denied. Please drag the pin on the map.';
             } else if (error.code === error.TIMEOUT) {
-                errMsg = 'Location request timed out. Please enter address manually.';
+                errMsg = 'Location request timed out. Please drag the pin on the map.';
             }
             if (statusEl) {
                 statusEl.className = 'gps-status-pill error';
@@ -1772,6 +1923,11 @@ function detectCustomerGps(isModal = false) {
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
     );
+}
+
+// Live GPS detection backward compatibility
+function detectCustomerGps(isModal = false) {
+    useMyExactLocation();
 }
 
 // Automatic check on dashboard load: if user allows geolocation, grab live GPS pin
@@ -1798,6 +1954,10 @@ function openAddressPromptModal() {
     }
     const modal = document.getElementById('addressPromptModal');
     if (modal) modal.classList.add('show');
+    
+    // Initialize or refresh the interactive Leaflet map pin picker
+    initCheckoutMap();
+
     if (modalAddr) modalAddr.focus();
 }
 
@@ -1821,11 +1981,10 @@ async function confirmModalAddressAndCheckout() {
     if (mainAddr) mainAddr.value = address;
     localStorage.setItem('foodDashDeliveryAddress', address);
 
-    // If coordinates are not yet set or address changed, ensure geocoded coordinates are obtained
-    const latInput = document.getElementById('delivery_lat') || document.getElementById('deliveryLatInput');
-    const lngInput = document.getElementById('delivery_lng') || document.getElementById('deliveryLngInput');
-    if (!latInput || !latInput.value || !lngInput || !lngInput.value) {
-        await geocodeAddressNominatim(address);
+    // Save picked marker coordinates directly
+    if (checkoutMarker) {
+        const pos = checkoutMarker.getLatLng();
+        setDeliveryCoordinates(pos.lat, pos.lng, 'map');
     }
 
     closeAddressPromptModal();
@@ -1859,13 +2018,13 @@ async function checkout() {
         btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Placing Order...';
     }
 
-    const latInput = document.getElementById('delivery_lat') || document.getElementById('deliveryLatInput');
-    const lngInput = document.getElementById('delivery_lng') || document.getElementById('deliveryLngInput');
+    const latInput = document.getElementById('delivery_lat') || document.getElementById('deliveryLatInput') || document.getElementById('modal_delivery_lat');
+    const lngInput = document.getElementById('delivery_lng') || document.getElementById('deliveryLngInput') || document.getElementById('modal_delivery_lng');
 
     let dLat = (latInput && latInput.value) ? parseFloat(latInput.value) : currentCustomerLat;
     let dLng = (lngInput && lngInput.value) ? parseFloat(lngInput.value) : currentCustomerLng;
 
-    // Ensure coordinates are populated: if empty, geocode using Nominatim before sending
+    // Only if coordinates are STILL missing, fallback to geocoding
     if ((dLat == null || dLng == null || isNaN(dLat) || isNaN(dLng)) && address) {
         try {
             const geo = await geocodeAddressNominatim(address);
@@ -1890,7 +2049,8 @@ async function checkout() {
         customer_lng: (dLng !== null && !isNaN(dLng)) ? dLng : null
     };
     
-    fetch(window.location.href, {
+    // Pass picked coordinates directly to order_transaction.php without text geocoding guesswork
+    fetch('order_transaction.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
