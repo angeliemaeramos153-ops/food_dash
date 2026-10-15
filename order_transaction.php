@@ -119,25 +119,55 @@ if ($method === 'POST') {
 
         $items_summary = implode(', ', array_map(fn($x) => $x['qty'] . 'x ' . $x['name'], $clean));
 
-        // Resolve shop_id if matching a registered shop
+        // Resolve shop_id and snapshot store_lat & store_lng directly from shops
         $shop_id = 0;
+        $store_lat = null;
+        $store_lng = null;
         $first_store = array_key_first($stores);
         if ($first_store) {
-            $s_stmt = $conn->prepare("SELECT shop_id FROM shops WHERE LOWER(shop_name) = LOWER(:sname) LIMIT 1");
+            $s_stmt = $conn->prepare("SELECT shop_id, latitude, longitude, lat, lng FROM shops WHERE LOWER(TRIM(shop_name)) = LOWER(TRIM(:sname)) LIMIT 1");
             $s_stmt->execute([':sname' => $first_store]);
             $s_res = $s_stmt->fetch(PDO::FETCH_ASSOC);
-            if ($s_res) $shop_id = (int)$s_res['shop_id'];
+
+            // Fallback partial match if exact name didn't hit
+            if (!$s_res) {
+                $s_like = '%' . strtolower(trim($first_store)) . '%';
+                $s_stmt2 = $conn->prepare("SELECT shop_id, latitude, longitude, lat, lng FROM shops WHERE LOWER(shop_name) LIKE :slike LIMIT 1");
+                $s_stmt2->execute([':slike' => $s_like]);
+                $s_res = $s_stmt2->fetch(PDO::FETCH_ASSOC);
+            }
+
+            if ($s_res) {
+                $shop_id = (int)$s_res['shop_id'];
+                $store_lat = (!empty($s_res['latitude']) && is_numeric($s_res['latitude'])) 
+                    ? (float)$s_res['latitude'] 
+                    : ((!empty($s_res['lat']) && is_numeric($s_res['lat'])) ? (float)$s_res['lat'] : null);
+                $store_lng = (!empty($s_res['longitude']) && is_numeric($s_res['longitude'])) 
+                    ? (float)$s_res['longitude'] 
+                    : ((!empty($s_res['lng']) && is_numeric($s_res['lng'])) ? (float)$s_res['lng'] : null);
+            }
+        }
+
+        // If coordinates not found in shops table, fallback geocode store_name
+        if (($store_lat === null || $store_lng === null) && !empty($store_name)) {
+            $s_geo = geocode_address_fallback($store_name);
+            if ($s_geo && !empty($s_geo['lat']) && !empty($s_geo['lng'])) {
+                $store_lat = (float)$s_geo['lat'];
+                $store_lng = (float)$s_geo['lng'];
+            }
         }
 
         $conn->beginTransaction();
         try {
-            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :cust_id, :cust_name, :ref, :store_name, :summary, :subtotal, :fee, :total, 'PENDING', 'waiting', 'Delivery', :addr, :dlat, :dlng, :lat, :lng, NOW())");
+            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, order_ref, store_name, store_lat, store_lng, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :cust_id, :cust_name, :ref, :store_name, :store_lat, :store_lng, :summary, :subtotal, :fee, :total, 'PENDING', 'waiting', 'Delivery', :addr, :dlat, :dlng, :lat, :lng, NOW())");
             $stmt->execute([
                 ':shop_id'    => $shop_id,
                 ':cust_id'    => $user_id,
                 ':cust_name'  => $customer_name,
                 ':ref'        => $order_ref,
                 ':store_name' => $store_name,
+                ':store_lat'  => $store_lat,
+                ':store_lng'  => $store_lng,
                 ':summary'    => $items_summary,
                 ':subtotal'   => $subtotal,
                 ':fee'        => $delivery_fee,

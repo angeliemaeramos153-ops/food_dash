@@ -50,13 +50,40 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['action_add_shop'])) {
         $shop_name = trim($_POST['shop_name'] ?? '');
         $category = trim($_POST['category'] ?? 'Fast Food');
+        $address = trim($_POST['address'] ?? '');
         $logo_url = trim($_POST['logo_url'] ?? 'assets/shops/default_store.svg');
         if (empty($logo_url)) $logo_url = 'assets/shops/default_store.svg';
 
+        $latitude = (isset($_POST['latitude']) && is_numeric($_POST['latitude']) && floatval($_POST['latitude']) != 0) ? floatval($_POST['latitude']) : null;
+        $longitude = (isset($_POST['longitude']) && is_numeric($_POST['longitude']) && floatval($_POST['longitude']) != 0) ? floatval($_POST['longitude']) : null;
+
+        // Backend fallback geocoding if coordinates not provided
+        if (($latitude === null || $longitude === null) && !empty($shop_name)) {
+            $q = urlencode(trim($shop_name . (!empty($address) ? ', ' . $address : '') . ', Ormoc City'));
+            $ctx = stream_context_create([
+                'http' => [
+                    'header' => "User-Agent: FoodDash-App/1.0\r\nAccept: application/json\r\n",
+                    'timeout' => 5
+                ]
+            ]);
+            $res = @file_get_contents("https://nominatim.openstreetmap.org/search?format=json&limit=1&q={$q}", false, $ctx);
+            if ($res) {
+                $j = json_decode($res, true);
+                if (!empty($j) && isset($j[0]['lat']) && isset($j[0]['lon'])) {
+                    $latitude = floatval($j[0]['lat']);
+                    $longitude = floatval($j[0]['lon']);
+                }
+            }
+            if ($latitude === null || $longitude === null) {
+                $latitude = 11.00650000;
+                $longitude = 124.60750000;
+            }
+        }
+
         if (!empty($shop_name)) {
-            $stmt = $conn->prepare("INSERT INTO shops (shop_name, category, logo_url) VALUES (?, ?, ?)");
-            $stmt->execute([$shop_name, $category, $logo_url]);
-            $action_msg = "Store added successfully!";
+            $stmt = $conn->prepare("INSERT INTO shops (shop_name, category, address, latitude, longitude, lat, lng, logo_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$shop_name, $category, $address, $latitude, $longitude, $latitude, $longitude, $logo_url]);
+            $action_msg = "Store added successfully with verified coordinates!";
         }
     }
 
@@ -65,13 +92,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $shop_id = intval($_POST['shop_id']);
         $shop_name = trim($_POST['shop_name'] ?? '');
         $category = trim($_POST['category'] ?? 'Fast Food');
+        $address = trim($_POST['address'] ?? '');
         $logo_url = trim($_POST['logo_url'] ?? 'assets/shops/default_store.svg');
         if (empty($logo_url)) $logo_url = 'assets/shops/default_store.svg';
 
+        $latitude = (isset($_POST['latitude']) && is_numeric($_POST['latitude']) && floatval($_POST['latitude']) != 0) ? floatval($_POST['latitude']) : null;
+        $longitude = (isset($_POST['longitude']) && is_numeric($_POST['longitude']) && floatval($_POST['longitude']) != 0) ? floatval($_POST['longitude']) : null;
+
+        if (($latitude === null || $longitude === null) && !empty($shop_name)) {
+            $q = urlencode(trim($shop_name . (!empty($address) ? ', ' . $address : '') . ', Ormoc City'));
+            $ctx = stream_context_create([
+                'http' => [
+                    'header' => "User-Agent: FoodDash-App/1.0\r\nAccept: application/json\r\n",
+                    'timeout' => 5
+                ]
+            ]);
+            $res = @file_get_contents("https://nominatim.openstreetmap.org/search?format=json&limit=1&q={$q}", false, $ctx);
+            if ($res) {
+                $j = json_decode($res, true);
+                if (!empty($j) && isset($j[0]['lat']) && isset($j[0]['lon'])) {
+                    $latitude = floatval($j[0]['lat']);
+                    $longitude = floatval($j[0]['lon']);
+                }
+            }
+        }
+
         if ($shop_id > 0 && !empty($shop_name)) {
-            $stmt = $conn->prepare("UPDATE shops SET shop_name = ?, category = ?, logo_url = ? WHERE shop_id = ?");
-            $stmt->execute([$shop_name, $category, $logo_url, $shop_id]);
-            $action_msg = "Store updated successfully!";
+            $stmt = $conn->prepare("UPDATE shops SET shop_name = ?, category = ?, address = ?, latitude = ?, longitude = ?, lat = ?, lng = ?, logo_url = ? WHERE shop_id = ?");
+            $stmt->execute([$shop_name, $category, $address, $latitude, $longitude, $latitude, $longitude, $logo_url, $shop_id]);
+            $action_msg = "Store updated successfully with verified coordinates!";
         }
     }
 
@@ -586,8 +635,9 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Food Dash - Admin Dashboard</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
@@ -1410,13 +1460,19 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       <div class="dashboard-section">
         <div class="section-title">
           <span>Partner Stores (<?php echo $total_shops; ?>)</span>
-          <button class="btn-action" onclick="openModal('addShopModal')" style="padding: 4px 8px; font-size: 0.72rem;">Add Store</button>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <a href="scripts/backfill_shops_geocoding.php" target="_blank" class="btn-action" style="padding: 4px 10px; font-size: 0.72rem; background: #788A6E; text-decoration: none; color: #fff; display: inline-flex; align-items: center; gap: 5px; border-radius: 4px;" title="Geocode missing store coordinates via Nominatim"><i class="fa-solid fa-satellite-dish"></i> Backfill / Sync GPS</a>
+            <button class="btn-action" onclick="openModal('addShopModal')" style="padding: 4px 10px; font-size: 0.72rem;">Add Store</button>
+          </div>
         </div>
         <div class="admin-stores-grid">
           <?php if (!empty($shops)): ?>
             <?php foreach ($shops as $s): 
               $s_logo = !empty($s['logo_url']) ? $s['logo_url'] : 'assets/shops/default_store.png';
               $s_cat = !empty($s['category']) ? $s['category'] : 'Restaurant';
+              $s_addr = !empty($s['address']) ? $s['address'] : 'Ormoc City Proper';
+              $s_lat = !empty($s['latitude']) ? (float)$s['latitude'] : (!empty($s['lat']) ? (float)$s['lat'] : null);
+              $s_lng = !empty($s['longitude']) ? (float)$s['longitude'] : (!empty($s['lng']) ? (float)$s['lng'] : null);
             ?>
               <div class="admin-store-card">
                 <div class="admin-store-logo">
@@ -1426,9 +1482,17 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
                   <div class="admin-store-id">#SHOP-<?php echo $s['shop_id']; ?></div>
                   <strong><?php echo htmlspecialchars($s['shop_name']); ?></strong>
                   <span class="admin-store-cat"><?php echo htmlspecialchars($s_cat); ?></span>
+                  <div style="font-size: 0.7rem; color: #74776a; margin-top: 3px; display: flex; flex-direction: column; gap: 2px;">
+                    <span><i class="fa-solid fa-location-dot" style="color: #D88F2A; font-size: 0.72rem;"></i> <?php echo htmlspecialchars($s_addr); ?></span>
+                    <?php if ($s_lat !== null && $s_lng !== null): ?>
+                      <span style="font-family: monospace; font-size: 0.67rem; color: #4B5320; background: #FAF6EE; padding: 1px 4px; border-radius: 3px; width: fit-content; border: 1px solid #d4c5a5;"><i class="fa-solid fa-crosshairs" style="color:#2e7d32"></i> <?php echo number_format($s_lat, 5) . ', ' . number_format($s_lng, 5); ?></span>
+                    <?php else: ?>
+                      <span style="font-size: 0.67rem; color: #d32f2f;"><i class="fa-solid fa-triangle-exclamation"></i> GPS missing</span>
+                    <?php endif; ?>
+                  </div>
                 </div>
                 <div class="admin-store-actions">
-                  <button class="btn-edit" onclick="openEditShopModal(<?php echo $s['shop_id']; ?>, '<?php echo addslashes($s['shop_name']); ?>', '<?php echo addslashes($s_cat); ?>', '<?php echo addslashes($s_logo); ?>')"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                  <button class="btn-edit" onclick="openEditShopModal(<?php echo $s['shop_id']; ?>, '<?php echo addslashes($s['shop_name']); ?>', '<?php echo addslashes($s_cat); ?>', '<?php echo addslashes($s_logo); ?>', '<?php echo addslashes($s['address'] ?? ''); ?>', <?php echo json_encode($s_lat); ?>, <?php echo json_encode($s_lng); ?>)"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
                   <form method="POST" style="display:inline;" onclick="return confirmAdminAction('Delete this shop?', 'Are you sure you want to delete this store?', this);">
                     <input type="hidden" name="shop_id" value="<?php echo $s['shop_id']; ?>">
                     <button type="submit" name="action_delete_shop" class="btn-delete"><i class="fa-solid fa-trash"></i> Delete</button>
@@ -1755,14 +1819,31 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
   <!-- MODAL: ADD SHOP -->
   <div id="addShopModal" class="modal">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width: 480px;">
       <h3>Add New Store</h3>
       <form method="POST">
         <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Store Name</label>
-        <input type="text" name="shop_name" placeholder="e.g. Popeyes Louisiana Kitchen" required>
+        <input type="text" name="shop_name" id="add_shop_name" placeholder="e.g. Popeyes Louisiana Kitchen" required>
         
         <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Category / Cuisine</label>
         <input type="text" name="category" placeholder="e.g. Fried Chicken • Biscuits" value="Fast Food">
+
+        <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Store Physical Address (Ormoc City)</label>
+        <input type="text" name="address" id="add_shop_address" placeholder="e.g. Real St, Ormoc City Proper">
+
+        <!-- Embedded Mini Leaflet Map Pin Picker -->
+        <div style="margin: 8px 0 12px 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label style="font-size: 9px; color: #788A6E; font-weight: 600; margin: 0;"><i class="fa-solid fa-map-pin" style="color: #D88F2A;"></i> Store Location Pin</label>
+            <span id="add_shop_coords_text" style="font-size: 0.68rem; font-family: monospace; color: #4B5320; background: #FAF6EE; padding: 1px 6px; border-radius: 3px; border: 1px solid #d4c5a5;">11.0065, 124.6075</span>
+          </div>
+          <div id="add-shop-map" style="height: 180px; width: 100%; border-radius: 8px; border: 1px solid #d4c5a5; background: #e8e6df; z-index: 1;"></div>
+          <small style="font-size: 0.68rem; color: #788A6E; display: flex; align-items: center; gap: 4px; margin-top: 4px;">
+            <i class="fa-solid fa-arrows-up-down-left-right" style="color: #D88F2A;"></i> Type store name/address to auto-locate, or drag marker to pinpoint the store entrance.
+          </small>
+        </div>
+        <input type="hidden" name="latitude" id="add_shop_lat" value="11.00650000">
+        <input type="hidden" name="longitude" id="add_shop_lng" value="124.60750000">
         
         <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Official Logo Path or URL</label>
         <input type="text" name="logo_url" placeholder="assets/shops/default_store.png" value="assets/shops/default_store.png">
@@ -1777,7 +1858,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
   <!-- MODAL: EDIT SHOP -->
   <div id="editShopModal" class="modal">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width: 480px;">
       <h3>Edit Store</h3>
       <form method="POST">
         <input type="hidden" name="shop_id" id="edit_shop_id">
@@ -1787,6 +1868,23 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
         
         <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Category / Cuisine</label>
         <input type="text" name="category" id="edit_shop_category" placeholder="Category">
+
+        <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Store Physical Address</label>
+        <input type="text" name="address" id="edit_shop_address" placeholder="e.g. Aviles St, Ormoc City">
+
+        <!-- Embedded Mini Leaflet Map Pin Picker -->
+        <div style="margin: 8px 0 12px 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label style="font-size: 9px; color: #788A6E; font-weight: 600; margin: 0;"><i class="fa-solid fa-map-pin" style="color: #D88F2A;"></i> Store Location Pin</label>
+            <span id="edit_shop_coords_text" style="font-size: 0.68rem; font-family: monospace; color: #4B5320; background: #FAF6EE; padding: 1px 6px; border-radius: 3px; border: 1px solid #d4c5a5;">11.0065, 124.6075</span>
+          </div>
+          <div id="edit-shop-map" style="height: 180px; width: 100%; border-radius: 8px; border: 1px solid #d4c5a5; background: #e8e6df; z-index: 1;"></div>
+          <small style="font-size: 0.68rem; color: #788A6E; display: flex; align-items: center; gap: 4px; margin-top: 4px;">
+            <i class="fa-solid fa-arrows-up-down-left-right" style="color: #D88F2A;"></i> Type name/address to auto-locate, or drag marker to position store entrance.
+          </small>
+        </div>
+        <input type="hidden" name="latitude" id="edit_shop_lat">
+        <input type="hidden" name="longitude" id="edit_shop_lng">
         
         <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Official Logo Path or URL</label>
         <input type="text" name="logo_url" id="edit_shop_logo_url" placeholder="assets/shops/default_store.png">
@@ -2102,20 +2200,190 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
     var initialTab = <?php echo json_encode($active_tab); ?>;
     switchTab(initialTab);
 
-    function openModal(id) {
-      document.getElementById(id).style.display = "flex";
-    }
-    function closeModal(id) {
-      document.getElementById(id).style.display = "none";
+    // Custom store map pin icon
+    function createStoreMapIcon() {
+      return L.divIcon({
+        className: 'custom-shop-pin',
+        html: `
+          <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+            <div style="background:#D88F2A;color:#ffffff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,0.3);border:2px solid #ffffff;font-size:14px;">
+              <i class="fa-solid fa-store"></i>
+            </div>
+            <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #D88F2A;margin-top:-2px;"></div>
+          </div>
+        `,
+        iconSize: [32, 42],
+        iconAnchor: [16, 40],
+        popupAnchor: [0, -38]
+      });
     }
 
-    function openEditShopModal(id, name, category, logoUrl) {
+    var addShopMap = null, addShopMarker = null;
+    var editShopMap = null, editShopMarker = null;
+    var defaultOrmocCoords = [11.00650000, 124.60750000];
+
+    function initAddShopMap() {
+      if (addShopMap) {
+        addShopMap.invalidateSize();
+        return;
+      }
+      var container = document.getElementById('add-shop-map');
+      if (!container || typeof L === 'undefined') return;
+
+      var lat = parseFloat(document.getElementById('add_shop_lat').value) || defaultOrmocCoords[0];
+      var lng = parseFloat(document.getElementById('add_shop_lng').value) || defaultOrmocCoords[1];
+
+      addShopMap = L.map('add-shop-map', { attributionControl: false }).setView([lat, lng], 16);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(addShopMap);
+
+      addShopMarker = L.marker([lat, lng], { draggable: true, icon: createStoreMapIcon() }).addTo(addShopMap);
+      addShopMarker.bindPopup('<b>Store Entrance Pin</b><br>Drag to position').openPopup();
+
+      addShopMarker.on('dragend', function(e) {
+        var p = e.target.getLatLng();
+        document.getElementById('add_shop_lat').value = p.lat.toFixed(8);
+        document.getElementById('add_shop_lng').value = p.lng.toFixed(8);
+        document.getElementById('add_shop_coords_text').textContent = p.lat.toFixed(5) + ', ' + p.lng.toFixed(5);
+      });
+    }
+
+    function initEditShopMap(lat, lng) {
+      var latVal = (lat !== null && !isNaN(lat) && lat != 0) ? parseFloat(lat) : defaultOrmocCoords[0];
+      var lngVal = (lng !== null && !isNaN(lng) && lng != 0) ? parseFloat(lng) : defaultOrmocCoords[1];
+
+      var container = document.getElementById('edit-shop-map');
+      if (!container || typeof L === 'undefined') return;
+
+      if (!editShopMap) {
+        editShopMap = L.map('edit-shop-map', { attributionControl: false }).setView([latVal, lngVal], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(editShopMap);
+        editShopMarker = L.marker([latVal, lngVal], { draggable: true, icon: createStoreMapIcon() }).addTo(editShopMap);
+        editShopMarker.bindPopup('<b>Store Entrance Pin</b><br>Drag to fine-tune').openPopup();
+
+        editShopMarker.on('dragend', function(e) {
+          var p = e.target.getLatLng();
+          document.getElementById('edit_shop_lat').value = p.lat.toFixed(8);
+          document.getElementById('edit_shop_lng').value = p.lng.toFixed(8);
+          document.getElementById('edit_shop_coords_text').textContent = p.lat.toFixed(5) + ', ' + p.lng.toFixed(5);
+        });
+      } else {
+        editShopMap.setView([latVal, lngVal], 16);
+        editShopMarker.setLatLng([latVal, lngVal]);
+        editShopMap.invalidateSize();
+      }
+    }
+
+    function openModal(id) {
+      var el = document.getElementById(id);
+      if (el) el.style.display = "flex";
+      if (id === 'addShopModal') {
+        setTimeout(function() {
+          initAddShopMap();
+          if (addShopMap) addShopMap.invalidateSize();
+        }, 200);
+      } else if (id === 'editShopModal') {
+        setTimeout(function() {
+          if (editShopMap) editShopMap.invalidateSize();
+        }, 200);
+      }
+    }
+
+    function closeModal(id) {
+      var el = document.getElementById(id);
+      if (el) el.style.display = "none";
+    }
+
+    function openEditShopModal(id, name, category, logoUrl, address, lat, lng) {
       document.getElementById('edit_shop_id').value = id;
-      document.getElementById('edit_shop_name').value = name;
+      document.getElementById('edit_shop_name').value = name || '';
       document.getElementById('edit_shop_category').value = category || 'Fast Food';
       document.getElementById('edit_shop_logo_url').value = logoUrl || 'assets/shops/default_store.png';
+      document.getElementById('edit_shop_address').value = address || '';
+
+      var latVal = (lat !== null && !isNaN(lat) && lat != 0) ? parseFloat(lat) : defaultOrmocCoords[0];
+      var lngVal = (lng !== null && !isNaN(lng) && lng != 0) ? parseFloat(lng) : defaultOrmocCoords[1];
+
+      document.getElementById('edit_shop_lat').value = latVal.toFixed(8);
+      document.getElementById('edit_shop_lng').value = lngVal.toFixed(8);
+      document.getElementById('edit_shop_coords_text').textContent = latVal.toFixed(5) + ', ' + lngVal.toFixed(5);
+
       openModal('editShopModal');
+      setTimeout(function() {
+        initEditShopMap(latVal, lngVal);
+      }, 200);
     }
+
+    var geoDebounceTimer = null;
+    function triggerStoreGeocode(nameInputId, addrInputId, latInputId, lngInputId, badgeId, mapInstance, markerInstance) {
+      clearTimeout(geoDebounceTimer);
+      geoDebounceTimer = setTimeout(function() {
+        var nameEl = document.getElementById(nameInputId);
+        var addrEl = document.getElementById(addrInputId);
+        var badgeEl = document.getElementById(badgeId);
+        var latEl = document.getElementById(latInputId);
+        var lngEl = document.getElementById(lngInputId);
+
+        var nameVal = nameEl ? nameEl.value.trim() : '';
+        var addrVal = addrEl ? addrEl.value.trim() : '';
+
+        if (!nameVal && !addrVal) return;
+
+        var query = nameVal;
+        if (addrVal) query += ', ' + addrVal;
+        query += ', Ormoc City, Leyte';
+
+        if (badgeEl) badgeEl.textContent = 'Searching OSM...';
+
+        var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(query);
+        fetch(url, { headers: { 'Accept': 'application/json' } })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data && data.length > 0 && data[0].lat && data[0].lon) {
+              var nLat = parseFloat(data[0].lat);
+              var nLng = parseFloat(data[0].lon);
+              if (latEl) latEl.value = nLat.toFixed(8);
+              if (lngEl) lngEl.value = nLng.toFixed(8);
+              if (badgeEl) badgeEl.textContent = nLat.toFixed(5) + ', ' + nLng.toFixed(5);
+              if (mapInstance && markerInstance) {
+                mapInstance.setView([nLat, nLng], 17);
+                markerInstance.setLatLng([nLat, nLng]);
+                markerInstance.bindPopup('<b>' + (nameVal || 'Store') + '</b><br>Pinpoint entrance').openPopup();
+              }
+            } else {
+              if (badgeEl) badgeEl.textContent = 'Building not on OSM (drag pin)';
+            }
+          })
+          .catch(function(err) {
+            if (badgeEl) badgeEl.textContent = 'Drag pin to position';
+          });
+      }, 450);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      ['add_shop_name', 'add_shop_address'].forEach(function(inputId) {
+        var el = document.getElementById(inputId);
+        if (el) {
+          el.addEventListener('change', function() {
+            triggerStoreGeocode('add_shop_name', 'add_shop_address', 'add_shop_lat', 'add_shop_lng', 'add_shop_coords_text', addShopMap, addShopMarker);
+          });
+          el.addEventListener('blur', function() {
+            triggerStoreGeocode('add_shop_name', 'add_shop_address', 'add_shop_lat', 'add_shop_lng', 'add_shop_coords_text', addShopMap, addShopMarker);
+          });
+        }
+      });
+
+      ['edit_shop_name', 'edit_shop_address'].forEach(function(inputId) {
+        var el = document.getElementById(inputId);
+        if (el) {
+          el.addEventListener('change', function() {
+            triggerStoreGeocode('edit_shop_name', 'edit_shop_address', 'edit_shop_lat', 'edit_shop_lng', 'edit_shop_coords_text', editShopMap, editShopMarker);
+          });
+          el.addEventListener('blur', function() {
+            triggerStoreGeocode('edit_shop_name', 'edit_shop_address', 'edit_shop_lat', 'edit_shop_lng', 'edit_shop_coords_text', editShopMap, editShopMarker);
+          });
+        }
+      });
+    });
 
     function openEditItemModal(id, name, shopId, price, isRecommended) {
       document.getElementById('edit_item_id').value = id;
