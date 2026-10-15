@@ -69,6 +69,8 @@ if (!function_exists('geocode_address_fallback')) {
         // 2. Local Ormoc barangay dictionary mapping if external API is unreachable or rate-limited
         $norm = strtolower($clean_addr);
         $barangays = [
+            'western leyte college' => [11.0093834, 124.6092918],
+            'wlc'                   => [11.0093834, 124.6092918],
             'alta vista'       => [11.0118026, 124.6203237],
             'altavista'        => [11.0118026, 124.6203237],
             'cogon'            => [11.0233014, 124.6040868],
