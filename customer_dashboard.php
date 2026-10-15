@@ -206,12 +206,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $items_summary = implode(', ', $items_summary_parts);
                 $unique_ref = '#FD-' . date('ymd') . '-' . random_int(1000, 9999);
                 $cname = !empty($full_name) ? $full_name : 'Customer';
+
+                // Snapshot store coordinates from shops table
+                $store_lat = null;
+                $store_lng = null;
+                if ($shop_id > 0) {
+                    $sc_stmt = $conn->prepare("SELECT latitude, longitude, lat, lng FROM shops WHERE shop_id = :sid LIMIT 1");
+                    $sc_stmt->execute([':sid' => $shop_id]);
+                    $sc_row = $sc_stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($sc_row) {
+                        $store_lat = (!empty($sc_row['latitude']) && is_numeric($sc_row['latitude'])) ? (float)$sc_row['latitude'] : ((!empty($sc_row['lat']) && is_numeric($sc_row['lat'])) ? (float)$sc_row['lat'] : null);
+                        $store_lng = (!empty($sc_row['longitude']) && is_numeric($sc_row['longitude'])) ? (float)$sc_row['longitude'] : ((!empty($sc_row['lng']) && is_numeric($sc_row['lng'])) ? (float)$sc_row['lng'] : null);
+                    }
+                }
+                if (($store_lat === null || $store_lng === null) && !empty($store_name)) {
+                    $sc_stmt2 = $conn->prepare("SELECT latitude, longitude, lat, lng FROM shops WHERE LOWER(TRIM(shop_name)) = LOWER(TRIM(:sname)) OR LOWER(shop_name) LIKE :slike LIMIT 1");
+                    $sc_stmt2->execute([':sname' => $store_name, ':slike' => '%' . strtolower(trim($store_name)) . '%']);
+                    $sc_row2 = $sc_stmt2->fetch(PDO::FETCH_ASSOC);
+                    if ($sc_row2) {
+                        $store_lat = (!empty($sc_row2['latitude']) && is_numeric($sc_row2['latitude'])) ? (float)$sc_row2['latitude'] : ((!empty($sc_row2['lat']) && is_numeric($sc_row2['lat'])) ? (float)$sc_row2['lat'] : null);
+                        $store_lng = (!empty($sc_row2['longitude']) && is_numeric($sc_row2['longitude'])) ? (float)$sc_row2['longitude'] : ((!empty($sc_row2['lng']) && is_numeric($sc_row2['lng'])) ? (float)$sc_row2['lng'] : null);
+                    }
+                }
                 
                 // Insert order with initial status 'PENDING'
-                $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, store_name, customer_id, customer_name, order_ref, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :store_name, :customer_id, :customer_name, :order_ref, :items_summary, :subtotal, :delivery_fee, :total_amount, 'PENDING', 'waiting', 'Delivery', :delivery_address, :delivery_lat, :delivery_lng, :customer_lat, :customer_lng, NOW())");
+                $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, store_name, store_lat, store_lng, customer_id, customer_name, order_ref, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :store_name, :store_lat, :store_lng, :customer_id, :customer_name, :order_ref, :items_summary, :subtotal, :delivery_fee, :total_amount, 'PENDING', 'waiting', 'Delivery', :delivery_address, :delivery_lat, :delivery_lng, :customer_lat, :customer_lng, NOW())");
                 $stmt->execute([
                     ':shop_id'          => $shop_id,
                     ':store_name'       => $store_name,
+                    ':store_lat'        => $store_lat,
+                    ':store_lng'        => $store_lng,
                     ':customer_id'      => $user_id,
                     ':customer_name'    => $cname,
                     ':order_ref'        => $unique_ref,

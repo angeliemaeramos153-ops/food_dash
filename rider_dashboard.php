@@ -205,8 +205,8 @@ if ($rid > 0) {
             o.order_id, o.order_ref, o.customer_name, o.store_name, o.items_summary, o.total_amount, 
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, o.created_at, o.shop_id,
-            COALESCE(s.latitude, s.lat) AS store_lat, 
-            COALESCE(s.longitude, s.lng) AS store_lng
+            COALESCE(o.store_lat, s.latitude, s.lat) AS store_lat, 
+            COALESCE(o.store_lng, s.longitude, s.lng) AS store_lng
         FROM food_orders o
         LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
         WHERE LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned') 
@@ -221,8 +221,8 @@ if ($rid > 0) {
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, 
             o.rider_lat, o.rider_lng, o.created_at, o.shop_id,
-            COALESCE(s.latitude, s.lat) AS store_lat, 
-            COALESCE(s.longitude, s.lng) AS store_lng,
+            COALESCE(o.store_lat, s.latitude, s.lat) AS store_lat, 
+            COALESCE(o.store_lng, s.longitude, s.lng) AS store_lng,
             r.current_lat AS rider_current_lat,
             r.current_lng AS rider_current_lng
         FROM food_orders o
@@ -742,23 +742,30 @@ function initDeliveryMap(data) {
     `);
   }
 
-  // Rider Starting Point / Store Origin Marker
-  if (hasRiderCoord) {
-    const riderCoord = [data.rider_lat, data.rider_lng];
-    const icon = createRiderIcon(data.is_initial_shop_origin);
-    riderMarker = L.marker(riderCoord, { icon: icon }).addTo(deliveryMap);
-    const riderLabel = data.is_initial_shop_origin 
-      ? `<b><i class="fa-solid fa-store" style="color:#D88F2A"></i> ${esc(data.store_name)}</b><br>Store Pickup Point` 
-      : `<b><i class="fa-solid fa-motorcycle" style="color:#2e7d32"></i> Rider Location</b><br>On Route`;
-    riderMarker.bindPopup(riderLabel);
+  // Dynamic Starting Store Pickup Marker (ALWAYS from dynamic store_lat & store_lng)
+  const hasStoreCoord = (data.store_lat !== null && data.store_lng !== null && !isNaN(data.store_lat) && !isNaN(data.store_lng) && Number(data.store_lat) !== 0);
+  if (hasStoreCoord) {
+    const storeCoord = [data.store_lat, data.store_lng];
+    const storeIcon = createRiderIcon(true);
+    const storeMarker = L.marker(storeCoord, { icon: storeIcon }).addTo(deliveryMap);
+    storeMarker.bindPopup(`<b><i class="fa-solid fa-store" style="color:#D88F2A"></i> ${esc(data.store_name)}</b><br><small>Store Pickup Origin</small>`);
   }
 
-  // Route Polyline & Bounds
-  if (hasCustomerCoord && hasRiderCoord) {
-    const customerCoord = [data.customer_lat, data.customer_lng];
+  // Live Rider Location Marker
+  if (hasRiderCoord && !data.is_initial_shop_origin) {
     const riderCoord = [data.rider_lat, data.rider_lng];
+    const icon = createRiderIcon(false);
+    riderMarker = L.marker(riderCoord, { icon: icon }).addTo(deliveryMap);
+    riderMarker.bindPopup(`<b><i class="fa-solid fa-motorcycle" style="color:#2e7d32"></i> Rider Location</b><br>On Route`);
+  }
 
-    routePolyline = L.polyline([riderCoord, customerCoord], {
+  // Route Polyline & Bounds: Between active origin (rider live GPS or store pickup) and customer destination
+  const activeOriginCoord = hasRiderCoord ? [data.rider_lat, data.rider_lng] : (hasStoreCoord ? [data.store_lat, data.store_lng] : null);
+
+  if (hasCustomerCoord && activeOriginCoord) {
+    const customerCoord = [data.customer_lat, data.customer_lng];
+
+    routePolyline = L.polyline([activeOriginCoord, customerCoord], {
       color: '#D88F2A',
       weight: 4,
       opacity: 0.85,
@@ -767,9 +774,9 @@ function initDeliveryMap(data) {
       lineJoin: 'round'
     }).addTo(deliveryMap);
 
-    const bounds = L.latLngBounds([riderCoord, customerCoord]);
+    const bounds = L.latLngBounds([activeOriginCoord, customerCoord]);
     deliveryMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
-    updateRouteUI(riderCoord[0], riderCoord[1], customerCoord[0], customerCoord[1]);
+    updateRouteUI(activeOriginCoord[0], activeOriginCoord[1], customerCoord[0], customerCoord[1]);
   } else if (hasCustomerCoord) {
     // Keep map centered strictly on customer destination until live GPS is acquired
     deliveryMap.setView([data.customer_lat, data.customer_lng], 16);
