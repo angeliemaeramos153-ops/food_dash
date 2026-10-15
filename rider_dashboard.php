@@ -1160,9 +1160,9 @@ let gpsWatchId = null;
 let activeGpsOrderId = null;
 let isManualSimulationActive = false;
 let autoDriveTimer = null;
-let autoDriveStep = 0;
-const AUTO_DRIVE_TOTAL_STEPS = 25;
-const AUTO_DRIVE_INTERVAL_MS = 1000;
+let autoDriveWaypoints = [];
+let autoDriveIndex = 0;
+const AUTO_DRIVE_INTERVAL_MS = 250; // Smooth 250ms interval along OSRM street network (200-300ms)
 let isTapRelocateActive = false;
 
 // PC Testing Simulator Controls
@@ -1184,7 +1184,7 @@ function initSimulator() {
     if (!activeDeliveryData) {
       updateSimStatus('No active delivery order claimed', 'ready');
     } else {
-      updateSimStatus('PC Simulator ready', 'ready');
+      updateSimStatus('PC Simulator ready (OSRM Road Routing)', 'ready');
     }
   }
 }
@@ -1203,6 +1203,156 @@ function updateSimStatus(text, type = 'ready') {
     if (type === 'driving') dot.classList.add('driving');
     else if (type === 'active') dot.classList.add('active');
   }
+}
+
+// Real-world Haversine distance calculation in kilometers
+function calculateHaversineDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// Calculate sum of road segments along a waypoints polyline (in meters)
+function calculatePathDistanceMeters(pts) {
+  if (!pts || pts.length < 2) return 0;
+  let totalKm = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    totalKm += calculateHaversineDistanceKm(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]);
+  }
+  return totalKm * 1000;
+}
+
+function updateRoadDistanceDisplay(distMeters) {
+  const distEl = document.getElementById('mapRouteDistance');
+  if (distEl) {
+    if (distMeters === null || isNaN(distMeters)) {
+      distEl.textContent = 'Distance: Calculating...';
+    } else if (distMeters < 1000) {
+      distEl.textContent = `Road Distance: ${Math.round(distMeters)} meters`;
+    } else {
+      distEl.textContent = `Road Distance: ${(distMeters / 1000).toFixed(2)} km`;
+    }
+  }
+}
+
+// Fallback street corridor generator if OSRM is unreachable
+function generateFallbackStreetCorridor(startLat, startLng, destLat, destLng) {
+  const midLat = startLat + (destLat - startLat) * 0.5;
+  const midLng = startLng + (destLng - startLng) * 0.5;
+  return [
+    [startLat, startLng],
+    [startLat, midLng],
+    [destLat, midLng],
+    [destLat, destLng]
+  ];
+}
+
+// Densify street road coordinates into smooth 6-10 meter steps for realistic auto-drive animation
+function densifyRoadCoordinates(coords, maxStepMeters = 8) {
+  if (!coords || coords.length === 0) return [];
+  if (coords.length === 1) return [coords[0], coords[0]];
+
+  const densified = [];
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p1 = coords[i];
+    const p2 = coords[i + 1];
+    densified.push(p1);
+
+    const distMeters = calculateHaversineDistanceKm(p1[0], p1[1], p2[0], p2[1]) * 1000;
+    if (distMeters > maxStepMeters) {
+      const steps = Math.ceil(distMeters / maxStepMeters);
+      for (let s = 1; s < steps; s++) {
+        const fraction = s / steps;
+        densified.push([
+          p1[0] + (p2[0] - p1[0]) * fraction,
+          p1[1] + (p2[1] - p1[1]) * fraction
+        ]);
+      }
+    }
+  }
+  densified.push(coords[coords.length - 1]);
+  return densified;
+}
+
+// 1. Real-Street Road Routing via free public OSRM Driving Routing API
+async function fetchOsrmDrivingRoute(startLat, startLng, destLat, destLng) {
+  const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${destLng},${destLat}?overview=full&geometries=geojson`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const response = await fetch(osrmUrl, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.code === 'Ok' && data.routes && data.routes.length > 0) {
+        const route = data.routes[0];
+        if (route.geometry && Array.isArray(route.geometry.coordinates) && route.geometry.coordinates.length > 0) {
+          // OSRM returns [longitude, latitude], convert to Leaflet [latitude, longitude]
+          const leafletCoords = route.geometry.coordinates.map(pt => [pt[1], pt[0]]);
+          const distanceMeters = (typeof route.distance === 'number') ? route.distance : calculatePathDistanceMeters(leafletCoords);
+          return {
+            ok: true,
+            coordinates: leafletCoords,
+            distanceMeters: distanceMeters,
+            source: 'osrm'
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('OSRM routing fetch failed or timed out, using street corridor fallback:', err);
+  }
+
+  // Fallback: Generate intermediate street corridor waypoints
+  const fallbackCorridor = generateFallbackStreetCorridor(startLat, startLng, destLat, destLng);
+  return {
+    ok: false,
+    coordinates: fallbackCorridor,
+    distanceMeters: calculatePathDistanceMeters(fallbackCorridor),
+    source: 'fallback'
+  };
+}
+
+// Load and draw visual road polyline on map using OSRM geometry
+async function loadAndDrawRoadRoute(startLat, startLng, destLat, destLng, fitBounds = false) {
+  if (!deliveryMap) return null;
+
+  const result = await fetchOsrmDrivingRoute(startLat, startLng, destLat, destLng);
+  const roadCoords = result.coordinates;
+  const distMeters = result.distanceMeters;
+
+  if (!routePolyline) {
+    routePolyline = L.polyline(roadCoords, {
+      color: '#D88F2A',
+      weight: 5,
+      opacity: 0.9,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(deliveryMap);
+  } else {
+    routePolyline.setLatLngs(roadCoords);
+  }
+
+  updateRoadDistanceDisplay(distMeters);
+
+  if (fitBounds && roadCoords.length > 0) {
+    const bounds = L.latLngBounds(roadCoords);
+    deliveryMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+  }
+
+  return result;
 }
 
 function toggleAutoDriveSimulation() {
@@ -1226,7 +1376,8 @@ function stopAutoDriveSimulation() {
   updateSimStatus('Auto-drive stopped', 'ready');
 }
 
-function startAutoDriveSimulation() {
+// 2. Snap Auto-Drive Simulation to Street Geometry
+async function startAutoDriveSimulation() {
   if (!activeDeliveryData) {
     toastRider('No active delivery order to simulate.', true);
     return;
@@ -1259,57 +1410,97 @@ function startAutoDriveSimulation() {
   }
 
   // Determine starting point:
-  // If riderMarker is already placed and not immediately at the customer destination (> 50m), start from rider position;
+  // If riderMarker is already placed and not immediately at the customer destination (> 40m), start from rider position;
   // otherwise start from store pickup.
   let startLat = sLat;
   let startLng = sLng;
 
+  const destLat = custCoord[0];
+  const destLng = custCoord[1];
+
   if (riderMarker) {
     const cur = riderMarker.getLatLng();
-    const distToCust = calculateHaversineDistanceKm(cur.lat, cur.lng, custCoord[0], custCoord[1]);
-    if (distToCust > 0.05) {
+    const distToCust = calculateHaversineDistanceKm(cur.lat, cur.lng, destLat, destLng);
+    if (distToCust > 0.04) {
       startLat = cur.lat;
       startLng = cur.lng;
     }
   }
 
-  const destLat = custCoord[0];
-  const destLng = custCoord[1];
-
-  autoDriveStep = 0;
-  const totalSteps = AUTO_DRIVE_TOTAL_STEPS;
-
   const btn = document.getElementById('btnAutoDrive');
   if (btn) {
     btn.classList.add('sim-btn-active');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span id="autoDriveLabel">Routing Street...</span>';
+  }
+
+  updateSimStatus('Fetching OSRM street route...', 'driving');
+  toastRider('Fetching actual road network via OSRM...');
+
+  // 1. Fetch real-street road route via OSRM (or fallback)
+  const routeResult = await fetchOsrmDrivingRoute(startLat, startLng, destLat, destLng);
+  
+  // 2. Densify street geometry into smooth road waypoints so marker stays along street corridors
+  autoDriveWaypoints = densifyRoadCoordinates(routeResult.coordinates, 8);
+  if (autoDriveWaypoints.length < 2) {
+    autoDriveWaypoints = [[startLat, startLng], [destLat, destLng]];
+  }
+
+  autoDriveIndex = 0;
+  const totalWaypoints = autoDriveWaypoints.length;
+
+  if (btn) {
     btn.innerHTML = '<i class="fa-solid fa-pause"></i> <span id="autoDriveLabel">Pause Auto-Drive</span>';
   }
 
-  updateSimStatus(`Auto-driving (0/${totalSteps})...`, 'driving');
-  toastRider('Auto-drive simulation started!');
+  const routeLabel = routeResult.source === 'osrm' ? 'OSRM Road' : 'Street Corridor';
+  updateSimStatus(`Auto-driving via ${routeLabel} (0/${totalWaypoints - 1})...`, 'driving');
+  toastRider(`Auto-drive started via ${routeLabel} (${totalWaypoints} road waypoints)!`);
 
-  // Trigger initial step immediately
-  handleRiderPositionUpdate(startLat, startLng, 'simulation');
+  // Initial step at waypoint 0
+  const [initLat, initLng] = autoDriveWaypoints[0];
+  handleRiderPositionUpdate(initLat, initLng, 'simulation');
+  if (routePolyline) {
+    routePolyline.setLatLngs(autoDriveWaypoints);
+  }
+  const initRemainingDist = calculatePathDistanceMeters(autoDriveWaypoints);
+  updateRoadDistanceDisplay(initRemainingDist);
 
+  // Sequential advance along OSRM street waypoints at smooth 250ms interval (200-300ms)
   autoDriveTimer = setInterval(() => {
-    autoDriveStep++;
-    const fraction = Math.min(1, autoDriveStep / totalSteps);
-    const currLat = startLat + (destLat - startLat) * fraction;
-    const currLng = startLng + (destLng - startLng) * fraction;
-
-    handleRiderPositionUpdate(currLat, currLng, 'simulation');
-
-    const percent = Math.round(fraction * 100);
-    updateSimStatus(`Auto-driving: ${percent}% (${autoDriveStep}/${totalSteps})`, 'driving');
-
-    if (deliveryMap) {
-      deliveryMap.panTo([currLat, currLng], { animate: true, duration: 0.5 });
-    }
-
-    if (autoDriveStep >= totalSteps) {
+    autoDriveIndex++;
+    if (autoDriveIndex >= autoDriveWaypoints.length) {
       stopAutoDriveSimulation();
+      // Snap marker cleanly to customer destination
+      handleRiderPositionUpdate(destLat, destLng, 'simulation');
+      if (routePolyline) {
+        routePolyline.setLatLngs([[destLat, destLng], [destLat, destLng]]);
+      }
+      updateRoadDistanceDisplay(0);
       updateSimStatus('Arrived at customer destination! (100%)', 'active');
       toastRider('Auto-drive completed: Rider arrived at customer!');
+      return;
+    }
+
+    const [currLat, currLng] = autoDriveWaypoints[autoDriveIndex];
+
+    // Post to tracking_api.php and update marker popup & badge
+    handleRiderPositionUpdate(currLat, currLng, 'simulation');
+
+    // Dynamically shorten remaining route polyline ahead of the rider
+    const remainingWaypoints = autoDriveWaypoints.slice(autoDriveIndex);
+    if (routePolyline) {
+      routePolyline.setLatLngs(remainingWaypoints);
+    }
+
+    // Calculate remaining road distance
+    const remainingDist = calculatePathDistanceMeters(remainingWaypoints);
+    updateRoadDistanceDisplay(remainingDist);
+
+    const percent = Math.round((autoDriveIndex / (totalWaypoints - 1)) * 100);
+    updateSimStatus(`Auto-driving (${routeLabel}): ${percent}% (${autoDriveIndex}/${totalWaypoints - 1})`, 'driving');
+
+    if (deliveryMap) {
+      deliveryMap.panTo([currLat, currLng], { animate: true, duration: 0.2 });
     }
   }, AUTO_DRIVE_INTERVAL_MS);
 }
@@ -1343,15 +1534,23 @@ function toggleMapTapRelocate() {
   }
 }
 
-function onMapTapRelocateHandler(e) {
+async function onMapTapRelocateHandler(e) {
   if (!isTapRelocateActive && !isManualSimulationActive) return;
   const { lat, lng } = e.latlng;
+  if (autoDriveTimer !== null) {
+    stopAutoDriveSimulation();
+  }
   handleRiderPositionUpdate(lat, lng, isTapRelocateActive ? 'simulation' : 'manual');
   updateSimStatus(`Relocated to ${lat.toFixed(5)}, ${lng.toFixed(5)}`, 'active');
   toastRider(`Rider pin relocated (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+
+  const custCoord = getActiveCustomerCoord();
+  if (custCoord) {
+    await loadAndDrawRoadRoute(lat, lng, custCoord[0], custCoord[1], false);
+  }
 }
 
-function resetRiderToStore() {
+async function resetRiderToStore() {
   stopAutoDriveSimulation();
   if (!activeDeliveryData) {
     toastRider('No active delivery order to reset.', true);
@@ -1372,22 +1571,14 @@ function resetRiderToStore() {
     deliveryMap.panTo([sLat, sLng], { animate: true, duration: 0.6 });
   }
 
+  const custCoord = getActiveCustomerCoord();
+  if (custCoord) {
+    await loadAndDrawRoadRoute(sLat, sLng, custCoord[0], custCoord[1], false);
+  }
+
   const storeName = activeDeliveryData.store_name || 'Store';
   updateSimStatus(`Reset to ${storeName}`, 'active');
   toastRider(`Rider reset to store (${storeName})`);
-}
-
-// Real-world Haversine distance calculation in kilometers
-function calculateHaversineDistanceKm(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth's radius in kilometers
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
 }
 
 function getActiveCustomerCoord() {
@@ -1464,10 +1655,17 @@ function attachRiderMarkerDragHandlers() {
     }
   });
 
-  riderMarker.on('dragend', (e) => {
+  riderMarker.on('dragend', async (e) => {
     const { lat, lng } = e.target.getLatLng();
+    if (autoDriveTimer !== null) {
+      stopAutoDriveSimulation();
+    }
     handleRiderPositionUpdate(lat, lng, 'manual');
     toastRider(`Pin moved (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+    const custCoord = getActiveCustomerCoord();
+    if (custCoord) {
+      await loadAndDrawRoadRoute(lat, lng, custCoord[0], custCoord[1], false);
+    }
   });
 }
 
@@ -1553,32 +1751,11 @@ function handleRiderPositionUpdate(latitude, longitude, source = 'gps', accuracy
     `);
   }
 
-  // Recalculate and update the polyline route directly between [latitude, longitude] and the customer's [delivery_lat, delivery_lng]
-  const custCoord = getActiveCustomerCoord();
-  if (custCoord && deliveryMap) {
-    const riderCoord = [numLat, numLng];
-    if (!routePolyline) {
-      routePolyline = L.polyline([riderCoord, custCoord], {
-        color: '#D88F2A',
-        weight: 4,
-        opacity: 0.85,
-        dashArray: '7, 8',
-        lineCap: 'round',
-        lineJoin: 'round'
-      }).addTo(deliveryMap);
-    } else {
-      routePolyline.setLatLngs([riderCoord, custCoord]);
-    }
-
-    // Dynamic Haversine distance
-    const distKm = calculateHaversineDistanceKm(numLat, numLng, custCoord[0], custCoord[1]);
-    const distEl = document.getElementById('mapRouteDistance');
-    if (distEl) {
-      if (distKm < 1) {
-        distEl.textContent = `Distance: ${Math.round(distKm * 1000)} meters`;
-      } else {
-        distEl.textContent = `Distance: ${distKm.toFixed(2)} km`;
-      }
+  // If NOT in auto-drive simulation (e.g. live GPS fix), update the road polyline via OSRM
+  if (source !== 'simulation') {
+    const custCoord = getActiveCustomerCoord();
+    if (custCoord && deliveryMap) {
+      loadAndDrawRoadRoute(numLat, numLng, custCoord[0], custCoord[1], false);
     }
   }
 
@@ -1718,24 +1895,13 @@ async function initDeliveryMap(data) {
     attachRiderMarkerDragHandlers();
   }
 
-  // Route Polyline & Bounds: Between active origin (rider live GPS or store pickup) and customer destination
+  // Route Polyline & Bounds: Between active origin (rider live GPS or store pickup) and customer destination via OSRM
   const activeOriginCoord = (hasRiderCoord && !data.is_initial_shop_origin) ? [rLat, rLng] : (hasStoreCoord ? [sLat, sLng] : null);
 
   if (hasCustomerCoord && activeOriginCoord) {
     const customerCoord = [cLat, cLng];
-
-    routePolyline = L.polyline([activeOriginCoord, customerCoord], {
-      color: '#D88F2A',
-      weight: 4,
-      opacity: 0.85,
-      dashArray: '7, 8',
-      lineCap: 'round',
-      lineJoin: 'round'
-    }).addTo(deliveryMap);
-
-    const bounds = L.latLngBounds([activeOriginCoord, customerCoord]);
-    deliveryMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
-    updateRouteUI(activeOriginCoord[0], activeOriginCoord[1], customerCoord[0], customerCoord[1]);
+    // Asynchronously fetch and render real-street OSRM road geometry
+    loadAndDrawRoadRoute(activeOriginCoord[0], activeOriginCoord[1], customerCoord[0], customerCoord[1], true);
   } else if (hasCustomerCoord) {
     // Keep map centered strictly on customer destination until live GPS is acquired
     deliveryMap.setView([cLat, cLng], 16);

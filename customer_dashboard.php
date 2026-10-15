@@ -2976,7 +2976,7 @@ function renderCustomerMap(opts) {
     }
   }
 
-  // d. Dynamic connecting polyline
+  // d. Dynamic connecting road polyline via OSRM
   const polyStart = validRider ? [opts.riderLat, opts.riderLng] : (validStore ? [opts.storeLat, opts.storeLng] : null);
   const polyEnd = validDest ? [opts.destLat, opts.destLng] : null;
 
@@ -2985,13 +2985,17 @@ function renderCustomerMap(opts) {
     if (!custRoutePolyline) {
       custRoutePolyline = L.polyline(latlngs, {
         color: '#4B5320',
-        weight: 4,
-        opacity: 0.85,
-        dashArray: '8, 8'
+        weight: 5,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round'
       }).addTo(custTrackingMap);
     } else {
       custRoutePolyline.setLatLngs(latlngs);
     }
+
+    // Fetch and snap to OSRM real-street road geometry
+    fetchCustOsrmRoute(polyStart[0], polyStart[1], polyEnd[0], polyEnd[1]);
   }
 
   if (opts.isInitial) {
@@ -3007,6 +3011,29 @@ function renderCustomerMap(opts) {
         custTrackingMap.setView(pointsToFit[0], 15);
       }
     }, 150);
+  }
+}
+
+let lastCustRouteKey = '';
+async function fetchCustOsrmRoute(startLat, startLng, destLat, destLng) {
+  const routeKey = `${startLat.toFixed(4)},${startLng.toFixed(4)}_${destLat.toFixed(4)},${destLng.toFixed(4)}`;
+  if (routeKey === lastCustRouteKey) return;
+  lastCustRouteKey = routeKey;
+
+  const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${destLng},${destLat}?overview=full&geometries=geojson`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates)) {
+        const leafletCoords = data.routes[0].geometry.coordinates.map(pt => [pt[1], pt[0]]);
+        if (custRoutePolyline && leafletCoords.length > 0) {
+          custRoutePolyline.setLatLngs(leafletCoords);
+        }
+      }
+    }
+  } catch (e) {
+    // Silent fallback keeps existing polyline
   }
 }
 
