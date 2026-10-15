@@ -616,7 +616,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   $is_ready_pickup = in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned']);
-?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div id="delivery-map" style="height: 320px; width: 100%; border-radius: 12px; margin-top: 12px;"></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div class="actions" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
+?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div id="delivery-map" style="height: 320px; width: 100%; border-radius: 12px; margin-top: 12px;"></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div id="gpsNoticeBanner" style="display:none;margin-top:8px;padding:9px 12px;background:#fff8e6;border:1.5px solid #d97706;border-radius:10px;font-size:0.73rem;color:#78350f;line-height:1.45;"><div style="display:flex;align-items:flex-start;gap:8px;"><i class="fa-solid fa-triangle-exclamation" style="color:#d97706;font-size:0.9rem;margin-top:2px;"></i><div style="flex:1;" id="gpsNoticeText">GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.</div></div></div><div class="actions" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
   $addr = trim((string)($o['delivery_address'] ?? ''));
   $lat = (isset($o['delivery_lat']) && is_numeric($o['delivery_lat'])) ? $o['delivery_lat'] : ($o['customer_lat'] ?? null);
@@ -682,6 +682,7 @@ let riderMarker = null;
 let routePolyline = null;
 let gpsWatchId = null;
 let activeGpsOrderId = null;
+let isManualSimulationActive = false;
 
 // Real-world Haversine distance calculation in kilometers
 function calculateHaversineDistanceKm(lat1, lon1, lat2, lon2) {
@@ -696,6 +697,15 @@ function calculateHaversineDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
+function getActiveCustomerCoord() {
+  const cLat = activeDeliveryData ? (activeDeliveryData.delivery_lat ?? activeDeliveryData.customer_lat) : null;
+  const cLng = activeDeliveryData ? (activeDeliveryData.delivery_lng ?? activeDeliveryData.customer_lng) : null;
+  if (cLat !== null && cLng !== null && !isNaN(cLat) && !isNaN(cLng) && Number(cLat) !== 0) {
+    return [Number(cLat), Number(cLng)];
+  }
+  return null;
+}
+
 function updateRouteUI(rLat, rLng, cLat, cLng) {
   if (routePolyline) {
     routePolyline.setLatLngs([[rLat, rLng], [cLat, cLng]]);
@@ -708,6 +718,22 @@ function updateRouteUI(rLat, rLng, cLat, cLng) {
     } else {
       distEl.textContent = `Distance: ${distKm.toFixed(2)} km`;
     }
+  }
+}
+
+function showGpsNotice(msg) {
+  const banner = document.getElementById('gpsNoticeBanner');
+  const textEl = document.getElementById('gpsNoticeText');
+  if (banner && textEl) {
+    textEl.textContent = msg;
+    banner.style.display = 'block';
+  }
+}
+
+function hideGpsNotice() {
+  const banner = document.getElementById('gpsNoticeBanner');
+  if (banner) {
+    banner.style.display = 'none';
   }
 }
 
@@ -731,6 +757,161 @@ function createRiderIcon(isStore) {
     iconAnchor: [17, 43],
     popupAnchor: [0, -42]
   });
+}
+
+function attachRiderMarkerDragHandlers() {
+  if (!riderMarker || riderMarker._dragHandlersAttached) return;
+  riderMarker._dragHandlersAttached = true;
+
+  riderMarker.on('drag', (e) => {
+    const { lat, lng } = e.target.getLatLng();
+    const custCoord = getActiveCustomerCoord();
+    if (custCoord) {
+      updateRouteUI(lat, lng, custCoord[0], custCoord[1]);
+    }
+  });
+
+  riderMarker.on('dragend', (e) => {
+    const { lat, lng } = e.target.getLatLng();
+    handleRiderPositionUpdate(lat, lng, 'manual');
+    toastRider(`Pin moved (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+  });
+}
+
+function enableManualSimulation(noticeText) {
+  isManualSimulationActive = true;
+  
+  const defaultNotice = "GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.";
+  const msg = noticeText || defaultNotice;
+  
+  showGpsNotice(msg);
+  toastRider(msg);
+
+  const gpsStatusEl = document.getElementById('gpsStatus');
+  if (gpsStatusEl) {
+    gpsStatusEl.innerHTML = `<span style="color:#b45309;font-weight:600;"><i class="fa-solid fa-hand-pointer"></i> ${esc(msg)}</span>`;
+  }
+
+  // Ensure green motorcycle marker exists on map
+  const sLat = activeDeliveryData ? activeDeliveryData.store_lat : null;
+  const sLng = activeDeliveryData ? activeDeliveryData.store_lng : null;
+  const cCoord = getActiveCustomerCoord();
+
+  if (!riderMarker && deliveryMap) {
+    const initialCoord = (sLat && sLng) ? [sLat, sLng] : (cCoord ? cCoord : deliveryMap.getCenter());
+    const greenRiderIcon = createRiderIcon(false);
+    riderMarker = L.marker(initialCoord, { icon: greenRiderIcon, draggable: true }).addTo(deliveryMap);
+  }
+
+  // Enable dragging on the green motorcycle marker
+  if (riderMarker) {
+    if (riderMarker.dragging) {
+      riderMarker.dragging.enable();
+    }
+    attachRiderMarkerDragHandlers();
+    riderMarker.bindPopup(`
+      <b><i class="fa-solid fa-hand-pointer" style="color:#2e7d32"></i> Rider (Simulated Movement)</b><br>
+      <span>Drag this pin or tap anywhere on the map to simulate live movement.</span>
+    `).openPopup();
+  }
+
+  // Allow clicking anywhere on the map to position the rider
+  if (deliveryMap && !deliveryMap._clickSimulationAttached) {
+    deliveryMap._clickSimulationAttached = true;
+    deliveryMap.on('click', (e) => {
+      if (isManualSimulationActive) {
+        const { lat, lng } = e.latlng;
+        handleRiderPositionUpdate(lat, lng, 'manual');
+      }
+    });
+  }
+
+  if (activeGpsOrderId) {
+    updateGpsButtonUI(activeGpsOrderId, true, true);
+  }
+}
+
+function handleRiderPositionUpdate(latitude, longitude, source = 'gps', accuracy = null) {
+  const numLat = parseFloat(latitude);
+  const numLng = parseFloat(longitude);
+  if (isNaN(numLat) || isNaN(numLng)) return;
+
+  const greenRiderIcon = createRiderIcon(false);
+
+  // Update or create rider marker
+  if (!riderMarker) {
+    if (deliveryMap) {
+      riderMarker = L.marker([numLat, numLng], { icon: greenRiderIcon, draggable: isManualSimulationActive }).addTo(deliveryMap);
+      attachRiderMarkerDragHandlers();
+    }
+  } else {
+    riderMarker.setIcon(greenRiderIcon);
+    riderMarker.setLatLng([numLat, numLng]);
+  }
+
+  if (riderMarker) {
+    const accuracyText = accuracy ? `<br><small style="color:#666">Accuracy: ±${Math.round(accuracy)}m</small>` : '';
+    const modeText = source === 'manual' ? 'Manual Movement (Drag/Tap)' : 'Live Hardware GPS';
+    riderMarker.bindPopup(`
+      <b><i class="fa-solid fa-motorcycle" style="color:#2e7d32"></i> Rider (${modeText})</b><br>
+      <span>Lat: ${numLat.toFixed(5)}, Lng: ${numLng.toFixed(5)}</span>${accuracyText}
+    `);
+  }
+
+  // Recalculate and update the polyline route directly between [latitude, longitude] and the customer's [delivery_lat, delivery_lng]
+  const custCoord = getActiveCustomerCoord();
+  if (custCoord && deliveryMap) {
+    const riderCoord = [numLat, numLng];
+    if (!routePolyline) {
+      routePolyline = L.polyline([riderCoord, custCoord], {
+        color: '#D88F2A',
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '7, 8',
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(deliveryMap);
+    } else {
+      routePolyline.setLatLngs([riderCoord, custCoord]);
+    }
+
+    // Dynamic Haversine distance
+    const distKm = calculateHaversineDistanceKm(numLat, numLng, custCoord[0], custCoord[1]);
+    const distEl = document.getElementById('mapRouteDistance');
+    if (distEl) {
+      if (distKm < 1) {
+        distEl.textContent = `Distance: ${Math.round(distKm * 1000)} meters`;
+      } else {
+        distEl.textContent = `Distance: ${distKm.toFixed(2)} km`;
+      }
+    }
+  }
+
+  // Live status badge & tags
+  const liveTag = document.getElementById('mapGpsLiveTag');
+  if (liveTag) {
+    liveTag.style.display = 'inline-flex';
+    if (source === 'manual') {
+      liveTag.innerHTML = '<i class="fa-solid fa-hand-pointer"></i> Manual Drag Movement';
+    } else {
+      liveTag.innerHTML = '<i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking';
+    }
+  }
+
+  const gpsStatusEl = document.getElementById('gpsStatus');
+  if (gpsStatusEl) {
+    if (source === 'manual') {
+      gpsStatusEl.innerHTML = `<span style="color:#b45309;font-weight:600;"><i class="fa-solid fa-hand-pointer"></i> Manual simulation active • ${numLat.toFixed(5)}, ${numLng.toFixed(5)}</span>`;
+    } else {
+      gpsStatusEl.textContent = `Live GPS active • ${numLat.toFixed(5)}, ${numLng.toFixed(5)}` + (accuracy ? ` (±${Math.round(accuracy)}m)` : '');
+    }
+  }
+
+  // Post the updated coordinates to tracking_api.php
+  const orderId = activeGpsOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
+  if (orderId) {
+    sendRiderLocation(orderId, numLat, numLng);
+  }
 }
 
 async function initDeliveryMap(data) {
@@ -835,6 +1016,7 @@ async function initDeliveryMap(data) {
     const icon = createRiderIcon(false);
     riderMarker = L.marker(riderCoord, { icon: icon }).addTo(deliveryMap);
     riderMarker.bindPopup(`<b><i class="fa-solid fa-motorcycle" style="color:#2e7d32"></i> Rider Location</b><br>On Route`);
+    attachRiderMarkerDragHandlers();
   }
 
   // Route Polyline & Bounds: Between active origin (rider live GPS or store pickup) and customer destination
@@ -882,7 +1064,8 @@ async function sendRiderLocation(orderId, lat, lng) {
     const gpsStatusEl = document.getElementById('gpsStatus');
     if (d.success) {
       if (gpsStatusEl) {
-        gpsStatusEl.textContent = `Live GPS sharing • ${lat.toFixed(5)}, ${lng.toFixed(5)}` + 
+        const modeLabel = isManualSimulationActive ? 'Manual pin sharing' : 'Live GPS sharing';
+        gpsStatusEl.textContent = `${modeLabel} • ${lat.toFixed(5)}, ${lng.toFixed(5)}` + 
           (d.distance_km != null ? ` • ${(d.distance_km < 1 ? (d.distance_km * 1000).toFixed(0) + ' m' : d.distance_km.toFixed(2) + ' km')} from customer` : '');
       }
       return true;
@@ -898,14 +1081,20 @@ async function sendRiderLocation(orderId, lat, lng) {
   }
 }
 
-function updateGpsButtonUI(orderId, isSharing) {
+function updateGpsButtonUI(orderId, isSharing, isManual = false) {
   const btn = document.getElementById('gpsToggleBtn_' + orderId);
   const text = document.getElementById('gpsToggleText_' + orderId);
   if (!btn) return;
   if (isSharing) {
     btn.classList.remove('secondary');
     btn.classList.add('btn-gps-active');
-    if (text) text.innerHTML = '<i class="fa-solid fa-satellite fa-beat-fade"></i> Sharing Live GPS (Tap to Stop)';
+    if (text) {
+      if (isManual) {
+        text.innerHTML = '<i class="fa-solid fa-hand-pointer fa-beat-fade"></i> Manual GPS Active (Tap or Drag Pin)';
+      } else {
+        text.innerHTML = '<i class="fa-solid fa-satellite fa-beat-fade"></i> Sharing Live GPS (Tap to Stop)';
+      }
+    }
   } else {
     btn.classList.remove('btn-gps-active');
     btn.classList.add('secondary');
@@ -918,6 +1107,11 @@ function stopLiveLocation() {
     navigator.geolocation.clearWatch(gpsWatchId);
     gpsWatchId = null;
   }
+  isManualSimulationActive = false;
+  if (riderMarker && riderMarker.dragging) {
+    riderMarker.dragging.disable();
+  }
+  hideGpsNotice();
   if (activeGpsOrderId !== null) {
     updateGpsButtonUI(activeGpsOrderId, false);
     activeGpsOrderId = null;
@@ -930,13 +1124,8 @@ function stopLiveLocation() {
   toastRider('Live GPS sharing stopped');
 }
 
-// 2. True Live Rider GPS (Hardware-driven)
+// 2. True Live Rider GPS (Hardware-driven over HTTPS, with non-blocking manual simulation fallback)
 function startLiveLocation(orderId) {
-  if (!navigator.geolocation) {
-    alert('GPS Error: Geolocation is not supported by your browser or device.');
-    return;
-  }
-  
   if (gpsWatchId !== null) {
     navigator.geolocation.clearWatch(gpsWatchId);
     gpsWatchId = null;
@@ -946,7 +1135,15 @@ function startLiveLocation(orderId) {
   }
   
   activeGpsOrderId = orderId;
-  updateGpsButtonUI(orderId, true);
+  hideGpsNotice();
+
+  // If geolocation service is unsupported
+  if (!navigator.geolocation) {
+    enableManualSimulation("GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.");
+    return;
+  }
+  
+  updateGpsButtonUI(orderId, true, false);
   
   const gpsStatusEl = document.getElementById('gpsStatus');
   if (gpsStatusEl) gpsStatusEl.textContent = 'Acquiring hardware GPS location…';
@@ -958,103 +1155,34 @@ function startLiveLocation(orderId) {
     timeout: 10000
   };
 
-  gpsWatchId = navigator.geolocation.watchPosition(
-    (position) => {
-      // a. Read const { latitude, longitude } = position.coords;
-      const { latitude, longitude } = position.coords;
-
-      // b. If riderMarker already exists on the map, update it immediately via riderMarker.setLatLng([latitude, longitude])
-      const greenRiderIcon = createRiderIcon(false);
-      if (riderMarker) {
-        riderMarker.setIcon(greenRiderIcon);
-        riderMarker.setLatLng([latitude, longitude]);
-      } else if (deliveryMap) {
-        riderMarker = L.marker([latitude, longitude], { icon: greenRiderIcon }).addTo(deliveryMap);
-      }
-      if (riderMarker) {
-        riderMarker.bindPopup(`
-          <b><i class="fa-solid fa-motorcycle" style="color:#2e7d32"></i> Rider (Live Hardware GPS)</b><br>
-          <span>Lat: ${latitude.toFixed(5)}, Lng: ${longitude.toFixed(5)}</span><br>
-          <small style="color:#666">Accuracy: ±${Math.round(position.coords.accuracy || 0)}m</small>
-        `);
-      }
-
-      // c. Recalculate and update the polyline route directly between [latitude, longitude] and the customer's [delivery_lat, delivery_lng]
-      const cLat = activeDeliveryData ? (activeDeliveryData.delivery_lat ?? activeDeliveryData.customer_lat) : null;
-      const cLng = activeDeliveryData ? (activeDeliveryData.delivery_lng ?? activeDeliveryData.customer_lng) : null;
-
-      if (cLat !== null && cLng !== null && !isNaN(cLat) && !isNaN(cLng) && Number(cLat) !== 0) {
-        const custCoord = [Number(cLat), Number(cLng)];
-        const riderCoord = [latitude, longitude];
-
-        if (!routePolyline && deliveryMap) {
-          routePolyline = L.polyline([riderCoord, custCoord], {
-            color: '#D88F2A',
-            weight: 4,
-            opacity: 0.85,
-            dashArray: '7, 8',
-            lineCap: 'round',
-            lineJoin: 'round'
-          }).addTo(deliveryMap);
-        } else if (routePolyline) {
-          routePolyline.setLatLngs([riderCoord, custCoord]);
+  try {
+    gpsWatchId = navigator.geolocation.watchPosition(
+      (position) => {
+        // Hardware GPS success: streaming live hardware coordinates over secure HTTPS/localhost
+        hideGpsNotice();
+        isManualSimulationActive = false;
+        if (riderMarker && riderMarker.dragging) {
+          riderMarker.dragging.disable();
         }
 
-        if (deliveryMap) {
-          const bounds = L.latLngBounds([riderCoord, custCoord]);
-          deliveryMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
-        }
-
-        // d. Calculate the real-world Haversine distance dynamically and update the "Distance" badge text
-        const distKm = calculateHaversineDistanceKm(latitude, longitude, Number(cLat), Number(cLng));
-        const distEl = document.getElementById('mapRouteDistance');
-        if (distEl) {
-          if (distKm < 1) {
-            distEl.textContent = `Distance: ${Math.round(distKm * 1000)} meters`;
-          } else {
-            distEl.textContent = `Distance: ${distKm.toFixed(2)} km`;
-          }
-        }
-      }
-
-      // Live status badge & tags
-      const liveTag = document.getElementById('mapGpsLiveTag');
-      if (liveTag) liveTag.style.display = 'inline-flex';
-      if (gpsStatusEl) {
-        gpsStatusEl.textContent = `Live GPS active • ${latitude.toFixed(5)}, ${longitude.toFixed(5)} (±${Math.round(position.coords.accuracy || 0)}m)`;
-      }
-
-      // e. Send the coordinates via POST to tracking_api.php so the database reflects the real hardware position
-      sendRiderLocation(orderId, latitude, longitude);
-    },
-    (error) => {
-      // If watchPosition errors or is stopped, alert the user with the actual browser error rather than silently falling back to a fixed coordinate
-      console.error('watchPosition error:', error);
-      let errMsg = error.message;
-      if (!errMsg) {
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errMsg = 'Permission denied. Please allow location access in your browser.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errMsg = 'Position unavailable. GPS signal could not be acquired.';
-            break;
-          case error.TIMEOUT:
-            errMsg = 'Location request timed out. Please verify device GPS is enabled.';
-            break;
-          default:
-            errMsg = 'Unknown GPS error (code ' + error.code + ').';
-        }
-      }
-      alert('GPS Error: ' + errMsg);
-      stopLiveLocation();
-    },
-    options
-  );
+        const { latitude, longitude, accuracy } = position.coords;
+        handleRiderPositionUpdate(latitude, longitude, 'gps', accuracy);
+      },
+      (error) => {
+        // When navigator.geolocation fails or throws "Origin does not have permission to use Geolocation service"
+        console.warn('Geolocation error:', error);
+        enableManualSimulation("GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.");
+      },
+      options
+    );
+  } catch (err) {
+    console.warn('watchPosition invocation threw:', err);
+    enableManualSimulation("GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.");
+  }
 }
 
 function toggleLiveLocation(orderId) {
-  if (gpsWatchId !== null && activeGpsOrderId === orderId) {
+  if ((gpsWatchId !== null || isManualSimulationActive) && activeGpsOrderId === orderId) {
     stopLiveLocation();
   } else {
     startLiveLocation(orderId);
