@@ -2,6 +2,7 @@
 session_start();
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
+require_once 'geocode_lib.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -103,6 +104,16 @@ if ($method === 'POST') {
         $delivery_lng = isset($payload['delivery_lng']) && is_numeric($payload['delivery_lng']) ? (float)$payload['delivery_lng'] : (isset($payload['customer_lng']) && is_numeric($payload['customer_lng']) ? (float)$payload['customer_lng'] : null);
         if ($delivery_lat !== null && ($delivery_lat < -90 || $delivery_lat > 90)) $delivery_lat = null;
         if ($delivery_lng !== null && ($delivery_lng < -180 || $delivery_lng > 180)) $delivery_lng = null;
+
+        // Fallback geocoding lookup using address string instead of hardcoding downtown Ormoc coordinates
+        if (($delivery_lat === null || $delivery_lng === null) && !empty($delivery_address)) {
+            $fallback_geo = geocode_address_fallback($delivery_address);
+            if ($fallback_geo && isset($fallback_geo['lat'], $fallback_geo['lng'])) {
+                $delivery_lat = $fallback_geo['lat'];
+                $delivery_lng = $fallback_geo['lng'];
+            }
+        }
+
         $customer_lat = $delivery_lat;
         $customer_lng = $delivery_lng;
 

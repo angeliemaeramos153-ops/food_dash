@@ -2,6 +2,7 @@
 session_start();
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
+require_once 'geocode_lib.php';
 
 // Auth Guard: Ensure user is logged in and is a customer
 if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'customer') {
@@ -124,6 +125,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($delivery_lat !== null && ($delivery_lat < -90 || $delivery_lat > 90)) $delivery_lat = null;
         if ($delivery_lng !== null && ($delivery_lng < -180 || $delivery_lng > 180)) $delivery_lng = null;
+
+        // Fallback geocoding lookup using address string instead of hardcoding downtown Ormoc coordinates
+        if (($delivery_lat === null || $delivery_lng === null) && !empty($delivery_address)) {
+            $fallback_geo = geocode_address_fallback($delivery_address);
+            if ($fallback_geo && isset($fallback_geo['lat'], $fallback_geo['lng'])) {
+                $delivery_lat = $fallback_geo['lat'];
+                $delivery_lng = $fallback_geo['lng'];
+            }
+        }
+
         $customer_lat = $delivery_lat;
         $customer_lng = $delivery_lng;
         
@@ -935,6 +946,8 @@ button{cursor:pointer}
       </div>
       <textarea id="deliveryAddressInput" class="delivery-textarea" placeholder="Enter complete delivery address (e.g. Unit/House No., Street, Brgy, City, Landmark)" rows="2"></textarea>
       <div id="gpsLocationStatus" class="gps-status-pill" style="display:none;"></div>
+      <input type="hidden" id="delivery_lat" name="delivery_lat" value="">
+      <input type="hidden" id="delivery_lng" name="delivery_lng" value="">
       <input type="hidden" id="deliveryLatInput" value="">
       <input type="hidden" id="deliveryLngInput" value="">
     </div>
@@ -1045,6 +1058,10 @@ button{cursor:pointer}
     </div>
     <textarea id="modalDeliveryAddress" class="delivery-textarea" placeholder="Unit/House No., Street, Barangay, City, Landmark..." rows="3"></textarea>
     <div id="modalGpsStatus" class="gps-status-pill" style="display:none;"></div>
+    <input type="hidden" id="modal_delivery_lat" name="delivery_lat" value="">
+    <input type="hidden" id="modal_delivery_lng" name="delivery_lng" value="">
+    <input type="hidden" id="modalDeliveryLat" value="">
+    <input type="hidden" id="modalDeliveryLng" value="">
     <div class="fd-modal-actions">
       <button class="btn-fd-secondary" onclick="closeAddressPromptModal()">Cancel</button>
       <button class="btn-fd-primary" id="btnModalConfirmOrder" onclick="confirmModalAddressAndCheckout()">Confirm & Order</button>
@@ -1489,7 +1506,12 @@ function renderCart(){
   const addrInput = document.getElementById('deliveryAddressInput');
   if (addrInput && !addrInput.value) {
     const saved = localStorage.getItem('foodDashDeliveryAddress');
-    if (saved) addrInput.value = saved;
+    if (saved) {
+      addrInput.value = saved;
+      if (!currentCustomerLat) {
+        geocodeAddressNominatim(saved);
+      }
+    }
   }
 }
 
@@ -1516,7 +1538,157 @@ function clearCart() {
 
 let currentCustomerLat = null;
 let currentCustomerLng = null;
+let addressGeocodeDebounceTimer = null;
 
+// Helper to write coordinates to all delivery_lat & delivery_lng hidden inputs and status pills
+function setDeliveryCoordinates(lat, lng, source = 'nominatim') {
+    if (lat == null || lng == null) return;
+    const numLat = parseFloat(lat);
+    const numLng = parseFloat(lng);
+    if (isNaN(numLat) || isNaN(numLng)) return;
+
+    currentCustomerLat = numLat;
+    currentCustomerLng = numLng;
+
+    const latStr = numLat.toFixed(7);
+    const lngStr = numLng.toFixed(7);
+
+    // Update hidden inputs across cart and modal
+    const latIds = ['delivery_lat', 'deliveryLatInput', 'modal_delivery_lat', 'modalDeliveryLat'];
+    const lngIds = ['delivery_lng', 'deliveryLngInput', 'modal_delivery_lng', 'modalDeliveryLng'];
+
+    latIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = latStr;
+    });
+    lngIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = lngStr;
+    });
+
+    const isGps = source === 'gps';
+    const statusText = `<i class="fa-solid ${isGps ? 'fa-satellite-dish' : 'fa-location-dot'}"></i> ${isGps ? 'Live GPS Pin' : 'Geocoded Pin'}: ${numLat.toFixed(5)}, ${numLng.toFixed(5)}`;
+
+    ['gpsLocationStatus', 'modalGpsStatus'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.style.display = 'flex';
+            el.className = 'gps-status-pill success';
+            el.innerHTML = statusText;
+        }
+    });
+}
+
+// OpenStreetMap Nominatim Geocoding for Customer Addresses
+async function geocodeAddressNominatim(address) {
+    if (!address || typeof address !== 'string') return null;
+    const cleanAddr = address.trim();
+    if (!cleanAddr) return null;
+
+    // Show loading state in status pill
+    ['gpsLocationStatus', 'modalGpsStatus'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && !currentCustomerLat) {
+            el.style.display = 'flex';
+            el.className = 'gps-status-pill loading';
+            el.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Geocoding address with Nominatim...';
+        }
+    });
+
+    try {
+        // 1. Primary requested Nominatim query format
+        const primaryUrl = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(cleanAddr + ', Ormoc City, Leyte');
+        let res = await fetch(primaryUrl, {
+            headers: { 'Accept': 'application/json' }
+        });
+        if (res.ok) {
+            let data = await res.json();
+            if (Array.isArray(data) && data.length > 0 && data[0].lat && data[0].lon) {
+                const lat = parseFloat(data[0].lat);
+                const lng = parseFloat(data[0].lon);
+                setDeliveryCoordinates(lat, lng, 'nominatim');
+                return { lat, lng, displayName: data[0].display_name };
+            }
+        }
+
+        // 2. Fallback query formats (handles addresses that already contain Ormoc/Leyte to avoid duplicate tokens)
+        const simplified = cleanAddr.replace(/Ormoc(\s+City)?/gi, '').replace(/Leyte/gi, '').replace(/,\s*,/g, ',').replace(/^[\s,]+|[\s,]+$/g, '');
+        const altQueries = [
+            (simplified || cleanAddr) + ', Ormoc, Leyte',
+            cleanAddr + ', Leyte',
+            cleanAddr
+        ];
+
+        for (const alt of altQueries) {
+            const altUrl = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(alt);
+            res = await fetch(altUrl, { headers: { 'Accept': 'application/json' } });
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0 && data[0].lat && data[0].lon) {
+                    const lat = parseFloat(data[0].lat);
+                    const lng = parseFloat(data[0].lon);
+                    setDeliveryCoordinates(lat, lng, 'nominatim');
+                    return { lat, lng, displayName: data[0].display_name };
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Nominatim client geocode network error:', e);
+    }
+
+    // 3. Client-side Ormoc barangay dictionary fallback if network is restricted
+    const norm = cleanAddr.toLowerCase();
+    const localDict = {
+        'alta vista': [11.0118026, 124.6203237],
+        'altavista': [11.0118026, 124.6203237],
+        'cogon': [11.0233014, 124.6040868],
+        'valencia': [11.1071389, 124.5782215],
+        'ipil': [10.9754111, 124.6331304],
+        'san pedro': [11.0057362, 124.6108008],
+        'linao': [11.0159798, 124.5908042],
+        'camp downes': [10.9966183, 124.6182589],
+        'bantigue': [10.9895862, 124.6222361],
+        'tambulilid': [11.0231637, 124.5846183],
+        'can-adieng': [11.0025430, 124.6139237],
+        'can adieng': [11.0025430, 124.6139237],
+        'punta': [11.0092018, 124.6003072],
+        'alegria': [11.0055905, 124.6038316],
+    };
+
+    for (const [name, coords] of Object.entries(localDict)) {
+        if (norm.includes(name)) {
+            setDeliveryCoordinates(coords[0], coords[1], 'nominatim');
+            return { lat: coords[0], lng: coords[1] };
+        }
+    }
+
+    return null;
+}
+
+// Handle typing in delivery address inputs with debounced geocoding
+function handleAddressTyping(value, isModal = false) {
+    const address = (value || '').trim();
+    if (!address) return;
+
+    // Sync other address field if needed
+    const otherAddr = document.getElementById(isModal ? 'deliveryAddressInput' : 'modalDeliveryAddress');
+    if (otherAddr && otherAddr.value !== address) otherAddr.value = address;
+    localStorage.setItem('foodDashDeliveryAddress', address);
+
+    clearTimeout(addressGeocodeDebounceTimer);
+    addressGeocodeDebounceTimer = setTimeout(async () => {
+        await geocodeAddressNominatim(address);
+    }, 600);
+}
+
+function handleAddressBlur(value, isModal = false) {
+    const address = (value || '').trim();
+    if (address) {
+        geocodeAddressNominatim(address);
+    }
+}
+
+// Live GPS detection via navigator.geolocation.getCurrentPosition
 function detectCustomerGps(isModal = false) {
     const statusEl = document.getElementById(isModal ? 'modalGpsStatus' : 'gpsLocationStatus');
     const addrInput = document.getElementById(isModal ? 'modalDeliveryAddress' : 'deliveryAddressInput');
@@ -1534,7 +1706,7 @@ function detectCustomerGps(isModal = false) {
     if (statusEl) {
         statusEl.style.display = 'flex';
         statusEl.className = 'gps-status-pill loading';
-        statusEl.innerHTML = '<i class="fa-solid fa-satellite-dish fa-spin"></i> Detecting GPS coordinates...';
+        statusEl.innerHTML = '<i class="fa-solid fa-satellite-dish fa-spin"></i> Grabbing live GPS pin...';
     }
 
     navigator.geolocation.getCurrentPosition(
@@ -1545,30 +1717,11 @@ function detectCustomerGps(isModal = false) {
             }
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
-            
-            currentCustomerLat = lat;
-            currentCustomerLng = lng;
-            
-            const latInput = document.getElementById('deliveryLatInput');
-            const lngInput = document.getElementById('deliveryLngInput');
-            if (latInput) latInput.value = lat.toFixed(7);
-            if (lngInput) lngInput.value = lng.toFixed(7);
-            
-            const statusText = `<i class="fa-solid fa-circle-check"></i> GPS Detected: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-            if (statusEl) {
-                statusEl.className = 'gps-status-pill success';
-                statusEl.innerHTML = statusText;
-            }
 
-            // Sync with other status element if present
-            const otherStatusEl = document.getElementById(isModal ? 'gpsLocationStatus' : 'modalGpsStatus');
-            if (otherStatusEl) {
-                otherStatusEl.style.display = 'flex';
-                otherStatusEl.className = 'gps-status-pill success';
-                otherStatusEl.innerHTML = statusText;
-            }
+            // Automatically write live GPS pin to delivery_lat and delivery_lng
+            setDeliveryCoordinates(lat, lng, 'gps');
 
-            // Try reverse geocoding via OpenStreetMap Nominatim
+            // Try reverse geocoding via OpenStreetMap Nominatim to give a friendly address name
             try {
                 const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
                     headers: { 'Accept': 'application/json' }
@@ -1598,7 +1751,7 @@ function detectCustomerGps(isModal = false) {
                 const mainAddr = document.getElementById('deliveryAddressInput');
                 if (mainAddr) mainAddr.value = fallbackText;
             }
-            toast('GPS location auto-detected successfully!');
+            toast('Live GPS pin acquired successfully!');
         },
         (error) => {
             if (btn) {
@@ -1621,6 +1774,22 @@ function detectCustomerGps(isModal = false) {
     );
 }
 
+// Automatic check on dashboard load: if user allows geolocation, grab live GPS pin
+function requestLiveGpsIfAllowed() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            setDeliveryCoordinates(lat, lng, 'gps');
+        },
+        (error) => {
+            console.log('Live GPS auto-check:', error.message);
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+    );
+}
+
 function openAddressPromptModal() {
     const mainAddr = document.getElementById('deliveryAddressInput');
     const modalAddr = document.getElementById('modalDeliveryAddress');
@@ -1637,7 +1806,7 @@ function closeAddressPromptModal() {
     if (modal) modal.classList.remove('show');
 }
 
-function confirmModalAddressAndCheckout() {
+async function confirmModalAddressAndCheckout() {
     const modalAddr = document.getElementById('modalDeliveryAddress');
     const address = (modalAddr ? modalAddr.value : '').trim();
     if (!address) {
@@ -1651,19 +1820,25 @@ function confirmModalAddressAndCheckout() {
     const mainAddr = document.getElementById('deliveryAddressInput');
     if (mainAddr) mainAddr.value = address;
     localStorage.setItem('foodDashDeliveryAddress', address);
+
+    // If coordinates are not yet set or address changed, ensure geocoded coordinates are obtained
+    const latInput = document.getElementById('delivery_lat') || document.getElementById('deliveryLatInput');
+    const lngInput = document.getElementById('delivery_lng') || document.getElementById('deliveryLngInput');
+    if (!latInput || !latInput.value || !lngInput || !lngInput.value) {
+        await geocodeAddressNominatim(address);
+    }
+
     closeAddressPromptModal();
     checkout();
 }
 
-function checkout() {
+async function checkout() {
     if (!cart.length) {
         toast('Cart is empty');
         return;
     }
     
     const addrInput = document.getElementById('deliveryAddressInput');
-    const latInput = document.getElementById('deliveryLatInput');
-    const lngInput = document.getElementById('deliveryLngInput');
     const address = (addrInput ? addrInput.value : '').trim();
 
     if (!address) {
@@ -1678,25 +1853,41 @@ function checkout() {
 
     localStorage.setItem('foodDashDeliveryAddress', address);
     
-    const deliveryFee = 30;
     const btnSubmit = document.getElementById('btnCheckoutSubmit');
     if (btnSubmit) {
         btnSubmit.disabled = true;
         btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Placing Order...';
     }
 
-    const dLat = (latInput && latInput.value) ? parseFloat(latInput.value) : currentCustomerLat;
-    const dLng = (lngInput && lngInput.value) ? parseFloat(lngInput.value) : currentCustomerLng;
+    const latInput = document.getElementById('delivery_lat') || document.getElementById('deliveryLatInput');
+    const lngInput = document.getElementById('delivery_lng') || document.getElementById('deliveryLngInput');
 
+    let dLat = (latInput && latInput.value) ? parseFloat(latInput.value) : currentCustomerLat;
+    let dLng = (lngInput && lngInput.value) ? parseFloat(lngInput.value) : currentCustomerLng;
+
+    // Ensure coordinates are populated: if empty, geocode using Nominatim before sending
+    if ((dLat == null || dLng == null || isNaN(dLat) || isNaN(dLng)) && address) {
+        try {
+            const geo = await geocodeAddressNominatim(address);
+            if (geo && geo.lat && geo.lng) {
+                dLat = geo.lat;
+                dLng = geo.lng;
+            }
+        } catch (e) {
+            console.warn('Pre-checkout geocoding failed:', e);
+        }
+    }
+
+    const deliveryFee = 30;
     const payload = {
         action: 'checkout',
         cart: cart,
         delivery_fee: deliveryFee,
         delivery_address: address,
-        delivery_lat: dLat,
-        delivery_lng: dLng,
-        customer_lat: dLat,
-        customer_lng: dLng
+        delivery_lat: (dLat !== null && !isNaN(dLat)) ? dLat : null,
+        delivery_lng: (dLng !== null && !isNaN(dLng)) ? dLng : null,
+        customer_lat: (dLat !== null && !isNaN(dLat)) ? dLat : null,
+        customer_lng: (dLng !== null && !isNaN(dLng)) ? dLng : null
     };
     
     fetch(window.location.href, {
@@ -1816,6 +2007,42 @@ function closeLogout() {
 updateBadge();
 loadNotifications();
 setInterval(loadNotifications, 6000);
+
+// Auto-request live location if allowed by browser
+requestLiveGpsIfAllowed();
+
+// Wire up typing and blur geocoding events for delivery address inputs
+document.addEventListener('DOMContentLoaded', () => {
+    const mainAddr = document.getElementById('deliveryAddressInput');
+    if (mainAddr) {
+        mainAddr.addEventListener('input', (e) => handleAddressTyping(e.target.value, false));
+        mainAddr.addEventListener('blur', (e) => handleAddressBlur(e.target.value, false));
+        mainAddr.addEventListener('change', (e) => handleAddressBlur(e.target.value, false));
+    }
+    const modalAddr = document.getElementById('modalDeliveryAddress');
+    if (modalAddr) {
+        modalAddr.addEventListener('input', (e) => handleAddressTyping(e.target.value, true));
+        modalAddr.addEventListener('blur', (e) => handleAddressBlur(e.target.value, true));
+        modalAddr.addEventListener('change', (e) => handleAddressBlur(e.target.value, true));
+    }
+});
+
+// Also run immediately in case DOM is already parsed
+(function() {
+    const mainAddr = document.getElementById('deliveryAddressInput');
+    if (mainAddr) {
+        mainAddr.addEventListener('input', (e) => handleAddressTyping(e.target.value, false));
+        mainAddr.addEventListener('blur', (e) => handleAddressBlur(e.target.value, false));
+        mainAddr.addEventListener('change', (e) => handleAddressBlur(e.target.value, false));
+    }
+    const modalAddr = document.getElementById('modalDeliveryAddress');
+    if (modalAddr) {
+        modalAddr.addEventListener('input', (e) => handleAddressTyping(e.target.value, true));
+        modalAddr.addEventListener('blur', (e) => handleAddressBlur(e.target.value, true));
+        modalAddr.addEventListener('change', (e) => handleAddressBlur(e.target.value, true));
+    }
+})();
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeLogout(); closeNotifications(); closeAddressPromptModal(); }
 });
