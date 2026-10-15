@@ -219,6 +219,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         'store_lng'          => $store_lng,
         'destination_lat'    => $dest_lat,
         'destination_lng'    => $dest_lng,
+        'lat'                => $rider_lat,
+        'lng'                => $rider_lng,
         'rider_lat'          => $rider_lat,
         'rider_lng'          => $rider_lng,
         'rider_name'         => $o['rider_name'],

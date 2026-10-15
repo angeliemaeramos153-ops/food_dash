@@ -926,6 +926,32 @@ button{cursor:pointer}
 .cust-comm-btn.msg:hover {
   filter: brightness(1.08);
 }
+.cust-comm-btn.sms {
+  background: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.25);
+}
+.cust-comm-btn.sms:hover {
+  background: #0369a1;
+}
+.cust-track-eta-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #fdf8eb;
+  border: 1.5px solid #f3d18e;
+  border-radius: 20px;
+  padding: 8px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--olive-shadow);
+  margin-top: 8px;
+  box-shadow: 0 2px 8px rgba(216, 143, 42, 0.12);
+}
+.cust-rider-pin {
+  transition: all 0.6s ease-out;
+}
 .cust-track-status-bar {
   display: flex;
   justify-content: space-between;
@@ -1534,12 +1560,21 @@ button{cursor:pointer}
       </div>
       <div class="cust-rider-actions">
         <a id="custTrackCallLink" href="tel:+639175550192" class="cust-comm-btn call" title="Call Rider">
-          <i class="fa-solid fa-phone"></i> Call
+          <i class="fa-solid fa-phone"></i> Call Rider
         </a>
-        <button id="custTrackMsgBtn" type="button" class="cust-comm-btn msg" onclick="openCustomerChat()" title="Message Rider">
-          <i class="fa-solid fa-comment-dots"></i> Message
+        <button id="custTrackMsgBtn" type="button" class="cust-comm-btn msg" onclick="openCustomerChat()" title="Message Rider (Chat)">
+          <i class="fa-solid fa-comment-dots"></i> Message Rider
         </button>
+        <a id="custTrackSmsBtn" href="sms:+639175550192" class="cust-comm-btn sms" title="Direct SMS to Rider">
+          <i class="fa-solid fa-envelope"></i> SMS
+        </a>
       </div>
+    </div>
+
+    <!-- Remaining distance & ETA badge (e.g. "500m away • ~3 mins") -->
+    <div class="cust-track-eta-badge" id="custTrackEtaBadge">
+      <i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i>
+      <span id="custTrackEtaBadgeText">Locating rider & calculating ETA...</span>
     </div>
 
     <!-- ETA and Distance Bar -->
@@ -2773,6 +2808,17 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// URL Query Parameter Routing (e.g. ?track=123 or ?screen=orders)
+const customerUrlParams = new URLSearchParams(window.location.search);
+if (customerUrlParams.has('track') || customerUrlParams.has('track_order') || customerUrlParams.has('order_id')) {
+  const trackId = parseInt(customerUrlParams.get('track') || customerUrlParams.get('track_order') || customerUrlParams.get('order_id'));
+  if (trackId) {
+    setTimeout(() => openCustomerTrackingModal(trackId), 250);
+  }
+} else if (customerUrlParams.get('screen') === 'orders') {
+  showScreen('orders');
+}
+
 // Customer Live GPS Tracking & Rider Chat
 let custTrackingMap = null;
 let custStoreMarker = null;
@@ -2807,7 +2853,7 @@ function openCustomerTrackingModal(orderId) {
     if (activeCustomerTrackingOrderId) {
       fetchCustomerLiveTracking(activeCustomerTrackingOrderId, false);
     }
-  }, 2500);
+  }, 2000); // 2-second real-time polling loop
 }
 
 function closeCustomerTrackingModal() {
@@ -2819,9 +2865,56 @@ function closeCustomerTrackingModal() {
   }
 }
 
+// Distance helper
+function calculateHaversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function updateCustomerEtaBadge(dKm) {
+  const badgeEl = document.getElementById('custTrackEtaBadgeText');
+  const distTextEl = document.getElementById('custTrackDistText');
+  const etaTextEl = document.getElementById('custTrackEtaText');
+  if (dKm === null || isNaN(dKm)) return;
+
+  const d = parseFloat(dKm);
+  let badgeStr = '';
+  let distStr = '';
+  let etaStr = '';
+
+  if (d <= 0.05) {
+    badgeStr = 'Arrived at your door! • 0 mins';
+    distStr = 'Arrived!';
+    etaStr = 'Rider is outside now! 🛵';
+  } else if (d < 0.2) {
+    const meters = Math.round(d * 1000);
+    badgeStr = `${meters}m away • ~1 min`;
+    distStr = `${meters} m away`;
+    etaStr = 'Arriving in ~1 min 🛵';
+  } else if (d < 1.0) {
+    const meters = Math.round(d * 1000);
+    const mins = Math.max(1, Math.round(d * 4));
+    badgeStr = `${meters}m away • ~${mins} mins`;
+    distStr = `${meters} m away`;
+    etaStr = `Arriving in ~${mins} mins`;
+  } else {
+    const mins = Math.max(3, Math.round(d * 3.5));
+    badgeStr = `${d.toFixed(1)} km away • ~${mins} mins`;
+    distStr = `${d.toFixed(1)} km away`;
+    etaStr = `Estimated ~${mins} mins`;
+  }
+
+  if (badgeEl) badgeEl.textContent = badgeStr;
+  if (distTextEl) distTextEl.textContent = distStr;
+  if (etaTextEl) etaTextEl.textContent = etaStr;
+}
+
 async function fetchCustomerLiveTracking(orderId, isInitial) {
   try {
-    const res = await fetch(`tracking_api.php?order_id=${orderId}&action=get_location`);
+    const res = await fetch(`tracking_api.php?action=get_location&order_id=${orderId}`);
     const data = await res.json();
     if (!data.success || !data.order) {
       console.warn('Tracking API response:', data.message);
@@ -2833,8 +2926,9 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     const storeLng = parseFloat(data.store_lng || ord.store_lng);
     const destLat = parseFloat(data.destination_lat || ord.destination_lat || ord.customer_lat);
     const destLng = parseFloat(data.destination_lng || ord.destination_lng || ord.customer_lng);
-    const riderLat = parseFloat(data.rider_lat || ord.rider_lat);
-    const riderLng = parseFloat(data.rider_lng || ord.rider_lng);
+    // Smoothly read live rider coordinates from data.lat/data.lng or fallback aliases
+    const riderLat = parseFloat(data.lat ?? data.rider_lat ?? ord.rider_lat);
+    const riderLng = parseFloat(data.lng ?? data.rider_lng ?? ord.rider_lng);
 
     // Update Rider info with non-null fallbacks
     currentTrackingRiderName = data.rider_name || ord.rider_name || 'Alex Rider';
@@ -2850,38 +2944,24 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     const callLink = document.getElementById('custTrackCallLink');
     if (callLink) callLink.href = `tel:${riderDial}`;
 
+    const smsLink = document.getElementById('custTrackSmsBtn');
+    if (smsLink) smsLink.href = `sms:${riderDial}`;
+
+    const chatSmsLink = document.getElementById('custChatSmsLink');
+    if (chatSmsLink) chatSmsLink.href = `sms:${riderDial}?body=Hi%20${encodeURIComponent(currentTrackingRiderName)},%20regarding%20my%20order%20${encodeURIComponent(ord.order_ref || '')}`;
+
     const refEl = document.getElementById('trackModalOrderRef');
     if (refEl) refEl.textContent = `${ord.order_ref || 'Order #' + orderId} Tracking`;
 
     const subEl = document.getElementById('trackModalStoreSubtitle');
     if (subEl) subEl.textContent = `${ord.store_name || 'Store'} • ${ord.status || 'On Delivery'}`;
 
-    // Update Distance / ETA text
-    const distTextEl = document.getElementById('custTrackDistText');
-    const etaTextEl = document.getElementById('custTrackEtaText');
-
-    if (data.distance_km !== null && !isNaN(data.distance_km)) {
-      const dKm = parseFloat(data.distance_km);
-      let distStr = '';
-      let etaStr = '';
-      if (dKm < 0.2) {
-        distStr = 'Arrived at your door!';
-        etaStr = 'Rider is outside now! 🛵';
-      } else if (dKm < 1.0) {
-        const meters = Math.round(dKm * 1000);
-        distStr = `${meters} m away`;
-        etaStr = 'Arriving in ~2-3 mins';
-      } else {
-        distStr = `${dKm.toFixed(1)} km away`;
-        const mins = Math.max(3, Math.round(dKm * 3));
-        etaStr = `Estimated ~${mins} mins`;
-      }
-      if (distTextEl) distTextEl.textContent = distStr;
-      if (etaTextEl) etaTextEl.textContent = etaStr;
-    } else {
-      if (distTextEl) distTextEl.textContent = 'Calculating...';
-      if (etaTextEl) etaTextEl.textContent = 'Rider en route';
+    // Update Distance / ETA text & badge (e.g. "500m away • ~3 mins")
+    let dKm = (data.distance_km !== null && !isNaN(data.distance_km)) ? parseFloat(data.distance_km) : null;
+    if (dKm === null && !isNaN(destLat) && !isNaN(destLng) && !isNaN(riderLat) && !isNaN(riderLng) && riderLat !== 0) {
+      dKm = calculateHaversineKm(riderLat, riderLng, destLat, destLng);
     }
+    updateCustomerEtaBadge(dKm);
 
     renderCustomerMap({
       storeLat, storeLng, storeName: ord.store_name,
@@ -3029,6 +3109,10 @@ async function fetchCustOsrmRoute(startLat, startLng, destLat, destLng) {
         const leafletCoords = data.routes[0].geometry.coordinates.map(pt => [pt[1], pt[0]]);
         if (custRoutePolyline && leafletCoords.length > 0) {
           custRoutePolyline.setLatLngs(leafletCoords);
+        }
+        if (typeof data.routes[0].distance === 'number') {
+          const roadDistKm = data.routes[0].distance / 1000;
+          updateCustomerEtaBadge(roadDistKm);
         }
       }
     }
