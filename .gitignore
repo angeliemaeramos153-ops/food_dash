@@ -1,0 +1,8 @@
+# Cloudflare tunnel binary
+cloudflared.exe
+*.exe
+
+# Local logs and caches
+*.log
+.DS_Store
+Thumbs.db

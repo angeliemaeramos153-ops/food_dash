@@ -1151,8 +1151,8 @@ function startLiveLocation(orderId) {
   
   const options = {
     enableHighAccuracy: true,
-    maximumAge: 0,
-    timeout: 10000
+    maximumAge: 3000,
+    timeout: 15000
   };
 
   try {
@@ -1171,7 +1171,15 @@ function startLiveLocation(orderId) {
       (error) => {
         // When navigator.geolocation fails or throws "Origin does not have permission to use Geolocation service"
         console.warn('Geolocation error:', error);
-        enableManualSimulation("GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.");
+        if (error.code === error.PERMISSION_DENIED || !window.isSecureContext) {
+          enableManualSimulation("GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.");
+        } else if (error.code === error.TIMEOUT) {
+          const gpsStatusEl = document.getElementById('gpsStatus');
+          if (gpsStatusEl) gpsStatusEl.textContent = 'Acquiring satellite lock… tap or drag marker to simulate if indoors.';
+          enableManualSimulation("Acquiring GPS fix… tap or drag marker to simulate if indoors.");
+        } else {
+          enableManualSimulation("GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.");
+        }
       },
       options
     );
