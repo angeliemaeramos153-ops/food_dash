@@ -75,6 +75,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $conn->prepare("UPDATE food_orders SET rider_lat = :lat, rider_lng = :lng, location_updated_at = NOW() WHERE order_id = :oid");
         $stmt->execute([':lat' => $lat, ':lng' => $lng, ':oid' => $order_id]);
 
+        if ($rider_id > 0) {
+            $stmtR = $conn->prepare("UPDATE riders SET current_lat = :lat, current_lng = :lng WHERE rider_id = :rid");
+            $stmtR->execute([':lat' => $lat, ':lng' => $lng, ':rid' => $rider_id]);
+        }
+
         // Check proximity immediately
         $stmt = $conn->prepare("SELECT customer_id, order_ref, customer_lat, customer_lng, delivery_status, near_notified_at FROM food_orders WHERE order_id = :oid LIMIT 1");
         $stmt->execute([':oid' => $order_id]);

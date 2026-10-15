@@ -14,18 +14,18 @@ $msg = ''; $error = '';
 
 // Match the rider account to riders table: user_id first, then name/Alex Gonzaga, fallback to 1
 $r = null;
-$stmt = $conn->prepare("SELECT rider_id, rider_name, status, current_order FROM riders WHERE user_id = :uid LIMIT 1");
+$stmt = $conn->prepare("SELECT rider_id, rider_name, status, current_lat, current_lng, current_order FROM riders WHERE user_id = :uid LIMIT 1");
 $stmt->execute([':uid' => $user_id]);
 $r = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$r) {
     $full = trim($user_name);
-    $stmt = $conn->prepare("SELECT rider_id, rider_name, status, current_order FROM riders WHERE LOWER(TRIM(rider_name)) = LOWER(:rname) OR rider_name LIKE '%Alex%' LIMIT 1");
+    $stmt = $conn->prepare("SELECT rider_id, rider_name, status, current_lat, current_lng, current_order FROM riders WHERE LOWER(TRIM(rider_name)) = LOWER(:rname) OR rider_name LIKE '%Alex%' LIMIT 1");
     $stmt->execute([':rname' => $full]);
     $r = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 if (!$r) {
-    $q = $conn->query("SELECT rider_id, rider_name, status, current_order FROM riders ORDER BY rider_id ASC LIMIT 1");
+    $q = $conn->query("SELECT rider_id, rider_name, status, current_lat, current_lng, current_order FROM riders ORDER BY rider_id ASC LIMIT 1");
     $r = $q ? $q->fetch(PDO::FETCH_ASSOC) : null;
 }
 $rid = $r ? (int)$r['rider_id'] : 1;
@@ -192,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
 }
 
 if ($r) {
-    $stmt=$conn->prepare("SELECT rider_id, rider_name, status, current_order FROM riders WHERE rider_id = :rid");
+    $stmt=$conn->prepare("SELECT rider_id, rider_name, status, current_lat, current_lng, current_order FROM riders WHERE rider_id = :rid");
     $stmt->execute([':rid' => $rid]);
     $r = $stmt->fetch(PDO::FETCH_ASSOC);
 }
@@ -200,21 +200,37 @@ if ($r) {
 $ready_orders = [];
 $my_orders = [];
 if ($rid > 0) {
-    // 1. Orders Ready for Pickup: Unassigned orders with case-insensitive status matching ready_for_pickup, ready, or assigned
-    $stmt_ready = $conn->prepare("SELECT order_id, order_ref, customer_name, store_name, items_summary, total_amount, status, delivery_status, rider_id, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at 
-        FROM food_orders 
-        WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned') 
-          AND (rider_id IS NULL OR rider_id = 0) 
-        ORDER BY order_id DESC LIMIT 30");
+    // 1. Orders Ready for Pickup: Joined with shops table for real store coordinates
+    $stmt_ready = $conn->prepare("SELECT 
+            o.order_id, o.order_ref, o.customer_name, o.store_name, o.items_summary, o.total_amount, 
+            o.status, o.delivery_status, o.rider_id, o.delivery_address, 
+            o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, o.created_at, o.shop_id,
+            COALESCE(s.latitude, s.lat) AS store_lat, 
+            COALESCE(s.longitude, s.lng) AS store_lng
+        FROM food_orders o
+        LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
+        WHERE LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned') 
+          AND (o.rider_id IS NULL OR o.rider_id = 0) 
+        ORDER BY o.order_id DESC LIMIT 30");
     $stmt_ready->execute();
     $ready_orders = $stmt_ready->fetchAll(PDO::FETCH_ASSOC);
 
-    // 2. My Delivery: Orders assigned to this rider with case-insensitive status matching ready_for_pickup, ready, assigned, or active delivery
-    $stmt_my = $conn->prepare("SELECT order_id, order_ref, customer_name, store_name, items_summary, total_amount, status, delivery_status, rider_id, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, rider_lat, rider_lng, created_at 
-        FROM food_orders 
-        WHERE rider_id = :rid 
-          AND (LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer')) 
-        ORDER BY order_id DESC LIMIT 30");
+    // 2. My Delivery: Joined with shops table for real store coordinates and riders table for true live rider GPS
+    $stmt_my = $conn->prepare("SELECT 
+            o.order_id, o.order_ref, o.customer_name, o.store_name, o.items_summary, o.total_amount, 
+            o.status, o.delivery_status, o.rider_id, o.delivery_address, 
+            o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, 
+            o.rider_lat, o.rider_lng, o.created_at, o.shop_id,
+            COALESCE(s.latitude, s.lat) AS store_lat, 
+            COALESCE(s.longitude, s.lng) AS store_lng,
+            r.current_lat AS rider_current_lat,
+            r.current_lng AS rider_current_lng
+        FROM food_orders o
+        LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
+        LEFT JOIN riders r ON (o.rider_id = r.rider_id)
+        WHERE o.rider_id = :rid 
+          AND (LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer')) 
+        ORDER BY o.order_id DESC LIMIT 30");
     $stmt_my->execute([':rid' => $rid]);
     $my_orders = $stmt_my->fetchAll(PDO::FETCH_ASSOC);
 }
@@ -223,31 +239,63 @@ if ($rid > 0) {
 $active_order_for_map = null;
 if (!empty($my_orders)) {
     $first_order = $my_orders[0];
-    $c_lat = (isset($first_order['delivery_lat']) && is_numeric($first_order['delivery_lat'])) ? (float)$first_order['delivery_lat'] : ((isset($first_order['customer_lat']) && is_numeric($first_order['customer_lat'])) ? (float)$first_order['customer_lat'] : null);
-    $c_lng = (isset($first_order['delivery_lng']) && is_numeric($first_order['delivery_lng'])) ? (float)$first_order['delivery_lng'] : ((isset($first_order['customer_lng']) && is_numeric($first_order['customer_lng'])) ? (float)$first_order['customer_lng'] : null);
 
-    // Fallback if coordinates missing: default to area based on address or central region
-    if ($c_lat === null || $c_lng === null || ((float)$c_lat == 0 && (float)$c_lng == 0)) {
-        $addr_l = strtolower($first_order['delivery_address'] ?? '');
-        if (str_contains($addr_l, 'ormoc')) {
-            $c_lat = 11.0054;
-            $c_lng = 124.6078;
-        } else {
-            $c_lat = 14.5830;
-            $c_lng = 121.0590;
-        }
+    // 1. Customer Destination: strictly from order delivery coordinates without arbitrary offsets
+    $c_lat = (isset($first_order['delivery_lat']) && is_numeric($first_order['delivery_lat'])) 
+        ? (float)$first_order['delivery_lat'] 
+        : ((isset($first_order['customer_lat']) && is_numeric($first_order['customer_lat'])) ? (float)$first_order['customer_lat'] : null);
+    $c_lng = (isset($first_order['delivery_lng']) && is_numeric($first_order['delivery_lng'])) 
+        ? (float)$first_order['delivery_lng'] 
+        : ((isset($first_order['customer_lng']) && is_numeric($first_order['customer_lng'])) ? (float)$first_order['customer_lng'] : null);
+
+    if ($c_lat !== null && ((float)$c_lat == 0 || $c_lat < -90 || $c_lat > 90)) $c_lat = null;
+    if ($c_lng !== null && ((float)$c_lng == 0 || $c_lng < -180 || $c_lng > 180)) $c_lng = null;
+
+    // 2. Dynamic Store Origin: retrieved from joined shops table
+    $s_lat = (isset($first_order['store_lat']) && is_numeric($first_order['store_lat'])) ? (float)$first_order['store_lat'] : null;
+    $s_lng = (isset($first_order['store_lng']) && is_numeric($first_order['store_lng'])) ? (float)$first_order['store_lng'] : null;
+    if ($s_lat !== null && ((float)$s_lat == 0 || $s_lat < -90 || $s_lat > 90)) $s_lat = null;
+    if ($s_lng !== null && ((float)$s_lng == 0 || $s_lng < -180 || $s_lng > 180)) $s_lng = null;
+
+    // 3. True Live Rider GPS: from riders table or food_orders table
+    $live_rider_lat = null;
+    $live_rider_lng = null;
+
+    if (isset($first_order['rider_current_lat']) && is_numeric($first_order['rider_current_lat'])) {
+        $live_rider_lat = (float)$first_order['rider_current_lat'];
+    } elseif (isset($r['current_lat']) && is_numeric($r['current_lat'])) {
+        $live_rider_lat = (float)$r['current_lat'];
+    } elseif (isset($first_order['rider_lat']) && is_numeric($first_order['rider_lat'])) {
+        $live_rider_lat = (float)$first_order['rider_lat'];
     }
 
-    $r_lat = (isset($first_order['rider_lat']) && is_numeric($first_order['rider_lat'])) ? (float)$first_order['rider_lat'] : null;
-    $r_lng = (isset($first_order['rider_lng']) && is_numeric($first_order['rider_lng'])) ? (float)$first_order['rider_lng'] : null;
+    if (isset($first_order['rider_current_lng']) && is_numeric($first_order['rider_current_lng'])) {
+        $live_rider_lng = (float)$first_order['rider_current_lng'];
+    } elseif (isset($r['current_lng']) && is_numeric($r['current_lng'])) {
+        $live_rider_lng = (float)$r['current_lng'];
+    } elseif (isset($first_order['rider_lng']) && is_numeric($first_order['rider_lng'])) {
+        $live_rider_lng = (float)$first_order['rider_lng'];
+    }
+
+    if ($live_rider_lat !== null && ((float)$live_rider_lat == 0 || $live_rider_lat < -90 || $live_rider_lat > 90)) $live_rider_lat = null;
+    if ($live_rider_lng !== null && ((float)$live_rider_lng == 0 || $live_rider_lng < -180 || $live_rider_lng > 180)) $live_rider_lng = null;
+
+    $r_lat = null;
+    $r_lng = null;
     $is_initial_shop_origin = false;
 
-    // Initial rider position defaults to store dispatch location (~800m away) if not yet broadcast
-    if ($r_lat === null || $r_lng === null || ((float)$r_lat == 0 && (float)$r_lng == 0)) {
-        $r_lat = $c_lat - 0.0072;
-        $r_lng = $c_lng - 0.0058;
+    if ($live_rider_lat !== null && $live_rider_lng !== null) {
+        // True Live Rider GPS: Rider has transmitted live coordinates -> use those exact values
+        $r_lat = $live_rider_lat;
+        $r_lng = $live_rider_lng;
+        $is_initial_shop_origin = false;
+    } elseif ($s_lat !== null && $s_lng !== null) {
+        // Dynamic Store Origin: Rider has not transmitted live coordinates yet -> default starting point of the route and initial pickup marker strictly to store's actual database coordinates
+        $r_lat = $s_lat;
+        $r_lng = $s_lng;
         $is_initial_shop_origin = true;
     }
+    // If neither exists, $r_lat and $r_lng remain null. NO phantom markers, NO offsets!
 
     $active_order_for_map = [
         'order_id' => (int)$first_order['order_id'],
@@ -257,6 +305,8 @@ if (!empty($my_orders)) {
         'delivery_address' => (string)($first_order['delivery_address'] ?? ''),
         'customer_lat' => $c_lat,
         'customer_lng' => $c_lng,
+        'store_lat' => $s_lat,
+        'store_lng' => $s_lng,
         'rider_lat' => $r_lat,
         'rider_lng' => $r_lng,
         'is_initial_shop_origin' => $is_initial_shop_origin
@@ -614,6 +664,28 @@ function updateRouteUI(rLat, rLng, cLat, cLng) {
   }
 }
 
+function createRiderIcon(isStore) {
+  const iconClass = isStore ? 'fa-store' : 'fa-motorcycle';
+  const bg = isStore ? '#D88F2A' : '#2e7d32';
+  const pulse = isStore ? '' : '<div id="riderPulseRing" style="position:absolute;top:-4px;left:-4px;width:42px;height:42px;border-radius:50%;background:rgba(46,125,50,0.3);animation:riderPulse 2s infinite ease-out;"></div>';
+  return L.divIcon({
+    className: 'custom-map-marker',
+    html: `
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+        ${pulse}
+        <div style="background:${bg};color:#ffffff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,0.3);border:2.5px solid #ffffff;font-size:15px;position:relative;z-index:2;">
+          <i class="fa-solid ${iconClass}"></i>
+        </div>
+        <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ${bg};margin-top:-2px;position:relative;z-index:2;"></div>
+        <div style="background:rgba(0,0,0,0.2);width:16px;height:4px;border-radius:50%;margin-top:1px;"></div>
+      </div>
+    `,
+    iconSize: [34, 46],
+    iconAnchor: [17, 43],
+    popupAnchor: [0, -42]
+  });
+}
+
 function initDeliveryMap(data) {
   if (!data || !document.getElementById('delivery-map')) return;
   if (typeof L === 'undefined') {
@@ -621,8 +693,15 @@ function initDeliveryMap(data) {
     return;
   }
 
-  const customerCoord = [data.customer_lat, data.customer_lng];
-  const riderCoord = [data.rider_lat, data.rider_lng];
+  const hasCustomerCoord = (data.customer_lat !== null && data.customer_lng !== null && !isNaN(data.customer_lat) && !isNaN(data.customer_lng) && Number(data.customer_lat) !== 0);
+  const hasRiderCoord = (data.rider_lat !== null && data.rider_lng !== null && !isNaN(data.rider_lat) && !isNaN(data.rider_lng) && Number(data.rider_lat) !== 0);
+
+  // If no valid coordinates exist yet, do not render a phantom marker in the sea
+  if (!hasCustomerCoord && !hasRiderCoord) {
+    const distEl = document.getElementById('mapRouteDistance');
+    if (distEl) distEl.textContent = 'Awaiting delivery coordinates…';
+    return;
+  }
 
   // Initialize Map
   deliveryMap = L.map('delivery-map', {
@@ -637,66 +716,70 @@ function initDeliveryMap(data) {
   }).addTo(deliveryMap);
 
   // Customer Destination Custom Marker
-  const customerIcon = L.divIcon({
-    className: 'custom-map-marker',
-    html: `
-      <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
-        <div style="background:#923D32;color:#ffffff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(146,61,50,0.45);border:2.5px solid #ffffff;font-size:15px;">
-          <i class="fa-solid fa-house-chimney"></i>
+  if (hasCustomerCoord) {
+    const customerCoord = [data.customer_lat, data.customer_lng];
+    const customerIcon = L.divIcon({
+      className: 'custom-map-marker',
+      html: `
+        <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+          <div style="background:#923D32;color:#ffffff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(146,61,50,0.45);border:2.5px solid #ffffff;font-size:15px;">
+            <i class="fa-solid fa-house-chimney"></i>
+          </div>
+          <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid #923D32;margin-top:-2px;"></div>
+          <div style="background:rgba(0,0,0,0.2);width:16px;height:4px;border-radius:50%;margin-top:1px;"></div>
         </div>
-        <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid #923D32;margin-top:-2px;"></div>
-        <div style="background:rgba(0,0,0,0.2);width:16px;height:4px;border-radius:50%;margin-top:1px;"></div>
-      </div>
-    `,
-    iconSize: [34, 46],
-    iconAnchor: [17, 43],
-    popupAnchor: [0, -42]
-  });
+      `,
+      iconSize: [34, 46],
+      iconAnchor: [17, 43],
+      popupAnchor: [0, -42]
+    });
 
-  customerMarker = L.marker(customerCoord, { icon: customerIcon }).addTo(deliveryMap);
-  customerMarker.bindPopup(`
-    <b><i class="fa-solid fa-location-dot" style="color:#923D32"></i> Customer Destination</b><br>
-    <strong>${esc(data.customer_name)}</strong><br>
-    <span>${esc(data.delivery_address || 'Delivery Address')}</span>
-  `);
+    customerMarker = L.marker(customerCoord, { icon: customerIcon }).addTo(deliveryMap);
+    customerMarker.bindPopup(`
+      <b><i class="fa-solid fa-location-dot" style="color:#923D32"></i> Customer Destination</b><br>
+      <strong>${esc(data.customer_name)}</strong><br>
+      <span>${esc(data.delivery_address || 'Delivery Address')}</span>
+    `);
+  }
 
-  // Rider Starting / Current Location Custom Marker
-  const riderIcon = L.divIcon({
-    className: 'custom-map-marker',
-    html: `
-      <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
-        <div id="riderPulseRing" style="position:absolute;top:-4px;left:-4px;width:42px;height:42px;border-radius:50%;background:rgba(46,125,50,0.3);animation:riderPulse 2s infinite ease-out;"></div>
-        <div style="background:#2e7d32;color:#ffffff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(46,125,50,0.45);border:2.5px solid #ffffff;font-size:15px;position:relative;z-index:2;">
-          <i class="fa-solid fa-motorcycle"></i>
-        </div>
-        <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid #2e7d32;margin-top:-2px;position:relative;z-index:2;"></div>
-        <div style="background:rgba(0,0,0,0.2);width:16px;height:4px;border-radius:50%;margin-top:1px;"></div>
-      </div>
-    `,
-    iconSize: [34, 46],
-    iconAnchor: [17, 43],
-    popupAnchor: [0, -42]
-  });
+  // Rider Starting Point / Store Origin Marker
+  if (hasRiderCoord) {
+    const riderCoord = [data.rider_lat, data.rider_lng];
+    const icon = createRiderIcon(data.is_initial_shop_origin);
+    riderMarker = L.marker(riderCoord, { icon: icon }).addTo(deliveryMap);
+    const riderLabel = data.is_initial_shop_origin 
+      ? `<b><i class="fa-solid fa-store" style="color:#D88F2A"></i> ${esc(data.store_name)}</b><br>Store Pickup Point` 
+      : `<b><i class="fa-solid fa-motorcycle" style="color:#2e7d32"></i> Rider Location</b><br>On Route`;
+    riderMarker.bindPopup(riderLabel);
+  }
 
-  riderMarker = L.marker(riderCoord, { icon: riderIcon }).addTo(deliveryMap);
-  const riderLabel = data.is_initial_shop_origin ? `<b>${esc(data.store_name)}</b><br>Store Pickup Point` : `<b>Rider Location</b><br>On Route`;
-  riderMarker.bindPopup(riderLabel);
+  // Route Polyline & Bounds
+  if (hasCustomerCoord && hasRiderCoord) {
+    const customerCoord = [data.customer_lat, data.customer_lng];
+    const riderCoord = [data.rider_lat, data.rider_lng];
 
-  // Clean Polyline Route
-  routePolyline = L.polyline([riderCoord, customerCoord], {
-    color: '#D88F2A',
-    weight: 4,
-    opacity: 0.85,
-    dashArray: '7, 8',
-    lineCap: 'round',
-    lineJoin: 'round'
-  }).addTo(deliveryMap);
+    routePolyline = L.polyline([riderCoord, customerCoord], {
+      color: '#D88F2A',
+      weight: 4,
+      opacity: 0.85,
+      dashArray: '7, 8',
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(deliveryMap);
 
-  // Fit bounds to display both markers
-  const bounds = L.latLngBounds([riderCoord, customerCoord]);
-  deliveryMap.fitBounds(bounds, { padding: [35, 35], maxZoom: 16 });
-
-  updateRouteUI(riderCoord[0], riderCoord[1], customerCoord[0], customerCoord[1]);
+    const bounds = L.latLngBounds([riderCoord, customerCoord]);
+    deliveryMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+    updateRouteUI(riderCoord[0], riderCoord[1], customerCoord[0], customerCoord[1]);
+  } else if (hasCustomerCoord) {
+    // Keep map centered strictly on customer destination until live GPS is acquired
+    deliveryMap.setView([data.customer_lat, data.customer_lng], 16);
+    const distEl = document.getElementById('mapRouteDistance');
+    if (distEl) distEl.textContent = 'Waiting for live rider GPS…';
+  } else if (hasRiderCoord) {
+    deliveryMap.setView([data.rider_lat, data.rider_lng], 16);
+    const distEl = document.getElementById('mapRouteDistance');
+    if (distEl) distEl.textContent = 'Store pickup location';
+  }
 
   setTimeout(() => {
     if (deliveryMap) deliveryMap.invalidateSize();
@@ -704,17 +787,52 @@ function initDeliveryMap(data) {
 }
 
 function updateRiderMarkerOnMap(lat, lng) {
-  if (!deliveryMap || !riderMarker) return;
-  
-  riderMarker.setLatLng([lat, lng]);
+  if (!deliveryMap) return;
+
+  const numLat = parseFloat(lat);
+  const numLng = parseFloat(lng);
+  if (isNaN(numLat) || isNaN(numLng)) return;
+
+  const greenRiderIcon = createRiderIcon(false);
+
+  // Update green rider marker position dynamically with riderMarker.setLatLng
+  if (!riderMarker) {
+    riderMarker = L.marker([numLat, numLng], { icon: greenRiderIcon }).addTo(deliveryMap);
+  } else {
+    riderMarker.setIcon(greenRiderIcon);
+    riderMarker.setLatLng([numLat, numLng]);
+  }
+
   riderMarker.bindPopup(`
     <b><i class="fa-solid fa-satellite" style="color:#2e7d32"></i> Rider (Live GPS)</b><br>
-    <span>Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}</span><br>
+    <span>Lat: ${numLat.toFixed(5)}, Lng: ${numLng.toFixed(5)}</span><br>
     <small style="color:#666">Updated live just now</small>
   `);
 
-  if (activeDeliveryData) {
-    updateRouteUI(lat, lng, activeDeliveryData.customer_lat, activeDeliveryData.customer_lng);
+  // Recalculate route polyline directly between rider's live coordinates and customer's delivery_lat/delivery_lng
+  if (activeDeliveryData && activeDeliveryData.customer_lat !== null && activeDeliveryData.customer_lng !== null) {
+    const cLat = parseFloat(activeDeliveryData.customer_lat);
+    const cLng = parseFloat(activeDeliveryData.customer_lng);
+
+    if (!isNaN(cLat) && !isNaN(cLng)) {
+      if (!routePolyline) {
+        routePolyline = L.polyline([[numLat, numLng], [cLat, cLng]], {
+          color: '#D88F2A',
+          weight: 4,
+          opacity: 0.85,
+          dashArray: '7, 8',
+          lineCap: 'round',
+          lineJoin: 'round'
+        }).addTo(deliveryMap);
+
+        const bounds = L.latLngBounds([[numLat, numLng], [cLat, cLng]]);
+        deliveryMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+      } else {
+        routePolyline.setLatLngs([[numLat, numLng], [cLat, cLng]]);
+      }
+
+      updateRouteUI(numLat, numLng, cLat, cLng);
+    }
   }
 
   const liveTag = document.getElementById('mapGpsLiveTag');
