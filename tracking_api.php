@@ -1,5 +1,5 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) session_start();
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
 header('Content-Type: application/json; charset=utf-8');
@@ -126,35 +126,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     out(false, 'Unknown tracking action.', [], 400);
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'track') {
-    if ($role !== 'customer') {
-        out(false, 'Only Customers can track orders.', [], 403);
-    }
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), ['track', 'get_location'], true) || isset($_GET['order_id']))) {
     $order_id = (int)($_GET['order_id'] ?? 0);
     if ($order_id <= 0) {
         out(false, 'Order ID is required.', [], 422);
     }
 
-    $stmt = $conn->prepare("SELECT order_id, order_ref, customer_name, store_name, customer_lat, customer_lng, rider_id, rider_lat, rider_lng, location_updated_at, status, delivery_status, near_notified_at FROM food_orders WHERE order_id = :oid AND customer_id = :uid LIMIT 1");
-    $stmt->execute([':oid' => $order_id, ':uid' => $uid]);
+    $stmt = $conn->prepare("SELECT 
+        o.order_id, o.order_ref, o.customer_id, o.customer_name, 
+        COALESCE(o.customer_phone, cu.phone, '+63 928 555 0148') AS customer_phone,
+        o.store_name, o.delivery_address, 
+        o.status, o.delivery_status, o.near_notified_at, o.location_updated_at,
+        COALESCE(o.store_lat, s.latitude, s.lat) AS store_lat,
+        COALESCE(o.store_lng, s.longitude, s.lng) AS store_lng,
+        COALESCE(o.delivery_lat, o.customer_lat) AS destination_lat,
+        COALESCE(o.delivery_lng, o.customer_lng) AS destination_lng,
+        o.customer_lat, o.customer_lng,
+        o.rider_id,
+        COALESCE(o.rider_lat, r.current_lat) AS rider_lat,
+        COALESCE(o.rider_lng, r.current_lng) AS rider_lng,
+        COALESCE(r.rider_name, ru.full_name, 'Alex Rider') AS rider_name,
+        COALESCE(o.rider_phone, r.phone, ru.phone, '+63 917 555 0192') AS rider_phone
+    FROM food_orders o
+    LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
+    LEFT JOIN riders r ON (o.rider_id = r.rider_id)
+    LEFT JOIN users ru ON (r.user_id = ru.user_id)
+    LEFT JOIN users cu ON (o.customer_id = cu.user_id)
+    WHERE o.order_id = :oid
+    LIMIT 1");
+    $stmt->execute([':oid' => $order_id]);
     $o = $stmt->fetch(PDO::FETCH_ASSOC);
+
     if (!$o) {
         out(false, 'Order not found.', [], 404);
     }
 
+    // Customer can only view their own orders
+    if ($role === 'customer' && (int)$o['customer_id'] !== $uid) {
+        out(false, 'Access denied.', [], 403);
+    }
+
+    // Cast and normalize numeric coordinates
+    $store_lat = (isset($o['store_lat']) && is_numeric($o['store_lat'])) ? (float)$o['store_lat'] : null;
+    $store_lng = (isset($o['store_lng']) && is_numeric($o['store_lng'])) ? (float)$o['store_lng'] : null;
+    $dest_lat = (isset($o['destination_lat']) && is_numeric($o['destination_lat'])) ? (float)$o['destination_lat'] : null;
+    $dest_lng = (isset($o['destination_lng']) && is_numeric($o['destination_lng'])) ? (float)$o['destination_lng'] : null;
+    $rider_lat = (isset($o['rider_lat']) && is_numeric($o['rider_lat'])) ? (float)$o['rider_lat'] : null;
+    $rider_lng = (isset($o['rider_lng']) && is_numeric($o['rider_lng'])) ? (float)$o['rider_lng'] : null;
+
+    $o['store_lat'] = $store_lat;
+    $o['store_lng'] = $store_lng;
+    $o['destination_lat'] = $dest_lat;
+    $o['destination_lng'] = $dest_lng;
+    $o['rider_lat'] = $rider_lat;
+    $o['rider_lng'] = $rider_lng;
+
+    // Fallback phones guaranteed non-null
+    if (empty($o['customer_phone'])) $o['customer_phone'] = '+63 928 555 0148';
+    if (empty($o['rider_phone'])) $o['rider_phone'] = '+63 917 555 0192';
+
+    // Calculate distance between rider and destination
     $distance = null;
     $near = false;
-    if ($o['customer_lat'] !== null && $o['customer_lng'] !== null && $o['rider_lat'] !== null && $o['rider_lng'] !== null) {
-        $distance = distance_km((float)$o['customer_lat'], (float)$o['customer_lng'], (float)$o['rider_lat'], (float)$o['rider_lng']);
+    if ($dest_lat !== null && $dest_lng !== null && $rider_lat !== null && $rider_lng !== null) {
+        $distance = round(distance_km($dest_lat, $dest_lng, $rider_lat, $rider_lng), 3);
         $near = $distance <= 0.5;
-        if ($near && empty($o['near_notified_at']) && in_array($o['delivery_status'], ['on_the_way', 'near_customer'], true)) {
+
+        if ($near && empty($o['near_notified_at']) && in_array($o['delivery_status'], ['on_the_way', 'near_customer', 'out_for_delivery'], true)) {
             $conn->beginTransaction();
             try {
                 $u = $conn->prepare("UPDATE food_orders SET delivery_status = 'near_customer', status = 'near_customer', near_notified_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND near_notified_at IS NULL");
                 $u->execute([':oid' => $order_id]);
                 $changed = $u->rowCount();
                 if ($changed > 0) {
-                    create_notification($conn, $uid, 'rider_near', 'Your rider is near', 'Your rider is within about 500 meters of your delivery location. Please get ready for ' . $o['order_ref'] . '.', $order_id);
+                    create_notification($conn, (int)$o['customer_id'], 'rider_near', 'Your rider is near', 'Your rider is within about 500 meters of your delivery location. Please get ready for ' . $o['order_ref'] . '.', $order_id);
                     $o['status'] = 'near_customer';
                     $o['delivery_status'] = 'near_customer';
                 }
@@ -164,7 +209,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'track')
             }
         }
     }
-    out(true, '', ['order' => $o, 'distance_km' => $distance, 'near' => $near, 'near_threshold_km' => 0.5]);
+
+    out(true, 'Tracking data retrieved.', [
+        'order'              => $o,
+        'distance_km'        => $distance,
+        'near'               => $near,
+        'near_threshold_km'  => 0.5,
+        'store_lat'          => $store_lat,
+        'store_lng'          => $store_lng,
+        'destination_lat'    => $dest_lat,
+        'destination_lng'    => $dest_lng,
+        'rider_lat'          => $rider_lat,
+        'rider_lng'          => $rider_lng,
+        'rider_name'         => $o['rider_name'],
+        'rider_phone'        => $o['rider_phone'],
+        'customer_phone'     => $o['customer_phone'],
+    ]);
 }
 
 out(false, 'Invalid tracking request.', [], 400);

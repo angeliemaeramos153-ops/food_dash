@@ -309,6 +309,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Fetch customer's orders from food_orders table
 $db_orders = [];
 $ontheway_count = 0;
+$active_tracking_order = null;
 
 $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
 if ($stmt) {
@@ -318,6 +319,9 @@ if ($stmt) {
         $st = strtoupper(trim(str_replace([' ', '-'], '_', $row['status'])));
         if (in_array($st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER'])) {
             $ontheway_count++;
+            if (!$active_tracking_order) {
+                $active_tracking_order = $row;
+            }
         }
     }
 }
@@ -821,6 +825,351 @@ button{cursor:pointer}
 
 .logout{width:100%;background:#fff;cursor:pointer;font-family:inherit;margin-top:12px;border:1px solid #e55b52;color:#d33b32;border-radius:11px;padding:10px;font-size:9px;font-weight:600}
 .logout-modal{display:none;position:fixed;inset:0;background:rgba(28,32,6,.38);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:18px;z-index:1000}.logout-modal.show{display:flex}.logout-box{width:min(360px,100%);background:#fffdf7;border:1px solid var(--line);border-radius:22px;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(55,65,22,.22)}.logout-box .logout-logo{width:58px;height:58px;border-radius:50%;object-fit:cover;border:1px solid #d7c98d;margin-bottom:9px}.logout-box h3{font-size:16px;color:var(--olive-dark);margin:0 0 5px}.logout-box p{font-size:9px;color:var(--muted);line-height:1.5;margin-bottom:17px}.logout-actions{display:flex;gap:8px}.logout-actions button,.logout-actions a{flex:1;padding:10px;border-radius:11px;font-size:9px;font-weight:700;text-decoration:none;border:0;font-family:inherit}.logout-cancel{background:#eee9d7;color:var(--olive)}.logout-confirm{background:var(--olive);color:white;display:grid;place-items:center}
+
+/* Customer Live Tracking & Chat Styles */
+.cust-track-btn {
+  background: var(--harvest-sun);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 8px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(216, 143, 42, 0.25);
+  transition: all 0.2s;
+}
+.cust-track-btn:hover {
+  filter: brightness(1.08);
+}
+.cust-track-modal-box {
+  width: min(440px, 100%);
+  padding: 16px;
+}
+.cust-rider-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fbf9f4;
+  border: 1px solid var(--sandstone);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+.cust-rider-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cust-rider-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(75, 83, 32, 0.14);
+  color: var(--olive-shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+.cust-rider-title {
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.cust-rider-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--olive-shadow);
+}
+.cust-rider-phone {
+  font-size: 0.66rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cust-rider-actions {
+  display: flex;
+  gap: 6px;
+}
+.cust-comm-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+}
+.cust-comm-btn.call {
+  background: #2e7d32;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(46, 125, 50, 0.25);
+}
+.cust-comm-btn.call:hover {
+  background: #256628;
+}
+.cust-comm-btn.msg {
+  background: var(--harvest-sun);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(216, 143, 42, 0.25);
+}
+.cust-comm-btn.msg:hover {
+  filter: brightness(1.08);
+}
+.cust-track-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #ffffff;
+  border: 1px dashed var(--sandstone);
+  border-radius: 8px;
+  padding: 7px 10px;
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: var(--olive-shadow);
+}
+.dist-pill {
+  font-weight: 700;
+  color: #2e7d32;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cust-map-legend {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 0.64rem;
+  color: var(--muted);
+}
+.legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+.legend-dot.store { background: #d97706; }
+.legend-dot.rider { background: #16a34a; }
+.legend-dot.customer { background: #dc2626; }
+
+/* Chat Drawer / Modal */
+.chat-modal-box {
+  width: min(400px, 100%);
+  background: #ffffff;
+  border: 1.5px solid var(--sandstone);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(75, 83, 32, 0.25);
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+  overflow: hidden;
+}
+.chat-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #fdfbf7;
+  border-bottom: 1px solid var(--line);
+}
+.chat-header-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(75, 83, 32, 0.15);
+  color: var(--olive-shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+}
+.chat-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1rem;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+}
+.quick-status-section {
+  padding: 10px 14px 6px;
+  background: #faf8f2;
+  border-bottom: 1px solid var(--line);
+}
+.quick-title {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--olive-shadow);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.quick-pills {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.quick-pill {
+  white-space: nowrap;
+  background: #ffffff;
+  border: 1px solid var(--sandstone);
+  border-radius: 14px;
+  padding: 5px 10px;
+  font-size: 0.66rem;
+  font-weight: 500;
+  color: var(--olive-shadow);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.quick-pill:hover {
+  background: var(--harvest-sun);
+  color: #ffffff;
+  border-color: var(--harvest-sun);
+}
+.chat-messages-container {
+  padding: 12px 14px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 180px;
+  max-height: 280px;
+  background: #fffdf9;
+}
+.chat-empty-hint {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-align: center;
+  margin: auto;
+  padding: 18px 10px;
+}
+.msg-bubble {
+  max-width: 82%;
+  padding: 7px 11px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.msg-bubble.me {
+  align-self: flex-end;
+  background: var(--olive-shadow);
+  color: #ffffff;
+  border-bottom-right-radius: 2px;
+}
+.msg-bubble.them {
+  align-self: flex-start;
+  background: #f1ebd8;
+  color: var(--ink);
+  border-bottom-left-radius: 2px;
+}
+.msg-meta {
+  font-size: 0.58rem;
+  margin-top: 3px;
+  opacity: 0.8;
+  text-align: right;
+}
+.msg-bubble.them .msg-meta {
+  text-align: left;
+}
+.chat-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: #ffffff;
+  border-top: 1px solid var(--line);
+}
+.chat-input-bar input {
+  flex: 1;
+  border: 1.5px solid var(--sandstone);
+  border-radius: 20px;
+  padding: 8px 12px;
+  font-size: 0.72rem;
+  outline: none;
+}
+.chat-input-bar input:focus {
+  border-color: var(--olive-shadow);
+}
+.chat-send-btn {
+  background: var(--olive-shadow);
+  color: #ffffff;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.chat-send-btn:hover {
+  transform: scale(1.08);
+}
+.chat-sms-btn {
+  background: #15803d;
+  color: #ffffff;
+  border-radius: 16px;
+  padding: 6px 10px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(21, 128, 61, 0.25);
+}
+.cust-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: var(--olive-shadow);
+  color: #ffffff;
+  padding: 10px 16px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s ease;
+  z-index: 3000;
+  box-shadow: 0 4px 16px rgba(75, 83, 32, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 90vw;
+}
+.cust-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+@keyframes riderPulse {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  70% { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
 </style>
 </head>
 <body>
@@ -842,10 +1191,15 @@ button{cursor:pointer}
   </div>
 </header>
 
-<?php if ($ontheway_count > 0): ?>
-<div class="notice-bar">
+<?php if ($ontheway_count > 0 && !empty($active_tracking_order)): ?>
+<div class="notice-bar" onclick="openCustomerTrackingModal(<?= (int)$active_tracking_order['order_id'] ?>)" style="cursor:pointer;" title="Tap to view real-time delivery GPS">
+  <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with <?= htmlspecialchars($active_tracking_order['order_ref']) ?>!</span>
+  <button type="button" onclick="event.stopPropagation(); openCustomerTrackingModal(<?= (int)$active_tracking_order['order_id'] ?>)">View</button>
+</div>
+<?php elseif ($ontheway_count > 0): ?>
+<div class="notice-bar" onclick="showScreen('orders')" style="cursor:pointer;">
   <span><i class="fa-solid fa-motorcycle"></i> Your rider is on the way with your food!</span>
-  <button onclick="showScreen('orders')">View</button>
+  <button type="button" onclick="showScreen('orders')">View</button>
 </div>
 <?php endif; ?>
 
@@ -1040,7 +1394,7 @@ button{cursor:pointer}
       if ($raw_status === 'READY_FOR_PICKUP') $status_label = 'Ready for Pickup';
       elseif ($raw_status === 'OUT_FOR_DELIVERY') $status_label = 'Out for Delivery';
     ?>
-      <div class="row-card order-row <?= $is_ontheway ? 'on-the-way-card' : '' ?>" data-status="<?= htmlspecialchars($norm_status) ?>" id="order-card-<?= $ord['order_id'] ?>">
+      <div class="row-card order-row <?= $is_ontheway ? 'on-the-way-card' : '' ?>" data-status="<?= htmlspecialchars($norm_status) ?>" id="order-card-<?= $ord['order_id'] ?>" <?= $is_ontheway ? 'onclick="openCustomerTrackingModal(' . (int)$ord['order_id'] . ')" style="cursor:pointer;" title="Tap to view live delivery tracking map"' : '' ?>>
         <div class="row-icon <?= $is_ontheway ? 'jolli' : ($is_settled ? 'settled-icon' : 'green') ?>">
           <?= $is_ontheway ? '🛵' : ($is_settled ? '🛡️' : ($is_delivered ? '📦' : ($is_prep ? '🍳' : '🛍️'))) ?>
         </div>
@@ -1065,9 +1419,14 @@ button{cursor:pointer}
             <div style="font-size: 8px; color: var(--harvest-sun); font-weight:600; margin-top:4px;">
               <i class="fa-solid fa-circle-notch fa-spin"></i> Rider is on the way with your order!
             </div>
-            <button class="confirm-btn" id="confirm-btn-<?= $ord['order_id'] ?>" onclick="confirmOrderReceived(<?= $ord['order_id'] ?>)">
-              <i class="fa-solid fa-box-open"></i> Confirm Order Received
-            </button>
+            <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openCustomerTrackingModal(<?= (int)$ord['order_id'] ?>)">
+                <i class="fa-solid fa-location-crosshairs"></i> Live GPS Tracking
+              </button>
+              <button class="confirm-btn" id="confirm-btn-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); confirmOrderReceived(<?= $ord['order_id'] ?>)">
+                <i class="fa-solid fa-box-open"></i> Received
+              </button>
+            </div>
           <?php elseif ($is_delivered && !$is_settled): ?>
             <div style="font-size: 8px; color: var(--sagebrush); font-weight:600; margin-top:4px;">
               <i class="fa-solid fa-circle-check"></i> Order Delivered. Awaiting admin settlement.
@@ -1148,6 +1507,102 @@ button{cursor:pointer}
 </div>
 
 <div class="logout-modal" id="logoutModal" onclick="if(event.target===this)closeLogout()"><div class="logout-box"><img class="logout-logo" src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out. You can log in again anytime.</p><div class="logout-actions"><button class="logout-cancel" type="button" onclick="closeLogout()">Cancel</button><a class="logout-confirm" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
+
+<!-- Customer Live Delivery Tracking Modal -->
+<div class="fd-modal" id="customerTrackingModal" onclick="if(event.target===this)closeCustomerTrackingModal()">
+  <div class="fd-modal-box cust-track-modal-box">
+    <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:18px;">🛵</span>
+        <div>
+          <h3 id="trackModalOrderRef" style="margin:0; font-size:13px; color:var(--olive-shadow);">Live Delivery Tracking</h3>
+          <small id="trackModalStoreSubtitle" style="font-size:10px; color:var(--muted);">Store pickup & real-time GPS</small>
+        </div>
+      </div>
+      <button class="fd-modal-close" onclick="closeCustomerTrackingModal()">&times;</button>
+    </div>
+
+    <!-- Rider Contact Card -->
+    <div class="cust-rider-card">
+      <div class="cust-rider-left">
+        <div class="cust-rider-avatar"><i class="fa-solid fa-motorcycle"></i></div>
+        <div>
+          <div class="cust-rider-title">Your Delivery Rider</div>
+          <div id="custTrackRiderName" class="cust-rider-name">Alex Rider</div>
+          <div id="custTrackRiderPhone" class="cust-rider-phone"><i class="fa-solid fa-phone-volume"></i> +63 917 555 0192</div>
+        </div>
+      </div>
+      <div class="cust-rider-actions">
+        <a id="custTrackCallLink" href="tel:+639175550192" class="cust-comm-btn call" title="Call Rider">
+          <i class="fa-solid fa-phone"></i> Call
+        </a>
+        <button id="custTrackMsgBtn" type="button" class="cust-comm-btn msg" onclick="openCustomerChat()" title="Message Rider">
+          <i class="fa-solid fa-comment-dots"></i> Message
+        </button>
+      </div>
+    </div>
+
+    <!-- ETA and Distance Bar -->
+    <div class="cust-track-status-bar">
+      <div id="custTrackEta"><i class="fa-solid fa-clock" style="color:var(--harvest-sun)"></i> <span id="custTrackEtaText">Locating rider...</span></div>
+      <div id="custTrackDist" class="dist-pill"><i class="fa-solid fa-route"></i> <span id="custTrackDistText">Calculating...</span></div>
+    </div>
+
+    <!-- Interactive Leaflet Live Tracking Map -->
+    <div id="cust-tracking-map" style="height: 310px; width: 100%; border-radius: 12px; margin-top: 10px; border: 1.5px solid var(--sandstone); position:relative;"></div>
+
+    <!-- Legend -->
+    <div class="cust-map-legend">
+      <span><span class="legend-dot store"></span> Store Pickup</span>
+      <span><span class="legend-dot rider"></span> Rider GPS</span>
+      <span><span class="legend-dot customer"></span> Your Destination</span>
+    </div>
+
+    <div class="fd-modal-actions" style="margin-top:12px;">
+      <button class="btn-fd-secondary" onclick="closeCustomerTrackingModal()">Close Map</button>
+      <button class="btn-fd-primary" onclick="openCustomerChat()"><i class="fa-solid fa-comment-dots"></i> Chat with Rider</button>
+    </div>
+  </div>
+</div>
+
+<!-- Customer Message / Chat Modal -->
+<div class="fd-modal" id="customerChatModal" onclick="if(event.target===this)closeCustomerChat()">
+  <div class="fd-modal-box chat-modal-box">
+    <div class="chat-modal-header">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div class="chat-header-avatar"><i class="fa-solid fa-motorcycle"></i></div>
+        <div>
+          <h4 id="custChatHeaderTitle" style="margin:0; font-size:13px; color:var(--olive-shadow);">Chat with Rider</h4>
+          <small id="custChatHeaderPhone" style="font-size:10px; color:var(--muted);">+63 917 555 0192</small>
+        </div>
+      </div>
+      <button class="chat-close-btn" onclick="closeCustomerChat()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- Quick Customer Replies -->
+    <div class="quick-status-section">
+      <div class="quick-title"><i class="fa-solid fa-bolt"></i> Quick Messages:</div>
+      <div class="quick-pills">
+        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('I\'m waiting outside! 👋')">👋 I'm waiting outside</button>
+        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Please leave it with the lobby/guard house 🛡️')">🛡️ Leave at guard house</button>
+        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Thank you! Take your time and ride safely 🛵')">🛵 Ride safely</button>
+        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Please ring doorbell when you arrive 🔔')">🔔 Ring doorbell</button>
+      </div>
+    </div>
+
+    <!-- Chat Messages Transcript -->
+    <div id="custChatMessagesList" class="chat-messages-container">
+      <div class="chat-empty-hint">Loading messages with your rider...</div>
+    </div>
+
+    <!-- Input Bar with In-App Send and Native SMS -->
+    <div class="chat-input-bar">
+      <input type="text" id="custChatInputText" placeholder="Type message to rider..." oninput="updateCustChatSmsLink(this.value)" onkeydown="if(event.key==='Enter') sendCustChatMessage()">
+      <button type="button" class="chat-send-btn" onclick="sendCustChatMessage()" title="Send in App"><i class="fa-solid fa-paper-plane"></i></button>
+      <a href="#" id="custChatSmsLink" class="chat-sms-btn" target="_blank" title="Send via native SMS"><i class="fa-solid fa-comment-dots"></i> SMS</a>
+    </div>
+  </div>
+</div>
 
 <nav class="bottom">
   <button class="nav active" data-screen="home" onclick="showScreen('home')"><i class="fa-solid fa-house"></i><span>Home</span></button>
@@ -2309,8 +2764,403 @@ if (document.readyState === 'loading') {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeLogout(); closeNotifications(); closeAddressPromptModal(); }
+  if (e.key === 'Escape') { 
+    closeLogout(); 
+    closeNotifications(); 
+    closeAddressPromptModal(); 
+    closeCustomerTrackingModal(); 
+    closeCustomerChat(); 
+  }
 });
+
+// Customer Live GPS Tracking & Rider Chat
+let custTrackingMap = null;
+let custStoreMarker = null;
+let custDestMarker = null;
+let custRiderMarker = null;
+let custRoutePolyline = null;
+let custTrackingTimer = null;
+let activeCustomerTrackingOrderId = <?php echo !empty($active_tracking_order['order_id']) ? (int)$active_tracking_order['order_id'] : 'null'; ?>;
+let currentTrackingRiderPhone = '+639175550192';
+let currentTrackingRiderName = 'Alex Rider';
+
+// Customer Chat State
+let activeCustChatOrderId = null;
+let custChatPollTimer = null;
+let custLastMessageId = 0;
+
+function openCustomerTrackingModal(orderId) {
+  const targetId = orderId || activeCustomerTrackingOrderId;
+  if (!targetId) {
+    showScreen('orders');
+    return;
+  }
+  activeCustomerTrackingOrderId = targetId;
+
+  const modal = document.getElementById('customerTrackingModal');
+  if (modal) modal.classList.add('show');
+
+  fetchCustomerLiveTracking(targetId, true);
+
+  if (custTrackingTimer) clearInterval(custTrackingTimer);
+  custTrackingTimer = setInterval(() => {
+    if (activeCustomerTrackingOrderId) {
+      fetchCustomerLiveTracking(activeCustomerTrackingOrderId, false);
+    }
+  }, 2500);
+}
+
+function closeCustomerTrackingModal() {
+  const modal = document.getElementById('customerTrackingModal');
+  if (modal) modal.classList.remove('show');
+  if (custTrackingTimer) {
+    clearInterval(custTrackingTimer);
+    custTrackingTimer = null;
+  }
+}
+
+async function fetchCustomerLiveTracking(orderId, isInitial) {
+  try {
+    const res = await fetch(`tracking_api.php?order_id=${orderId}&action=get_location`);
+    const data = await res.json();
+    if (!data.success || !data.order) {
+      console.warn('Tracking API response:', data.message);
+      return;
+    }
+
+    const ord = data.order;
+    const storeLat = parseFloat(data.store_lat || ord.store_lat);
+    const storeLng = parseFloat(data.store_lng || ord.store_lng);
+    const destLat = parseFloat(data.destination_lat || ord.destination_lat || ord.customer_lat);
+    const destLng = parseFloat(data.destination_lng || ord.destination_lng || ord.customer_lng);
+    const riderLat = parseFloat(data.rider_lat || ord.rider_lat);
+    const riderLng = parseFloat(data.rider_lng || ord.rider_lng);
+
+    // Update Rider info with non-null fallbacks
+    currentTrackingRiderName = data.rider_name || ord.rider_name || 'Alex Rider';
+    const riderPhoneRaw = data.rider_phone || ord.rider_phone || '+63 917 555 0192';
+    const riderDial = riderPhoneRaw.replace(/[^\+0-9]/g, '') || '+639175550192';
+    currentTrackingRiderPhone = riderDial;
+
+    const nameEl = document.getElementById('custTrackRiderName');
+    if (nameEl) nameEl.textContent = currentTrackingRiderName;
+    const phoneEl = document.getElementById('custTrackRiderPhone');
+    if (phoneEl) phoneEl.innerHTML = `<i class="fa-solid fa-phone-volume"></i> ${escapeCustHtml(riderPhoneRaw)}`;
+
+    const callLink = document.getElementById('custTrackCallLink');
+    if (callLink) callLink.href = `tel:${riderDial}`;
+
+    const refEl = document.getElementById('trackModalOrderRef');
+    if (refEl) refEl.textContent = `${ord.order_ref || 'Order #' + orderId} Tracking`;
+
+    const subEl = document.getElementById('trackModalStoreSubtitle');
+    if (subEl) subEl.textContent = `${ord.store_name || 'Store'} • ${ord.status || 'On Delivery'}`;
+
+    // Update Distance / ETA text
+    const distTextEl = document.getElementById('custTrackDistText');
+    const etaTextEl = document.getElementById('custTrackEtaText');
+
+    if (data.distance_km !== null && !isNaN(data.distance_km)) {
+      const dKm = parseFloat(data.distance_km);
+      let distStr = '';
+      let etaStr = '';
+      if (dKm < 0.2) {
+        distStr = 'Arrived at your door!';
+        etaStr = 'Rider is outside now! 🛵';
+      } else if (dKm < 1.0) {
+        const meters = Math.round(dKm * 1000);
+        distStr = `${meters} m away`;
+        etaStr = 'Arriving in ~2-3 mins';
+      } else {
+        distStr = `${dKm.toFixed(1)} km away`;
+        const mins = Math.max(3, Math.round(dKm * 3));
+        etaStr = `Estimated ~${mins} mins`;
+      }
+      if (distTextEl) distTextEl.textContent = distStr;
+      if (etaTextEl) etaTextEl.textContent = etaStr;
+    } else {
+      if (distTextEl) distTextEl.textContent = 'Calculating...';
+      if (etaTextEl) etaTextEl.textContent = 'Rider en route';
+    }
+
+    renderCustomerMap({
+      storeLat, storeLng, storeName: ord.store_name,
+      destLat, destLng, deliveryAddress: ord.delivery_address,
+      riderLat, riderLng, riderName: currentTrackingRiderName,
+      isInitial
+    });
+
+  } catch (err) {
+    console.warn('Error fetching customer tracking:', err);
+  }
+}
+
+function renderCustomerMap(opts) {
+  const mapContainer = document.getElementById('cust-tracking-map');
+  if (!mapContainer || typeof L === 'undefined') return;
+
+  const validStore = !isNaN(opts.storeLat) && !isNaN(opts.storeLng) && opts.storeLat !== 0;
+  const validDest = !isNaN(opts.destLat) && !isNaN(opts.destLng) && opts.destLat !== 0;
+  const validRider = !isNaN(opts.riderLat) && !isNaN(opts.riderLng) && opts.riderLat !== 0;
+
+  // Fallback center: Ormoc City center
+  const defaultCenter = [11.0050, 124.6075];
+  const center = validRider ? [opts.riderLat, opts.riderLng] : (validDest ? [opts.destLat, opts.destLng] : (validStore ? [opts.storeLat, opts.storeLng] : defaultCenter));
+
+  if (!custTrackingMap) {
+    custTrackingMap = L.map('cust-tracking-map', {
+      zoomControl: true,
+      attributionControl: false
+    }).setView(center, 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(custTrackingMap);
+  }
+
+  // Icons
+  const storeIcon = L.divIcon({
+    className: 'custom-map-pin',
+    html: `<div style="background:#d97706; color:#ffffff; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(217,119,6,0.4); border:2.5px solid #ffffff; font-size:15px;"><i class="fa-solid fa-store"></i></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -17]
+  });
+
+  const destIcon = L.divIcon({
+    className: 'custom-map-pin',
+    html: `<div style="background:#dc2626; color:#ffffff; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 10px rgba(220,38,38,0.4); border:2.5px solid #ffffff; font-size:15px;"><i class="fa-solid fa-house"></i></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -17]
+  });
+
+  const riderIcon = L.divIcon({
+    className: 'custom-map-pin',
+    html: `<div style="position:relative; width:40px; height:40px;">
+             <div style="position:absolute; inset:0; border-radius:50%; background:rgba(22,163,74,0.3); animation:riderPulse 1.8s infinite;"></div>
+             <div style="position:absolute; inset:2px; border-radius:50%; background:#16a34a; color:#ffffff; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 12px rgba(22,163,74,0.5); border:2.5px solid #ffffff; font-size:17px;"><i class="fa-solid fa-motorcycle"></i></div>
+           </div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -20]
+  });
+
+  // a. Store Pin (pickup location)
+  if (validStore) {
+    if (!custStoreMarker) {
+      custStoreMarker = L.marker([opts.storeLat, opts.storeLng], { icon: storeIcon }).addTo(custTrackingMap);
+      custStoreMarker.bindPopup(`<b>${escapeCustHtml(opts.storeName || 'Store')}</b><br><small>Pickup Location</small>`);
+    } else {
+      custStoreMarker.setLatLng([opts.storeLat, opts.storeLng]);
+    }
+  }
+
+  // b. Customer Delivery Pin (destination lat/lng)
+  if (validDest) {
+    if (!custDestMarker) {
+      custDestMarker = L.marker([opts.destLat, opts.destLng], { icon: destIcon }).addTo(custTrackingMap);
+      custDestMarker.bindPopup(`<b>Your Delivery Location</b><br><small>${escapeCustHtml(opts.deliveryAddress || 'Destination')}</small>`);
+    } else {
+      custDestMarker.setLatLng([opts.destLat, opts.destLng]);
+    }
+  }
+
+  // c. Rider Motorcycle Pin (live coordinates)
+  if (validRider) {
+    if (!custRiderMarker) {
+      custRiderMarker = L.marker([opts.riderLat, opts.riderLng], { icon: riderIcon, zIndexOffset: 1000 }).addTo(custTrackingMap);
+      custRiderMarker.bindPopup(`<b>${escapeCustHtml(opts.riderName || 'Rider')}</b><br><small>Live Motorcycle GPS</small>`);
+    } else {
+      custRiderMarker.setLatLng([opts.riderLat, opts.riderLng]);
+    }
+  }
+
+  // d. Dynamic connecting polyline
+  const polyStart = validRider ? [opts.riderLat, opts.riderLng] : (validStore ? [opts.storeLat, opts.storeLng] : null);
+  const polyEnd = validDest ? [opts.destLat, opts.destLng] : null;
+
+  if (polyStart && polyEnd) {
+    const latlngs = [polyStart, polyEnd];
+    if (!custRoutePolyline) {
+      custRoutePolyline = L.polyline(latlngs, {
+        color: '#4B5320',
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '8, 8'
+      }).addTo(custTrackingMap);
+    } else {
+      custRoutePolyline.setLatLngs(latlngs);
+    }
+  }
+
+  if (opts.isInitial) {
+    setTimeout(() => {
+      custTrackingMap.invalidateSize();
+      const pointsToFit = [];
+      if (validStore) pointsToFit.push([opts.storeLat, opts.storeLng]);
+      if (validDest) pointsToFit.push([opts.destLat, opts.destLng]);
+      if (validRider) pointsToFit.push([opts.riderLat, opts.riderLng]);
+      if (pointsToFit.length >= 2) {
+        custTrackingMap.fitBounds(pointsToFit, { padding: [40, 40], maxZoom: 16 });
+      } else if (pointsToFit.length === 1) {
+        custTrackingMap.setView(pointsToFit[0], 15);
+      }
+    }, 150);
+  }
+}
+
+// Customer Chat Integration
+function openCustomerChat() {
+  const orderId = activeCustomerTrackingOrderId || <?php echo !empty($active_tracking_order['order_id']) ? (int)$active_tracking_order['order_id'] : '0'; ?>;
+  if (!orderId) {
+    showScreen('orders');
+    return;
+  }
+  activeCustChatOrderId = orderId;
+  custLastMessageId = 0;
+
+  const titleEl = document.getElementById('custChatHeaderTitle');
+  if (titleEl) titleEl.textContent = `Chat with ${currentTrackingRiderName}`;
+  const phoneEl = document.getElementById('custChatHeaderPhone');
+  if (phoneEl) phoneEl.textContent = currentTrackingRiderPhone;
+
+  updateCustChatSmsLink('');
+
+  const modal = document.getElementById('customerChatModal');
+  if (modal) modal.classList.add('show');
+
+  fetchCustomerMessages(orderId, true);
+
+  if (custChatPollTimer) clearInterval(custChatPollTimer);
+  custChatPollTimer = setInterval(() => {
+    if (activeCustChatOrderId) {
+      fetchCustomerMessages(activeCustChatOrderId, false);
+    }
+  }, 2500);
+}
+
+function closeCustomerChat() {
+  const modal = document.getElementById('customerChatModal');
+  if (modal) modal.classList.remove('show');
+  if (custChatPollTimer) {
+    clearInterval(custChatPollTimer);
+    custChatPollTimer = null;
+  }
+  activeCustChatOrderId = null;
+}
+
+function updateCustChatSmsLink(text) {
+  const smsBtn = document.getElementById('custChatSmsLink');
+  if (!smsBtn) return;
+  const msgText = (text && text.trim()) ? text.trim() : "Hello! This is regarding my Food Dash order.";
+  const body = encodeURIComponent(msgText);
+  smsBtn.href = `sms:${currentTrackingRiderPhone}?body=${body}`;
+}
+
+async function fetchCustomerMessages(orderId, scrollToBottom) {
+  try {
+    const res = await fetch(`order_messages_api.php?order_id=${orderId}&after_id=${custLastMessageId}`);
+    const data = await res.json();
+    if (data.success && Array.isArray(data.messages)) {
+      const container = document.getElementById('custChatMessagesList');
+      if (!container) return;
+
+      if (custLastMessageId === 0) {
+        container.innerHTML = '';
+      }
+
+      if (data.messages.length > 0) {
+        const hint = container.querySelector('.chat-empty-hint');
+        if (hint) hint.remove();
+
+        data.messages.forEach(msg => {
+          if (msg.message_id > custLastMessageId) {
+            custLastMessageId = msg.message_id;
+            const isMe = msg.sender_role === 'customer';
+            const bubble = document.createElement('div');
+            bubble.className = `msg-bubble ${isMe ? 'me' : 'them'}`;
+            bubble.innerHTML = `
+              <div>${escapeCustHtml(msg.message_text)}</div>
+              <div class="msg-meta">${escapeCustHtml(msg.sender_name)} • ${escapeCustHtml(msg.time_formatted || '')}</div>
+            `;
+            container.appendChild(bubble);
+
+            if (!isMe && !scrollToBottom) {
+              showToastCustomer(`Rider: ${msg.message_text}`);
+            }
+          }
+        });
+
+        if (scrollToBottom || data.messages.length > 0) {
+          container.scrollTop = container.scrollHeight;
+        }
+      } else if (custLastMessageId === 0) {
+        container.innerHTML = '<div class="chat-empty-hint">No messages yet. Send a quick message to your rider!</div>';
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to load customer messages:', err);
+  }
+}
+
+async function sendCustChatMessage() {
+  const input = document.getElementById('custChatInputText');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text || !activeCustChatOrderId) return;
+
+  input.value = '';
+  await submitCustomerMessage(activeCustChatOrderId, text);
+}
+
+function sendCustomerQuickReply(text) {
+  if (!activeCustChatOrderId) return;
+  updateCustChatSmsLink(text);
+  submitCustomerMessage(activeCustChatOrderId, text);
+}
+
+async function submitCustomerMessage(orderId, text) {
+  try {
+    const res = await fetch('order_messages_api.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: orderId, message_text: text })
+    });
+    const data = await res.json();
+    if (data.success) {
+      fetchCustomerMessages(orderId, true);
+    } else {
+      showToastCustomer(data.message || 'Failed to send message');
+    }
+  } catch (err) {
+    console.error('Error sending customer message:', err);
+    showToastCustomer('Network error sending message');
+  }
+}
+
+function showToastCustomer(msg) {
+  let toast = document.getElementById('customerLiveToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'customerLiveToast';
+    toast.className = 'cust-toast';
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = `<i class="fa-solid fa-bell"></i> <span>${escapeCustHtml(msg)}</span>`;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 4000);
+}
+
+function escapeCustHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // Check if navigating to a specific screen via hash (e.g. #orders, #cart)
 if (window.location.hash) {

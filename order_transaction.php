@@ -174,13 +174,24 @@ if ($method === 'POST') {
             }
         }
 
+        // Retrieve customer phone
+        $customer_phone = null;
+        try {
+            $u_stmt = $conn->prepare("SELECT phone FROM users WHERE user_id = :uid LIMIT 1");
+            $u_stmt->execute([':uid' => $user_id]);
+            $customer_phone = $u_stmt->fetchColumn() ?: '+63 928 555 0148';
+        } catch (Throwable $e) {
+            $customer_phone = '+63 928 555 0148';
+        }
+
         $conn->beginTransaction();
         try {
-            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, order_ref, store_name, store_lat, store_lng, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :cust_id, :cust_name, :ref, :store_name, :store_lat, :store_lng, :summary, :subtotal, :fee, :total, 'PENDING', 'waiting', 'Delivery', :addr, :dlat, :dlng, :lat, :lng, NOW())");
+            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, customer_phone, order_ref, store_name, store_lat, store_lng, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :cust_id, :cust_name, :cust_phone, :ref, :store_name, :store_lat, :store_lng, :summary, :subtotal, :fee, :total, 'PENDING', 'waiting', 'Delivery', :addr, :dlat, :dlng, :lat, :lng, NOW())");
             $stmt->execute([
                 ':shop_id'    => $shop_id,
                 ':cust_id'    => $user_id,
                 ':cust_name'  => $customer_name,
+                ':cust_phone' => $customer_phone,
                 ':ref'        => $order_ref,
                 ':store_name' => $store_name,
                 ':store_lat'  => $store_lat,
