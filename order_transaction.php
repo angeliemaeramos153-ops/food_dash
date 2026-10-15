@@ -184,9 +184,32 @@ if ($method === 'POST') {
             $customer_phone = '+63 928 555 0148';
         }
 
+        // Philippine Payment Method validation and assignment
+        $allowed_payment_methods = [
+            'Cash on Delivery (COD)',
+            'GCash',
+            'Maya (PayMaya)',
+            'GoTyme Bank',
+            'Apple Pay'
+        ];
+        $raw_pm = trim((string)($payload['payment_method'] ?? ''));
+        if (in_array($raw_pm, $allowed_payment_methods, true)) {
+            $payment_method = $raw_pm;
+        } elseif (stripos($raw_pm, 'gcash') !== false) {
+            $payment_method = 'GCash';
+        } elseif (stripos($raw_pm, 'maya') !== false) {
+            $payment_method = 'Maya (PayMaya)';
+        } elseif (stripos($raw_pm, 'gotyme') !== false) {
+            $payment_method = 'GoTyme Bank';
+        } elseif (stripos($raw_pm, 'apple') !== false) {
+            $payment_method = 'Apple Pay';
+        } else {
+            $payment_method = 'Cash on Delivery (COD)';
+        }
+
         $conn->beginTransaction();
         try {
-            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, customer_phone, order_ref, store_name, store_lat, store_lng, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :cust_id, :cust_name, :cust_phone, :ref, :store_name, :store_lat, :store_lng, :summary, :subtotal, :fee, :total, 'PENDING', 'waiting', 'Delivery', :addr, :dlat, :dlng, :lat, :lng, NOW())");
+            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, customer_phone, order_ref, store_name, store_lat, store_lng, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :cust_id, :cust_name, :cust_phone, :ref, :store_name, :store_lat, :store_lng, :summary, :subtotal, :fee, :total, :pm, 'PENDING', 'waiting', 'Delivery', :addr, :dlat, :dlng, :lat, :lng, NOW())");
             $stmt->execute([
                 ':shop_id'    => $shop_id,
                 ':cust_id'    => $user_id,
@@ -200,6 +223,7 @@ if ($method === 'POST') {
                 ':subtotal'   => $subtotal,
                 ':fee'        => $delivery_fee,
                 ':total'      => $total_amount,
+                ':pm'         => $payment_method,
                 ':addr'       => !empty($delivery_address) ? $delivery_address : null,
                 ':dlat'       => $delivery_lat,
                 ':dlng'       => $delivery_lng,
@@ -207,6 +231,18 @@ if ($method === 'POST') {
                 ':lng'        => $customer_lng,
             ]);
             $order_id = (int)$conn->lastInsertId();
+
+            // Mirror into orders table
+            try {
+                $orders_stmt = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, payment_method, shop_id, created_at) VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, NOW()) ON DUPLICATE KEY UPDATE payment_method = VALUES(payment_method), total_price = VALUES(total_price)");
+                $orders_stmt->execute([
+                    ':oid'     => $order_id,
+                    ':uid'     => $user_id,
+                    ':total'   => $total_amount,
+                    ':pm'      => $payment_method,
+                    ':shop_id' => $shop_id,
+                ]);
+            } catch (Throwable $e) {}
 
             // Insert into food_order_items
             $item_stmt = $conn->prepare("INSERT INTO food_order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (:oid, :name, :store, :qty, :price, :line, :icon)");
@@ -240,18 +276,19 @@ if ($method === 'POST') {
             record_order_audit_log($conn, $order_id, null, 'PENDING', $user_id, 'customer', 'Order submitted by customer');
 
             // Security & Activity Audit Log: ORDER_PLACED
-            log_activity($conn, $user_id, 'ORDER_PLACED', "Order {$order_ref} placed for total ₱" . number_format($total_amount, 2) . " at {$store_name}.");
+            log_activity($conn, $user_id, 'ORDER_PLACED', "Order {$order_ref} placed ({$payment_method}) for total ₱" . number_format($total_amount, 2) . " at {$store_name}.");
 
             // Notify Chef / Kitchen
             notify_role($conn, 'chef', 'new_order', 'New Customer Order', "{$order_ref} from {$customer_name} is ready to be prepared.", $order_id);
 
             $conn->commit();
             respond(true, 'Order placed successfully.', [
-                'order_id'     => $order_id,
-                'order_ref'    => $order_ref,
-                'status'       => 'PENDING',
-                'total_amount' => $total_amount,
-                'store_name'   => $store_name
+                'order_id'       => $order_id,
+                'order_ref'      => $order_ref,
+                'status'         => 'PENDING',
+                'total_amount'   => $total_amount,
+                'payment_method' => $payment_method,
+                'store_name'     => $store_name
             ]);
         } catch (Throwable $e) {
             if ($conn->inTransaction()) $conn->rollBack();
@@ -266,7 +303,7 @@ if ($method === 'POST') {
 
         // Fetch current order state
         $conn->beginTransaction();
-        $stmt = $conn->prepare("SELECT order_id, shop_id, customer_id, customer_name, order_ref, store_name, subtotal, delivery_fee, total_amount, status, delivery_status, chef_id, rider_id FROM food_orders WHERE order_id = :oid LIMIT 1 FOR UPDATE");
+        $stmt = $conn->prepare("SELECT order_id, shop_id, customer_id, customer_name, order_ref, store_name, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, chef_id, rider_id FROM food_orders WHERE order_id = :oid LIMIT 1 FOR UPDATE");
         $stmt->execute([':oid' => $order_id]);
         $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -437,6 +474,24 @@ if ($method === 'POST') {
                     create_notification($conn, $cust_id, 'rider_assigned', 'Rider Out for Delivery', "A rider has claimed {$ref} and is out for delivery.", $order_id);
                 }
                 log_activity($conn, $user_id, 'ORDER_DISPATCHED', "Order {$ref} dispatched ({$new_delivery_status}) with rider {$user_name}.");
+
+                // Automated departure and bill message from rider
+                try {
+                    $chk_m = $conn->prepare("SELECT COUNT(*) FROM order_messages WHERE order_id = :oid AND sender_role = 'rider' AND message_text LIKE 'Hello! I have picked up your order%'");
+                    $chk_m->execute([':oid' => $order_id]);
+                    if ((int)$chk_m->fetchColumn() === 0) {
+                        $bill_amt = number_format((float)($order['total_amount'] ?? 0), 2);
+                        $bill_pm = !empty($order['payment_method']) ? trim($order['payment_method']) : 'Cash on Delivery (COD)';
+                        $auto_dep_msg = "Hello! I have picked up your order and I'm on the way. Your total bill is ₱{$bill_amt} ({$bill_pm}). Please have the payment or recipient ready!";
+                        $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'rider', :uid, :rname, :txt, NOW())");
+                        $ins_m->execute([
+                            ':oid'   => $order_id,
+                            ':uid'   => $user_id,
+                            ':rname' => $user_name,
+                            ':txt'   => $auto_dep_msg
+                        ]);
+                    }
+                } catch (Throwable $e) {}
             } elseif ($target_status === 'DELIVERED') {
                 create_notification($conn, $cust_id, 'delivered', 'Order Delivered', "Your order {$ref} has been delivered. Enjoy your meal!", $order_id);
                 notify_role($conn, 'admin', 'order_delivered', 'Order Delivered - Ready for Settlement', "Order {$ref} delivered. Ready for admin reconciliation.", $order_id);
@@ -479,7 +534,7 @@ if ($method === 'GET') {
         $dateSql = $isPg 
             ? "TO_CHAR(created_at, 'Mon DD, YYYY • HH12:MI AM') AS created_at" 
             : "DATE_FORMAT(created_at, '%b %d, %Y • %h:%i %p') AS created_at";
-        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, rider_id, delivery_address, delivery_lat, delivery_lng, rider_lat, rider_lng, customer_lat, customer_lng, {$dateSql} FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
+        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, rider_id, delivery_address, delivery_lat, delivery_lng, rider_lat, rider_lng, customer_lat, customer_lng, {$dateSql} FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
         $stmt->execute([':cid' => $user_id]);
         $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
         respond(true, '', ['orders' => $orders]);

@@ -33,6 +33,7 @@ if ($order_id > 0) {
     $stmt = $conn->prepare("SELECT 
         o.order_id, o.order_ref, o.store_name, o.delivery_address, 
         o.status, o.total_amount, o.created_at,
+        COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
         COALESCE(o.store_lat, s.latitude, s.lat, 11.00842) AS store_lat,
         COALESCE(o.store_lng, s.longitude, s.lng, 124.60721) AS store_lng,
         COALESCE(o.delivery_lat, o.customer_lat, 11.00762) AS destination_lat,
@@ -459,6 +460,162 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
   gap: 4px;
   flex-shrink: 0;
 }
+
+/* Pay Method Badge */
+.pay-method-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 10.5px;
+  border: 1px solid #bfdbfe;
+}
+
+/* In-App Customer Chat Drawer */
+.track-chat-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: flex;
+  justify-content: flex-end;
+}
+.track-chat-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+}
+.track-chat-drawer {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.25);
+  z-index: 1;
+  animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.track-chat-header {
+  padding: 14px 16px;
+  background: #1e293b;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.track-chat-user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.track-chat-user-info .chat-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+.track-chat-user-info h4 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+}
+.chat-close-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #ffffff;
+  font-size: 22px;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.track-chat-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.msg-bubble {
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+.msg-bubble.me {
+  align-self: flex-end;
+  background: #4B5320;
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+}
+.msg-bubble.them {
+  align-self: flex-start;
+  background: #ffffff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.msg-bubble .msg-meta {
+  font-size: 10px;
+  opacity: 0.75;
+  margin-top: 4px;
+  text-align: right;
+}
+.track-chat-footer {
+  padding: 12px 16px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 8px;
+}
+.track-chat-footer input {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 20px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  outline: none;
+}
+.track-chat-footer input:focus {
+  border-color: #4B5320;
+}
+.chat-send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #4B5320;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
 </style>
 </head>
 <body>
@@ -493,11 +650,11 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
   </div>
 
   <!-- Live Rider Message Banner -->
-  <div id="liveRiderMessageBanner" class="live-rider-msg-banner" style="display:none;" onclick="openChatFromBanner()">
+  <div id="liveRiderMessageBanner" class="live-rider-msg-banner" style="display:none;" onclick="openTrackChat()">
     <div class="msg-banner-avatar"><i class="fa-solid fa-motorcycle"></i></div>
     <div class="msg-banner-content">
       <div class="msg-banner-title">
-        <span>New message from your rider</span>
+        <span id="liveMsgBannerTitle">Rider <?= htmlspecialchars($rider_name) ?></span>
         <span class="msg-banner-time">Just now</span>
       </div>
       <div class="msg-banner-body" id="liveMsgBannerText">I'm outside with your order! 🛵</div>
@@ -514,7 +671,7 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
     </a>
     <div class="header-title">
       <h2><?= htmlspecialchars($order['order_ref'] ?? 'Live Delivery') ?></h2>
-      <small><?= htmlspecialchars($order['store_name'] ?? 'Store') ?></small>
+      <small><?= htmlspecialchars($order['store_name'] ?? 'Store') ?> • <span class="pay-method-badge"><i class="fa-solid fa-wallet"></i> <?= htmlspecialchars($order['payment_method'] ?? 'Cash on Delivery (COD)') ?></span></small>
     </div>
     <div class="status-pill">
       <i class="fa-solid fa-circle-dot fa-beat-fade"></i>
@@ -559,18 +716,46 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
           <div class="rider-sub" id="riderPhoneDisplay"><i class="fa-solid fa-phone-volume"></i> <?= htmlspecialchars($rider_phone) ?></div>
         </div>
       </div>
-      <small style="font-size:10px; color:var(--muted); text-align:right;">Assigned Rider<br><span style="color:#2e7d32; font-weight:600;"><i class="fa-solid fa-shield-halved"></i> Verified</span></small>
+      <small style="font-size:10px; color:var(--muted); text-align:right;">
+        Total Bill: <strong style="color:var(--olive-shadow);">₱<?= number_format((float)($order['total_amount'] ?? 0), 2) ?></strong><br>
+        <span class="pay-method-badge" style="margin-top:2px;"><i class="fa-solid fa-wallet"></i> <?= htmlspecialchars($order['payment_method'] ?? 'Cash on Delivery (COD)') ?></span>
+      </small>
     </div>
     <div class="contact-actions">
       <a id="btnCallRider" href="tel:<?= htmlspecialchars($rider_dial) ?>" class="comm-btn call" title="Direct Phone Call">
         <i class="fa-solid fa-phone"></i> Call Rider
       </a>
-      <a id="btnMsgRider" href="customer_dashboard.php?track=<?= (int)$order_id ?>" class="comm-btn msg" title="Open In-App Chat">
+      <button type="button" id="btnMsgRider" onclick="openTrackChat()" class="comm-btn msg" title="Open In-App Chat" style="position:relative;">
         <i class="fa-solid fa-comment-dots"></i> Message Rider
-      </a>
+        <span class="cust-chat-unread-badge" id="trackChatBadge" style="display:none; position:absolute; top:-6px; right:-6px; background:#ef4444; color:#fff; font-size:10px; font-weight:800; border-radius:50%; width:18px; height:18px; align-items:center; justify-content:center; border:2px solid #fff;">0</span>
+      </button>
       <a id="btnSmsRider" href="sms:<?= htmlspecialchars($rider_dial) ?>?body=Hi%20<?= urlencode($rider_name) ?>,%20regarding%20order%20<?= urlencode($order['order_ref'] ?? '') ?>" class="comm-btn sms" title="Direct Native SMS">
         <i class="fa-solid fa-envelope"></i> SMS
       </a>
+    </div>
+  </div>
+
+  <!-- In-App Customer Chat Drawer Modal -->
+  <div id="trackChatModal" class="track-chat-modal" style="display:none;">
+    <div class="track-chat-backdrop" onclick="closeTrackChat()"></div>
+    <div class="track-chat-drawer">
+      <div class="track-chat-header">
+        <div class="track-chat-user-info">
+          <div class="chat-avatar"><i class="fa-solid fa-motorcycle"></i></div>
+          <div>
+            <h4 id="trackChatRiderName">Chat with <?= htmlspecialchars($rider_name) ?></h4>
+            <span style="font-size:11px; color:#16a34a; font-weight:600;"><i class="fa-solid fa-circle" style="font-size:7px;"></i> Active Delivery</span>
+          </div>
+        </div>
+        <button type="button" class="chat-close-btn" onclick="closeTrackChat()">&times;</button>
+      </div>
+      <div class="track-chat-body" id="trackChatMessagesList">
+        <div class="chat-loading-hint" style="text-align:center; color:#94a3b8; padding:20px; font-size:12px;">Connecting to secure chat...</div>
+      </div>
+      <form class="track-chat-footer" onsubmit="sendTrackChatMessage(event)">
+        <input type="text" id="trackChatInput" placeholder="Message rider..." autocomplete="off">
+        <button type="submit" class="chat-send-btn" id="trackChatSendBtn"><i class="fa-solid fa-paper-plane"></i></button>
+      </form>
     </div>
   </div>
 
@@ -1019,37 +1204,163 @@ async function endConnectedCall() {
   currentIncomingCall = null;
 }
 
+let seenRiderMessageIds = new Set();
+let unreadChatCount = 0;
+
+function updateTrackChatBadges() {
+  const badge = document.getElementById('trackChatBadge');
+  if (!badge) return;
+  if (unreadChatCount > 0) {
+    badge.textContent = unreadChatCount;
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function openTrackChat() {
+  const modal = document.getElementById('trackChatModal');
+  if (modal) modal.style.display = 'flex';
+  unreadChatCount = 0;
+  updateTrackChatBadges();
+  loadTrackChatMessages();
+}
+
+function closeTrackChat() {
+  const modal = document.getElementById('trackChatModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function escapeTrackHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>"']/g, m => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  })[m]);
+}
+
+function appendMessageToTrackChatDrawer(msg) {
+  const list = document.getElementById('trackChatMessagesList');
+  if (!list) return;
+
+  const hint = list.querySelector('.chat-loading-hint');
+  if (hint) hint.remove();
+
+  const existing = list.querySelector(`[data-msg-id="${msg.message_id}"]`);
+  if (existing) return;
+
+  const isMe = msg.sender_role === 'customer';
+  const bubble = document.createElement('div');
+  bubble.className = `msg-bubble ${isMe ? 'me' : 'them'}`;
+  bubble.setAttribute('data-msg-id', msg.message_id);
+  bubble.innerHTML = `
+    <div>${escapeTrackHtml(msg.message_text)}</div>
+    <div class="msg-meta">${escapeTrackHtml(msg.sender_name || (isMe ? 'You' : 'Rider'))} • ${escapeTrackHtml(msg.time_formatted || 'Just now')}</div>
+  `;
+  list.appendChild(bubble);
+  list.scrollTop = list.scrollHeight;
+}
+
+async function loadTrackChatMessages() {
+  if (!orderId) return;
+  try {
+    const res = await fetch(`order_communication_api.php?action=get_updates&order_id=${orderId}&after_message_id=0&_t=${Date.now()}`);
+    const data = await res.json();
+    if (data.success && Array.isArray(data.messages)) {
+      const list = document.getElementById('trackChatMessagesList');
+      if (list) list.innerHTML = '';
+      data.messages.forEach(m => appendMessageToTrackChatDrawer(m));
+    }
+  } catch (e) {}
+}
+
+async function sendTrackChatMessage(e) {
+  e.preventDefault();
+  const input = document.getElementById('trackChatInput');
+  const btn = document.getElementById('trackChatSendBtn');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch('order_communication_api.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'send_message',
+        order_id: orderId,
+        message_text: text
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      appendMessageToTrackChatDrawer({
+        message_id: data.message_id || ('local_' + Date.now()),
+        sender_role: 'customer',
+        sender_name: 'You',
+        message_text: text,
+        time_formatted: 'Just now'
+      });
+    }
+  } catch (err) {
+    console.error('Send message error:', err);
+  } finally {
+    if (btn) btn.disabled = false;
+    input.focus();
+  }
+}
+
 function handleLiveRiderMessage(msg) {
   if (!msg || !msg.message_id) return;
-  if (lastSeenRiderMsgId === 0) {
-    lastSeenRiderMsgId = msg.message_id;
-    return;
-  }
+  if (seenRiderMessageIds.has(msg.message_id)) return;
+  seenRiderMessageIds.add(msg.message_id);
 
   if (msg.message_id > lastSeenRiderMsgId) {
     lastSeenRiderMsgId = msg.message_id;
-
-    const banner = document.getElementById('liveRiderMessageBanner');
-    const textEl = document.getElementById('liveMsgBannerText');
-    if (banner && textEl) {
-      textEl.textContent = msg.message_text;
-      banner.style.display = 'flex';
-
-      playMessageChime();
-
-      if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
-      msgBannerTimeout = setTimeout(() => {
-        banner.style.display = 'none';
-      }, 7000);
-    }
   }
-}
 
-function openChatFromBanner() {
-  window.location.href = `customer_dashboard.php?track=${orderId}`;
+  const senderName = msg.sender_name || 'Alex';
+
+  // a. Instantly display floating toast/banner at top of viewport: "Rider Alex: [message text]"
+  const banner = document.getElementById('liveRiderMessageBanner');
+  const titleEl = document.getElementById('liveMsgBannerTitle');
+  const textEl = document.getElementById('liveMsgBannerText');
+  if (banner && textEl) {
+    if (titleEl) titleEl.textContent = `Rider ${senderName}`;
+    textEl.textContent = msg.message_text;
+    banner.style.display = 'flex';
+
+    if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
+    msgBannerTimeout = setTimeout(() => {
+      banner.style.display = 'none';
+    }, 8000);
+  }
+
+  // b. Play subtle audio chime/ping (new Audio(...))
+  playMessageChime();
+
+  // c. Update chat message badge counter and append message into active chat drawer in real time
+  unreadChatCount++;
+  updateTrackChatBadges();
+  appendMessageToTrackChatDrawer(msg);
 }
 
 function playMessageChime() {
+  try {
+    const audio = new Audio('assets/notification_chime.wav');
+    audio.volume = 0.8;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => playWebAudioFallbackChime());
+    }
+  } catch (e) {
+    playWebAudioFallbackChime();
+  }
+}
+
+function playWebAudioFallbackChime() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     const ctx = new AudioCtx();
@@ -1061,7 +1372,7 @@ function playMessageChime() {
     osc.frequency.setValueAtTime(587.33, now);
     osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
 
-    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.setValueAtTime(0.12, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
 
     osc.connect(gain);
@@ -1072,11 +1383,45 @@ function playMessageChime() {
   } catch (e) {}
 }
 
+// 2-second real-time polling loop checking order_communication_api.php?action=get_updates&order_id=...
+async function pollOrderCommunication() {
+  if (!orderId) return;
+  try {
+    const res = await fetch(`order_communication_api.php?action=get_updates&order_id=${orderId}&after_message_id=${lastSeenRiderMsgId}&_t=${Date.now()}`, {
+      cache: 'no-store'
+    });
+    const data = await res.json();
+    if (!data.success) return;
+
+    if (data.active_call && data.active_call.status === 'ringing') {
+      handleIncomingCallAlert(data.active_call);
+    } else {
+      dismissIncomingCallIfRinging();
+    }
+
+    if (Array.isArray(data.messages) && data.messages.length > 0) {
+      data.messages.forEach(msg => {
+        if (msg.sender_role === 'rider') {
+          handleLiveRiderMessage(msg);
+        } else if (msg.sender_role === 'customer') {
+          appendMessageToTrackChatDrawer(msg);
+        }
+      });
+    } else if (data.latest_banner && data.latest_banner.sender_role === 'rider') {
+      handleLiveRiderMessage(data.latest_banner);
+    }
+  } catch (e) {}
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
   pollRiderLocation();
+  pollOrderCommunication();
   // 2-second polling loop
-  pollTimer = setInterval(pollRiderLocation, 2000);
+  pollTimer = setInterval(() => {
+    pollRiderLocation();
+    pollOrderCommunication();
+  }, 2000);
 });
 </script>
 </body>

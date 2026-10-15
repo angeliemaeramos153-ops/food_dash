@@ -311,7 +311,7 @@ $db_orders = [];
 $ontheway_count = 0;
 $active_tracking_order = null;
 
-$stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
+$stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
 if ($stmt) {
     $stmt->execute([':cid' => $user_id]);
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) { 
@@ -554,6 +554,113 @@ button{cursor:pointer}
   transition: opacity 0.2s;
 }
 .confirm-btn:hover { opacity: 0.9; }
+
+/* Payment Method Selection Card & Options Grid */
+.payment-method-card {
+  background: #ffffff;
+  border: 1px solid #EBE4D1;
+  border-radius: 14px;
+  padding: 12px;
+  margin: 12px 0;
+  box-shadow: 0 4px 12px rgba(75,83,32,.04);
+}
+.payment-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--olive-dark);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.payment-options-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.pay-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #faf8f5;
+  border: 1.5px solid #ebe4d1;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.pay-option:hover {
+  border-color: var(--harvest-sun);
+  background: #fffdf9;
+}
+.pay-option.active {
+  border-color: var(--olive-shadow);
+  background: #f4f6ec;
+  box-shadow: 0 2px 8px rgba(75,83,32,.08);
+}
+.pay-option-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.pay-option-icon.cod { background: #ecfdf5; color: #059669; }
+.pay-option-icon.gcash { background: #eff6ff; color: #2563eb; }
+.pay-option-icon.maya { background: #fdf2f8; color: #db2777; }
+.pay-option-icon.gotyme { background: #fefce8; color: #ca8a04; }
+.pay-option-icon.apple { background: #f1f5f9; color: #0f172a; }
+.pay-option-info {
+  flex: 1;
+  min-width: 0;
+}
+.pay-option-info strong {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--olive-dark);
+}
+.pay-option-info small {
+  display: block;
+  font-size: 8px;
+  color: var(--muted);
+}
+.pay-option .pay-check {
+  font-size: 13px;
+  color: #cbd5e1;
+  transition: color 0.2s ease;
+}
+.pay-option.active .pay-check {
+  color: var(--olive-shadow);
+}
+.pay-method-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2.5px 7px;
+  border-radius: 6px;
+  font-size: 8px;
+  font-weight: 700;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.cust-chat-unread-badge {
+  background: #ef4444;
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4);
+}
 
 /* In-App Notifications Modal (Food Dash Palette) */
 .bell-badge {
@@ -1581,6 +1688,56 @@ button{cursor:pointer}
       <input type="hidden" id="deliveryLngInput" value="">
     </div>
 
+    <!-- Philippine Payment Method Selection -->
+    <div class="payment-method-card">
+      <div class="payment-section-title">
+        <i class="fa-solid fa-wallet" style="color:var(--harvest-sun)"></i> Payment Method
+      </div>
+      <div class="payment-options-grid" id="checkoutPaymentOptions">
+        <div class="pay-option active" data-method="Cash on Delivery (COD)" onclick="setCustomerPaymentMethod('Cash on Delivery (COD)', this)">
+          <div class="pay-option-icon cod"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+          <div class="pay-option-info">
+            <strong>Cash on Delivery (COD)</strong>
+            <small>Pay with cash upon arrival</small>
+          </div>
+          <i class="fa-solid fa-circle-check pay-check"></i>
+        </div>
+        <div class="pay-option" data-method="GCash" onclick="setCustomerPaymentMethod('GCash', this)">
+          <div class="pay-option-icon gcash"><i class="fa-solid fa-mobile-screen"></i></div>
+          <div class="pay-option-info">
+            <strong>GCash</strong>
+            <small>Scan QR or instant transfer</small>
+          </div>
+          <i class="fa-regular fa-circle pay-check"></i>
+        </div>
+        <div class="pay-option" data-method="Maya (PayMaya)" onclick="setCustomerPaymentMethod('Maya (PayMaya)', this)">
+          <div class="pay-option-icon maya"><i class="fa-solid fa-credit-card"></i></div>
+          <div class="pay-option-info">
+            <strong>Maya (PayMaya)</strong>
+            <small>E-Wallet, Visa & Mastercard</small>
+          </div>
+          <i class="fa-regular fa-circle pay-check"></i>
+        </div>
+        <div class="pay-option" data-method="GoTyme Bank" onclick="setCustomerPaymentMethod('GoTyme Bank', this)">
+          <div class="pay-option-icon gotyme"><i class="fa-solid fa-building-columns"></i></div>
+          <div class="pay-option-info">
+            <strong>GoTyme Bank</strong>
+            <small>Digital Bank & Go Rewards</small>
+          </div>
+          <i class="fa-regular fa-circle pay-check"></i>
+        </div>
+        <div class="pay-option" data-method="Apple Pay" onclick="setCustomerPaymentMethod('Apple Pay', this)">
+          <div class="pay-option-icon apple"><i class="fa-brands fa-apple"></i></div>
+          <div class="pay-option-info">
+            <strong>Apple Pay</strong>
+            <small>Fast & secure Touch ID / Face ID</small>
+          </div>
+          <i class="fa-regular fa-circle pay-check"></i>
+        </div>
+      </div>
+      <input type="hidden" id="selectedPaymentMethod" value="Cash on Delivery (COD)">
+    </div>
+
     <div class="summary">
       <div class="sumrow"><span>Subtotal</span><span id="subtotal">₱0.00</span></div>
       <div class="sumrow"><span>Delivery Fee</span><span>₱30.00</span></div>
@@ -1632,6 +1789,9 @@ button{cursor:pointer}
           <div style="margin-top: 5px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span class="status-badge status-<?= htmlspecialchars($norm_status) ?>" id="status-tag-<?= $ord['order_id'] ?>">
               <?= htmlspecialchars($status_label) ?>
+            </span>
+            <span class="pay-method-badge">
+              <i class="fa-solid fa-wallet"></i> <?= htmlspecialchars(!empty($ord['payment_method']) ? $ord['payment_method'] : 'Cash on Delivery (COD)') ?>
             </span>
             <?php if ($is_settled): ?>
               <span class="settled-tag"><i class="fa-solid fa-circle-check"></i> Reconciled</span>
@@ -1701,6 +1861,19 @@ button{cursor:pointer}
     <textarea id="modalDeliveryAddress" class="delivery-textarea" placeholder="Unit/House No., Street, Barangay, City, Landmark..." rows="2"></textarea>
     <div id="modalGpsStatus" class="gps-status-pill" style="display:none; margin-top:8px;"></div>
     
+    <div style="margin-top:8px; margin-bottom:6px;">
+      <label style="display:block; font-size: 9.5px; font-weight: 700; color: var(--olive-dark); margin-bottom: 4px;">
+        <i class="fa-solid fa-wallet" style="color:var(--harvest-sun)"></i> Payment Method
+      </label>
+      <select id="modalPaymentSelect" class="delivery-textarea" style="height:36px; padding:6px 10px; font-size:10.5px; cursor:pointer;" onchange="syncCustomerPaymentMethod(this.value)">
+        <option value="Cash on Delivery (COD)">Cash on Delivery (COD)</option>
+        <option value="GCash">GCash</option>
+        <option value="Maya (PayMaya)">Maya (PayMaya)</option>
+        <option value="GoTyme Bank">GoTyme Bank</option>
+        <option value="Apple Pay">Apple Pay</option>
+      </select>
+    </div>
+    
     <input type="hidden" id="modal_delivery_lat" name="delivery_lat" value="">
     <input type="hidden" id="modal_delivery_lng" name="delivery_lng" value="">
     <input type="hidden" id="modalDeliveryLat" value="">
@@ -1760,7 +1933,7 @@ button{cursor:pointer}
           <i class="fa-solid fa-phone"></i> Call Rider
         </a>
         <button id="custTrackMsgBtn" type="button" class="cust-comm-btn msg" onclick="openCustomerChat()" title="Message Rider (Chat)">
-          <i class="fa-solid fa-comment-dots"></i> Message Rider
+          <i class="fa-solid fa-comment-dots"></i> Message Rider <span class="cust-chat-unread-badge badge" style="display:none;margin-left:4px;">0</span>
         </button>
         <a id="custTrackSmsBtn" href="sms:+639175550192" class="cust-comm-btn sms" title="Direct SMS to Rider">
           <i class="fa-solid fa-envelope"></i> SMS
@@ -1792,7 +1965,7 @@ button{cursor:pointer}
 
     <div class="fd-modal-actions" style="margin-top:12px;">
       <button class="btn-fd-secondary" onclick="closeCustomerTrackingModal()">Close Map</button>
-      <button class="btn-fd-primary" onclick="openCustomerChat()"><i class="fa-solid fa-comment-dots"></i> Chat with Rider</button>
+      <button class="btn-fd-primary" onclick="openCustomerChat()"><i class="fa-solid fa-comment-dots"></i> Chat with Rider <span class="cust-chat-unread-badge" style="display:none;margin-left:4px;">0</span></button>
     </div>
   </div>
 </div>
@@ -1869,7 +2042,7 @@ button{cursor:pointer}
   <div class="msg-banner-avatar"><i class="fa-solid fa-motorcycle"></i></div>
   <div class="msg-banner-content">
     <div class="msg-banner-title">
-      <span>New message from your rider</span>
+      <span id="liveMsgBannerTitle">Rider Alex</span>
       <span class="msg-banner-time">Just now</span>
     </div>
     <div class="msg-banner-body" id="liveMsgBannerText">I'm outside with your order! 🛵</div>
@@ -2851,6 +3024,49 @@ async function confirmModalAddressAndCheckout() {
     checkout();
 }
 
+function setCustomerPaymentMethod(method, elem) {
+    const hiddenInput = document.getElementById('selectedPaymentMethod');
+    if (hiddenInput) hiddenInput.value = method;
+
+    const modalSelect = document.getElementById('modalPaymentSelect');
+    if (modalSelect) modalSelect.value = method;
+
+    const options = document.querySelectorAll('#checkoutPaymentOptions .pay-option');
+    options.forEach(opt => {
+        opt.classList.remove('active');
+        const checkIcon = opt.querySelector('.pay-check');
+        if (checkIcon) {
+            checkIcon.className = 'fa-regular fa-circle pay-check';
+        }
+    });
+
+    if (elem) {
+        elem.classList.add('active');
+        const checkIcon = elem.querySelector('.pay-check');
+        if (checkIcon) {
+            checkIcon.className = 'fa-solid fa-circle-check pay-check';
+        }
+    }
+}
+
+function syncCustomerPaymentMethod(method) {
+    const hiddenInput = document.getElementById('selectedPaymentMethod');
+    if (hiddenInput) hiddenInput.value = method;
+
+    const options = document.querySelectorAll('#checkoutPaymentOptions .pay-option');
+    options.forEach(opt => {
+        if (opt.getAttribute('data-method') === method) {
+            opt.classList.add('active');
+            const checkIcon = opt.querySelector('.pay-check');
+            if (checkIcon) checkIcon.className = 'fa-solid fa-circle-check pay-check';
+        } else {
+            opt.classList.remove('active');
+            const checkIcon = opt.querySelector('.pay-check');
+            if (checkIcon) checkIcon.className = 'fa-regular fa-circle pay-check';
+        }
+    });
+}
+
 async function checkout() {
     if (!cart.length) {
         toast('Cart is empty');
@@ -2898,11 +3114,15 @@ async function checkout() {
     }
 
     const deliveryFee = 30;
+    const payInput = document.getElementById('selectedPaymentMethod');
+    const chosenPaymentMethod = payInput ? payInput.value : 'Cash on Delivery (COD)';
+
     const payload = {
         action: 'checkout',
         cart: cart,
         delivery_fee: deliveryFee,
         delivery_address: address,
+        payment_method: chosenPaymentMethod,
         delivery_lat: (dLat !== null && !isNaN(dLat)) ? dLat : null,
         delivery_lng: (dLng !== null && !isNaN(dLng)) ? dLng : null,
         customer_lat: (dLat !== null && !isNaN(dLat)) ? dLat : null,
@@ -3463,6 +3683,10 @@ function openCustomerChat() {
   activeCustChatOrderId = orderId;
   custLastMessageId = 0;
 
+  // Clear unread badge counter on opening chat drawer
+  unreadChatCount = 0;
+  updateChatBadges();
+
   const titleEl = document.getElementById('custChatHeaderTitle');
   if (titleEl) titleEl.textContent = `Chat with ${currentTrackingRiderName}`;
   const phoneEl = document.getElementById('custChatHeaderPhone');
@@ -3480,7 +3704,7 @@ function openCustomerChat() {
     if (activeCustChatOrderId) {
       fetchCustomerMessages(activeCustChatOrderId, false);
     }
-  }, 2500);
+  }, 2000);
 }
 
 function closeCustomerChat() {
@@ -3775,36 +3999,78 @@ async function endConnectedCall() {
   currentIncomingCall = null;
 }
 
+let seenRiderMessageIds = new Set();
+let unreadChatCount = 0;
+
+function updateChatBadges() {
+  const badges = document.querySelectorAll('.cust-chat-unread-badge');
+  badges.forEach(b => {
+    if (unreadChatCount > 0) {
+      b.textContent = unreadChatCount;
+      b.style.display = 'inline-flex';
+    } else {
+      b.style.display = 'none';
+    }
+  });
+}
+
+function appendMessageToChatDrawer(msg) {
+  const container = document.getElementById('custChatMessagesList');
+  if (!container) return;
+
+  const existing = container.querySelector(`[data-msg-id="${msg.message_id}"]`);
+  if (existing) return;
+
+  const hint = container.querySelector('.chat-empty-hint');
+  if (hint) hint.remove();
+
+  const isMe = msg.sender_role === 'customer';
+  const bubble = document.createElement('div');
+  bubble.className = `msg-bubble ${isMe ? 'me' : 'them'}`;
+  bubble.setAttribute('data-msg-id', msg.message_id);
+  bubble.innerHTML = `
+    <div>${escapeCustHtml(msg.message_text)}</div>
+    <div class="msg-meta">${escapeCustHtml(msg.sender_name || 'Rider')} • ${escapeCustHtml(msg.time_formatted || 'Just now')}</div>
+  `;
+  container.appendChild(bubble);
+  container.scrollTop = container.scrollHeight;
+}
+
 function handleLiveRiderMessage(msg) {
   if (!msg || !msg.message_id) return;
-  if (lastSeenRiderMsgId === 0) {
-    lastSeenRiderMsgId = msg.message_id;
-    return;
-  }
+  if (seenRiderMessageIds.has(msg.message_id)) return;
+  seenRiderMessageIds.add(msg.message_id);
 
   if (msg.message_id > lastSeenRiderMsgId) {
     lastSeenRiderMsgId = msg.message_id;
-
-    // If chat modal is open, message will be loaded directly
-    const chatModal = document.getElementById('customerChatModal');
-    if (chatModal && chatModal.classList.contains('show')) {
-      return;
-    }
-
-    const banner = document.getElementById('liveRiderMessageBanner');
-    const textEl = document.getElementById('liveMsgBannerText');
-    if (banner && textEl) {
-      textEl.textContent = msg.message_text;
-      banner.style.display = 'flex';
-
-      playMessageChime();
-
-      if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
-      msgBannerTimeout = setTimeout(() => {
-        banner.style.display = 'none';
-      }, 7000);
-    }
   }
+
+  const senderName = msg.sender_name || currentTrackingRiderName || 'Alex';
+  const alertText = `Rider ${senderName}: ${msg.message_text}`;
+
+  // a. Instantly display floating toast/banner at top of viewport: "Rider Alex: [message text]"
+  const banner = document.getElementById('liveRiderMessageBanner');
+  const titleEl = document.getElementById('liveMsgBannerTitle');
+  const textEl = document.getElementById('liveMsgBannerText');
+  if (banner && textEl) {
+    if (titleEl) titleEl.textContent = `Rider ${senderName}`;
+    textEl.textContent = msg.message_text;
+    banner.style.display = 'flex';
+
+    if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
+    msgBannerTimeout = setTimeout(() => {
+      banner.style.display = 'none';
+    }, 8000);
+  }
+  showToastCustomer(alertText);
+
+  // b. Play subtle audio chime/ping (new Audio(...))
+  playMessageChime();
+
+  // c. Update chat message badge counter and append message into active chat drawer in real time
+  unreadChatCount++;
+  updateChatBadges();
+  appendMessageToChatDrawer(msg);
 }
 
 function openChatFromBanner() {
@@ -3814,6 +4080,19 @@ function openChatFromBanner() {
 }
 
 function playMessageChime() {
+  try {
+    const audio = new Audio('assets/notification_chime.wav');
+    audio.volume = 0.8;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => playWebAudioFallbackChime());
+    }
+  } catch (e) {
+    playWebAudioFallbackChime();
+  }
+}
+
+function playWebAudioFallbackChime() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     const ctx = new AudioCtx();
@@ -3825,7 +4104,7 @@ function playMessageChime() {
     osc.frequency.setValueAtTime(587.33, now);
     osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
 
-    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.setValueAtTime(0.12, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
 
     osc.connect(gain);
@@ -3836,31 +4115,38 @@ function playMessageChime() {
   } catch (e) {}
 }
 
-// Background poller for incoming calls & delivery messages across all screens
-if (activeCustomerTrackingOrderId) {
-  setInterval(async () => {
-    // Only poll here if tracking modal is closed (if modal is open, fetchCustomerLiveTracking handles it)
-    const trackingModal = document.getElementById('customerTrackingModal');
-    if (trackingModal && trackingModal.classList.contains('show')) return;
+// Ensure the polling loop checks order_communication_api.php?action=get_updates&order_id=... every 2 seconds
+async function pollCustomerCommunicationUpdates() {
+  if (!activeCustomerTrackingOrderId) return;
+  try {
+    const res = await fetch(`order_communication_api.php?action=get_updates&order_id=${activeCustomerTrackingOrderId}&after_message_id=${lastSeenRiderMsgId}&_t=${Date.now()}`, {
+      cache: 'no-store'
+    });
+    const data = await res.json();
+    if (!data.success) return;
 
-    try {
-      const res = await fetch(`order_communication_api.php?action=get_updates&order_id=${activeCustomerTrackingOrderId}&after_message_id=${lastSeenRiderMsgId}&_t=${Date.now()}`, {
-        cache: 'no-store'
+    if (data.active_call && data.active_call.status === 'ringing') {
+      handleIncomingCallAlert(data.active_call);
+    } else {
+      dismissIncomingCallIfRinging();
+    }
+
+    if (Array.isArray(data.messages) && data.messages.length > 0) {
+      data.messages.forEach(msg => {
+        if (msg.sender_role === 'rider') {
+          handleLiveRiderMessage(msg);
+        }
       });
-      const data = await res.json();
-      if (!data.success) return;
+    } else if (data.latest_banner && data.latest_banner.sender_role === 'rider') {
+      handleLiveRiderMessage(data.latest_banner);
+    }
+  } catch (e) {}
+}
 
-      if (data.active_call && data.active_call.status === 'ringing') {
-        handleIncomingCallAlert(data.active_call);
-      } else {
-        dismissIncomingCallIfRinging();
-      }
-
-      if (data.latest_banner && data.latest_banner.sender_role === 'rider') {
-        handleLiveRiderMessage(data.latest_banner);
-      }
-    } catch (e) {}
-  }, 2500);
+if (activeCustomerTrackingOrderId) {
+  pollCustomerCommunicationUpdates();
+  // 2-second real-time polling loop
+  setInterval(pollCustomerCommunicationUpdates, 2000);
 }
 
 // Check if navigating to a specific screen via hash (e.g. #orders, #cart)

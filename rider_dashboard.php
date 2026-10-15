@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
     $order_id = (int)($input['order_id'] ?? 0);
     
     if ($order_id > 0) {
-        $stmt = $conn->prepare("SELECT order_id, customer_id, customer_name, order_ref, status, delivery_status, rider_id, total_amount, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng FROM food_orders WHERE order_id = :oid LIMIT 1");
+        $stmt = $conn->prepare("SELECT order_id, customer_id, customer_name, order_ref, status, delivery_status, rider_id, total_amount, payment_method, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng FROM food_orders WHERE order_id = :oid LIMIT 1");
         $stmt->execute([':oid' => $order_id]);
         $order = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -70,9 +70,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
                     $stmt->execute([':ref' => $ref, ':rid' => $rid]);
 
+                    // Sync to orders table
+                    try {
+                        $conn->prepare("UPDATE orders SET status = 'out_for_delivery', rider_id = :rid WHERE order_id = :oid")->execute([':rid' => $rid, ':oid' => $order_id]);
+                    } catch (Throwable $e) {}
+
                     record_order_audit_log($conn, $order_id, $old_st, 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
                     create_notification($conn, $customer_id, 'rider_assigned', 'Order Out for Delivery', 'Rider ' . $user_name . ' has picked up your order ' . $ref . ' and is on the way!', $order_id);
                     notify_role($conn, 'admin', 'Rider Dispatched', 'Rider ' . $user_name . ' confirmed pickup and dispatched order ' . $ref, $order_id);
+
+                    // Automated departure & amount notification into chat
+                    $bill_amt = number_format((float)($order['total_amount'] ?? 0), 2);
+                    $bill_pm = !empty($order['payment_method']) ? trim($order['payment_method']) : 'Cash on Delivery (COD)';
+                    $auto_dep_msg = "Hello! I have picked up your order and I'm on the way. Your total bill is ₱{$bill_amt} ({$bill_pm}). Please have the payment or recipient ready!";
+
+                    try {
+                        $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'rider', :uid, :rname, :txt, NOW())");
+                        $ins_m->execute([
+                            ':oid'   => $order_id,
+                            ':uid'   => $user_id,
+                            ':rname' => $user_name,
+                            ':txt'   => $auto_dep_msg
+                        ]);
+                        if ($customer_id > 0) {
+                            create_notification($conn, $customer_id, 'rider_message', 'Message from Rider (' . $user_name . ')', $auto_dep_msg, $order_id);
+                        }
+                    } catch (Throwable $e) {}
 
                     if (ob_get_level()) ob_clean();
                     header('Content-Type: application/json');
@@ -146,8 +169,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                         $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
                         $stmt->execute([':ref' => $ref, ':rid' => $rid]);
 
+                        // Sync to orders table
+                        try {
+                            $conn->prepare("UPDATE orders SET status = 'out_for_delivery', rider_id = :rid WHERE order_id = :oid")->execute([':rid' => $rid, ':oid' => $order_id]);
+                        } catch (Throwable $e) {}
+
                         record_order_audit_log($conn, $order_id, $old_st, 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
                         create_notification($conn, $customer_id, 'rider_assigned', 'Order Out for Delivery', 'Rider ' . $user_name . ' has picked up your order ' . $ref . '.', $order_id);
+
+                        // Automated departure & amount notification into chat
+                        $bill_amt = number_format((float)($order['total_amount'] ?? 0), 2);
+                        $bill_pm = !empty($order['payment_method']) ? trim($order['payment_method']) : 'Cash on Delivery (COD)';
+                        $auto_dep_msg = "Hello! I have picked up your order and I'm on the way. Your total bill is ₱{$bill_amt} ({$bill_pm}). Please have the payment or recipient ready!";
+
+                        try {
+                            $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'rider', :uid, :rname, :txt, NOW())");
+                            $ins_m->execute([
+                                ':oid'   => $order_id,
+                                ':uid'   => $user_id,
+                                ':rname' => $user_name,
+                                ':txt'   => $auto_dep_msg
+                            ]);
+                            if ($customer_id > 0) {
+                                create_notification($conn, $customer_id, 'rider_message', 'Message from Rider (' . $user_name . ')', $auto_dep_msg, $order_id);
+                            }
+                        } catch (Throwable $e) {}
+
                         $msg = 'Order picked up! Status transitioned to On Delivery.';
                     } else {
                         $error = 'Order is already assigned or not ready.';
@@ -205,7 +252,7 @@ if ($rid > 0) {
     $stmt_ready = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.customer_id, o.customer_name, 
             COALESCE(o.customer_phone, cu.phone, '+63 917 123 4567') AS customer_phone,
-            o.store_name, o.items_summary, o.total_amount, 
+            o.store_name, o.items_summary, o.total_amount, o.payment_method,
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, o.created_at, o.shop_id,
             COALESCE(o.store_lat, s.latitude, s.lat) AS store_lat, 
@@ -225,7 +272,7 @@ if ($rid > 0) {
     $stmt_my = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.customer_id, o.customer_name, 
             COALESCE(o.customer_phone, cu.phone, '+63 917 123 4567') AS customer_phone,
-            o.store_name, o.items_summary, o.total_amount, 
+            o.store_name, o.items_summary, o.total_amount, o.payment_method,
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, 
             o.rider_lat, o.rider_lng, o.created_at, o.shop_id,
@@ -1164,7 +1211,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   $is_ready_pickup = in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned']);
-?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><?php
+?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div style="margin:5px 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="rider-payment-badge" style="display:inline-flex;align-items:center;gap:5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:3px 9px;border-radius:6px;font-size:0.75rem;font-weight:700;"><i class="fa-solid fa-wallet"></i> <?=htmlspecialchars(!empty($o['payment_method']) ? $o['payment_method'] : 'Cash on Delivery (COD)')?></span><span style="font-weight:800;color:#0f172a;font-size:0.82rem;">₱<?=number_format((float)$o['total_amount'],2)?></span></div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><?php
   $c_phone_val = !empty($o['customer_phone']) ? trim($o['customer_phone']) : '+63 917 123 4567';
   $c_dial = preg_replace('/[^\+0-9]/', '', $c_phone_val);
   if (empty($c_dial)) $c_dial = '+639171234567';
@@ -1175,7 +1222,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $lat = (isset($o['delivery_lat']) && is_numeric($o['delivery_lat'])) ? $o['delivery_lat'] : ($o['customer_lat'] ?? null);
   $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
-?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>₱<?=number_format((float)$o['total_amount'],2)?></div><div class="rider-address-card" style="margin:8px 0 10px;"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No delivery address provided')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="margin-top:8px;"><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'claim')"><i class="fa-solid fa-motorcycle"></i> Accept / Pick Up Order</button></div></div><?php endforeach; else: ?><div class="empty">No unassigned ready orders.</div><?php endif; ?></div></section>
+?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?></div><div style="margin:5px 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="rider-payment-badge" style="display:inline-flex;align-items:center;gap:5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:3px 9px;border-radius:6px;font-size:0.75rem;font-weight:700;"><i class="fa-solid fa-wallet"></i> <?=htmlspecialchars(!empty($o['payment_method']) ? $o['payment_method'] : 'Cash on Delivery (COD)')?></span><span style="font-weight:800;color:#0f172a;font-size:0.82rem;">₱<?=number_format((float)$o['total_amount'],2)?></span></div><div class="rider-address-card" style="margin:8px 0 10px;"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No delivery address provided')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="margin-top:8px;"><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'claim')"><i class="fa-solid fa-motorcycle"></i> Accept / Pick Up Order</button></div></div><?php endforeach; else: ?><div class="empty">No unassigned ready orders.</div><?php endif; ?></div></section>
 <section class="section" id="live"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">📡 Live Location</h2><div id="gpsStatus" class="meta">Live location is off. Tap Share Live Location after starting a delivery.</div><button type="button" class="btn full" style="margin-top:10px" onclick="stopLiveLocation()">Stop Sharing</button></div></section><section class="section" id="guide"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">Customer Notification Flow</h2><div class="meta">When you accept an order, the customer is notified. When you start the trip, they receive an <b>On the Way</b> notification. When you tap <b>I'm Near Customer</b>, they receive the near-arrival notification. When delivered, the customer receives a final delivery notice.</div></div></section></main><nav class="bottom"><a class="active" href="#delivery"><i class="fa-solid fa-box"></i>Delivery</a><a href="#available"><i class="fa-solid fa-motorcycle"></i>Pickup</a><a href="#live"><i class="fa-solid fa-location-crosshairs"></i>Live</a><a href="#guide"><i class="fa-solid fa-circle-info"></i>Guide</a><a href="#" onclick="openLogout();return false"><i class="fa-solid fa-right-from-bracket"></i>Logout</a></nav></div>
 <div class="modal" id="noteModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Notifications</h3><div id="notificationList" class="notification-list"><div class="empty">Loading...</div></div><div class="box-actions"><button class="close" onclick="markAllRead()">Mark all read</button><button class="close" onclick="closeNotifications()">Close</button></div></div></div>
 <div class="modal" id="logoutModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out.</p><div class="box-actions"><button class="close" onclick="closeLogout()">Cancel</button><a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
