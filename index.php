@@ -43,6 +43,10 @@ $saved_demo_user_js = null;
 if (isset($_GET['msg'])) {
     if ($_GET['msg'] === 'forgot_sent') {
         $success_msg = "Password reset instructions sent to your email!";
+        if (!empty($_GET['email'])) {
+            require_once 'email_template_helper.php';
+            create_password_reset_request($conn, $_GET['email']);
+        }
     } elseif ($_GET['msg'] === 'social_demo') {
         $success_msg = "Social login initiated. Authenticating...";
     } elseif ($_GET['msg'] === 'logged_out') {
@@ -1998,14 +2002,55 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     function closeForgotModal() {
       document.getElementById("forgotModal").classList.remove("active");
     }
-    function submitForgotPassword() {
-      const email = document.getElementById("reset-email").value;
+    async function submitForgotPassword() {
+      const emailInput = document.getElementById("reset-email");
+      const email = emailInput ? emailInput.value.trim() : "";
       const errorEl = document.getElementById("forgotError");
-      if (email.trim() === "") {
-        errorEl.style.display = "block";
-      } else {
-        errorEl.style.display = "none";
-        window.location.href = "index.php?msg=forgot_sent";
+      if (email === "") {
+        if (errorEl) errorEl.style.display = "block";
+        return;
+      }
+      if (errorEl) errorEl.style.display = "none";
+
+      const btn = document.querySelector("#forgotModal .btn-submit");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+      }
+
+      try {
+        const formData = new FormData();
+        formData.append('email', email);
+        const res = await fetch('mail_api.php?action=send_reset', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+
+        closeForgotModal();
+
+        // Show prominent toast notification
+        let alertBox = document.getElementById('forgotSuccessToast');
+        if (!alertBox) {
+          alertBox = document.createElement('div');
+          alertBox.id = 'forgotSuccessToast';
+          alertBox.style.cssText = 'position:fixed; top:24px; left:50%; transform:translateX(-50%); background:#2e7d32; color:#fff; padding:12px 24px; border-radius:10px; font-weight:700; font-size:14px; box-shadow:0 8px 24px rgba(0,0,0,0.2); z-index:10001; display:flex; align-items:center; gap:10px; transition:all 0.3s;';
+          alertBox.innerHTML = '<i class="fa-solid fa-circle-check"></i> <span>Password reset instructions sent to your email!</span>';
+          document.body.appendChild(alertBox);
+          setTimeout(() => { if (alertBox) alertBox.remove(); }, 6000);
+        }
+
+        // Open the Gmail inbox simulator pre-filtered to this recipient
+        if (typeof openGmailModal === 'function') {
+          setTimeout(() => openGmailModal(email), 400);
+        }
+      } catch (err) {
+        window.location.href = "index.php?msg=forgot_sent&email=" + encodeURIComponent(email);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Send Reset';
+        }
       }
     }
 
@@ -2081,5 +2126,6 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       if (u && !u.value) { p.value = ''; }
     });
   </script>
+  <?php require_once 'gmail_simulator_modal.php'; ?>
 </body>
 </html>

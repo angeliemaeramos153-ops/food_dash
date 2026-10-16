@@ -6017,5 +6017,6 @@ if (window.location.hash) {
   }
 }
 </script>
+<?php require_once 'gmail_simulator_modal.php'; ?>
 </body>
 </html>
