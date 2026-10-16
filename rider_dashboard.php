@@ -167,16 +167,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', updated_at = NOW() WHERE order_id = :oid AND rider_id = :rid");
                     $stmt->execute([':oid' => $order_id, ':rid' => $rid]);
 
-                    $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid");
-                    $stmt->execute([':rid' => $rid]);
+                    try {
+                        $conn->prepare("UPDATE orders SET status = 'delivered', updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+                    } catch (Throwable $e) {}
+
+                    // Two-Way Delivery Handshake: Keep rider on_delivery with active current_order reference
+                    // so the active summary card is retained until rider taps "Finish & Clear / Next Order"
+                    $order_ref_val = !empty($order['order_ref']) ? $order['order_ref'] : '#' . $order_id;
+                    $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
+                    $stmt->execute([':ref' => $order_ref_val, ':rid' => $rid]);
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'DELIVERED', $user_id, 'rider', 'Order successfully delivered to customer by ' . $user_name);
                     create_notification($conn, $customer_id, 'delivered', 'Order Delivered!', 'Your order ' . $ref . ' has been marked delivered. Enjoy your meal!', $order_id);
                     notify_role($conn, 'admin', 'Order Delivered - Ready for Settlement', 'Order ' . $ref . ' delivered by ' . $user_name . '. Awaiting audit reconciliation.', $order_id);
 
+                    // Add delivery confirmation chat message
+                    try {
+                        $chk_m = $conn->prepare("SELECT message_id FROM order_messages WHERE order_id = :oid AND message_text LIKE '%Order delivered successfully%' LIMIT 1");
+                        $chk_m->execute([':oid' => $order_id]);
+                        if (!$chk_m->fetch()) {
+                            $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'rider', :uid, :rname, :txt, NOW())");
+                            $ins_m->execute([
+                                ':oid'   => $order_id,
+                                ':uid'   => $user_id,
+                                ':rname' => $user_name,
+                                ':txt'   => '📦 Order delivered successfully! Enjoy your meal.'
+                            ]);
+                        }
+                    } catch (Throwable $e) {}
+
                     if (ob_get_level()) ob_clean();
                     header('Content-Type: application/json');
-                    echo json_encode(['success' => true, 'message' => 'Delivery completed! Customer and Admin notified.']);
+                    echo json_encode(['success' => true, 'message' => 'Delivery marked as delivered! Active order summary retained.']);
+                    exit();
+                } elseif ($action === 'clear_order' || $action === 'finish_delivery') {
+                    // Explicit Finish & Clear action by rider
+                    $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid");
+                    $stmt->execute([':rid' => $rid]);
+
+                    if (ob_get_level()) ob_clean();
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => true, 'message' => 'Active delivery cleared! Ready for your next order.']);
                     exit();
                 } else {
                     throw new Exception('Unknown delivery action.');
@@ -285,13 +316,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', updated_at = NOW() WHERE order_id = :oid");
                     $stmt->execute([':oid' => $order_id]);
 
-                    $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid");
-                    $stmt->execute([':rid' => $rid]);
+                    try {
+                        $conn->prepare("UPDATE orders SET status = 'delivered', updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+                    } catch (Throwable $e) {}
+
+                    $order_ref_val = !empty($order['order_ref']) ? $order['order_ref'] : '#' . $order_id;
+                    $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
+                    $stmt->execute([':ref' => $order_ref_val, ':rid' => $rid]);
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'DELIVERED', $user_id, 'rider', 'Order delivered by ' . $user_name);
                     create_notification($conn, $customer_id, 'delivered', 'Order delivered', 'Your order ' . $ref . ' has been delivered.', $order_id);
                     notify_role($conn, 'admin', 'Order Delivered', 'Order ' . $ref . ' delivered by ' . $user_name, $order_id);
-                    $msg = 'Delivery completed and customer notified.';
+                    $msg = 'Delivery marked delivered! Active summary retained.';
+                } elseif ($action === 'clear_order' || $action === 'finish_delivery') {
+                    $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid");
+                    $stmt->execute([':rid' => $rid]);
+                    $msg = 'Delivery cleared. You are now waiting for new orders.';
                 }
             }
         }
@@ -355,7 +395,13 @@ if ($rid > 0) {
         LEFT JOIN riders r ON (o.rider_id = r.rider_id)
         LEFT JOIN users cu ON (o.customer_id = cu.user_id)
         WHERE o.rider_id = :rid 
-          AND (LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer')) 
+          AND (
+            LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived')
+            OR (
+              LOWER(TRIM(o.status)) = 'delivered'
+              AND (r.status = 'on_delivery' OR (r.current_order IS NOT NULL AND r.current_order != 'None' AND r.current_order != ''))
+            )
+          )
         ORDER BY o.order_id DESC LIMIT 30");
     $stmt_my->execute([':rid' => $rid]);
     $my_orders = $stmt_my->fetchAll(PDO::FETCH_ASSOC);
@@ -727,6 +773,83 @@ main{padding:16px;flex:1;overflow-x:hidden}
 .toast-rider{position:fixed;left:50%;bottom:88px;transform:translateX(-50%) translateY(20px);background:var(--olive-shadow);color:#fff;padding:10px 18px;border-radius:20px;font-size:11px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:200;white-space:nowrap;box-shadow:0 4px 15px rgba(75,83,32,.30)}
 .toast-rider.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast-rider.err{background:var(--earth-clay)}
+
+/* Floating Customer Message Toast Alert */
+.rider-customer-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-120px);
+  max-width: 420px;
+  width: calc(100% - 28px);
+  background: #ffffff;
+  border: 1.5px solid #22c55e;
+  border-left: 5px solid #16a34a;
+  border-radius: 14px;
+  padding: 11px 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.18), 0 3px 10px rgba(34,197,94,0.25);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 9999;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.rider-customer-toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.rct-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+.rct-body {
+  flex: 1;
+  overflow: hidden;
+}
+.rct-title {
+  font-size: 0.70rem;
+  font-weight: 700;
+  color: #15803d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.rct-text {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.rct-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+}
+.rct-close:hover { color: #0f172a; }
+.delivery-complete-summary {
+  animation: fadeInSummary 0.4s ease-out;
+}
+@keyframes fadeInSummary {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* PC Testing Simulator Floating Controls Bar */
 .pc-simulator-panel {
@@ -1311,12 +1434,13 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   $is_ready_pickup = in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned']);
+  $is_delivered_state = ($del_st === 'delivered' || $norm_st === 'delivered');
 ?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div style="margin:5px 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><?=render_payment_badge($o['payment_method'] ?? 'Cash on Delivery (COD)')?><span style="font-weight:800;color:#0f172a;font-size:0.82rem;">₱<?=number_format((float)$o['total_amount'],2)?></span></div><div class="rider-ack-badge" id="riderAckBadge_<?=(int)$o['order_id']?>" style="<?=empty($o['arrival_acknowledged_at']) ? 'display:none;' : ''?>"><i class="fa-solid fa-circle-check"></i> Customer Acknowledged: <b>"<?=htmlspecialchars($o['arrival_ack_response'] ?? 'Coming outside!')?>"</b></div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><?php
   $c_phone_val = !empty($o['customer_phone']) ? trim($o['customer_phone']) : '+63 917 123 4567';
   $c_dial = preg_replace('/[^\+0-9]/', '', $c_phone_val);
   if (empty($c_dial)) $c_dial = '+639171234567';
   $c_name_val = !empty($o['customer_name']) ? trim($o['customer_name']) : 'Customer';
-?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div id="delivery-map" style="height: 320px; width: 100%; border-radius: 12px; margin-top: 12px;"></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div id="gpsNoticeBanner" style="display:none;margin-top:8px;padding:9px 12px;background:#fff8e6;border:1.5px solid #d97706;border-radius:10px;font-size:0.73rem;color:#78350f;line-height:1.45;"><div style="display:flex;align-items:flex-start;gap:8px;"><i class="fa-solid fa-triangle-exclamation" style="color:#d97706;font-size:0.9rem;margin-top:2px;"></i><div style="flex:1;" id="gpsNoticeText">GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.</div></div></div><div class="actions" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'near_customer'): ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'arrived'): ?><div style="background:#ecfdf5; border:1.5px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:10px; font-size:0.82rem; font-weight:700; text-align:center;"><i class="fa-solid fa-circle-check"></i> Arrived at Destination • Customer notified outside</div><?php else: ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'delivered')"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
+?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div id="delivery-map" style="height: 320px; width: 100%; border-radius: 12px; margin-top: 12px;"></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div id="gpsNoticeBanner" style="display:none;margin-top:8px;padding:9px 12px;background:#fff8e6;border:1.5px solid #d97706;border-radius:10px;font-size:0.73rem;color:#78350f;line-height:1.45;"><div style="display:flex;align-items:flex-start;gap:8px;"><i class="fa-solid fa-triangle-exclamation" style="color:#d97706;font-size:0.9rem;margin-top:2px;"></i><div style="flex:1;" id="gpsNoticeText">GPS unavailable on insecure HTTP or permission denied. Tap or drag the rider marker on the map to simulate live movement.</div></div></div><div class="actions" id="riderOrderActions_<?=(int)$o['order_id']?>" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_delivered_state): ?><div class="delivery-complete-summary" id="deliveryCompleteSummary_<?=(int)$o['order_id']?>" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;"><div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;"><i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i><span>Delivery Handover Completed!</span></div><div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">Delivery handover is confirmed. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:</div><button type="button" class="btn success full" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(<?=(int)$o['order_id']?>)"><i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order</button></div><?php else: ?><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'near_customer'): ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'arrived'): ?><div style="background:#ecfdf5; border:1.5px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:10px; font-size:0.82rem; font-weight:700; text-align:center;"><i class="fa-solid fa-circle-check"></i> Arrived at Destination • Customer notified outside</div><?php else: ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full" onclick="promptCompleteDelivery(<?=$o['order_id']?>)"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
   $addr = trim((string)($o['delivery_address'] ?? ''));
   $lat = (isset($o['delivery_lat']) && is_numeric($o['delivery_lat'])) ? $o['delivery_lat'] : ($o['customer_lat'] ?? null);
@@ -1362,6 +1486,15 @@ main{padding:16px;flex:1;overflow-x:hidden}
       <span id="simStatusText">Simulator ready</span>
     </div>
   </div>
+</div>
+<!-- Floating Customer Message Alert Toast -->
+<div class="rider-customer-toast" id="riderCustomerToast" onclick="openOrderChatFromToast()">
+  <div class="rct-icon"><i class="fa-solid fa-comment-dots"></i></div>
+  <div class="rct-body">
+    <div class="rct-title" id="rctTitle">Customer Message</div>
+    <div class="rct-text" id="rctText">Customer: ...</div>
+  </div>
+  <button type="button" class="rct-close" onclick="event.stopPropagation(); dismissRiderCustomerToast()">&times;</button>
 </div>
 <div class="toast-rider" id="riderToast"></div>
 <script src="assets/js/order_call_engine.js"></script>
@@ -2441,9 +2574,15 @@ async function fetchOrderMessages(orderId, scrollToBottom) {
         data.messages.forEach(msg => {
           if (msg.message_id > lastKnownMessageId) {
             lastKnownMessageId = msg.message_id;
+            if (msg.message_id > highestSeenMessageId) highestSeenMessageId = msg.message_id;
+            seenRiderMessageIds.add(msg.message_id);
+
+            if (container.querySelector(`[data-msg-id="${msg.message_id}"]`)) return;
+
             const isMe = msg.sender_role === 'rider';
             const bubble = document.createElement('div');
             bubble.className = `msg-bubble ${isMe ? 'me' : 'them'}`;
+            bubble.setAttribute('data-msg-id', msg.message_id);
             bubble.innerHTML = `
               <div>${escapeHtml(msg.message_text)}</div>
               <div class="msg-meta">${escapeHtml(msg.sender_name)} • ${escapeHtml(msg.time_formatted || '')}</div>
@@ -2514,7 +2653,120 @@ let riderCallTimer = null;
 let riderCallSeconds = 0;
 
 let activeRiderDeliveryOrderId = <?=(!empty($my_orders[0]['order_id']) ? (int)$my_orders[0]['order_id'] : 0)?>;
+let currentActiveCustomerName = '<?=htmlspecialchars(addslashes($my_orders[0]['customer_name'] ?? 'Customer'))?>';
+let currentActiveCustomerPhone = '<?=htmlspecialchars(addslashes($my_orders[0]['customer_phone'] ?? '+63 917 123 4567'))?>';
 let lastSeenCustomerAck = false;
+let seenRiderMessageIds = new Set();
+let highestSeenMessageId = 0;
+let isFirstCommPoll = true;
+
+function promptCompleteDelivery(orderId) {
+  if (!confirm('Confirm delivery handover with customer?')) {
+    return;
+  }
+  doDeliveryAction(orderId, 'delivered');
+}
+
+function doFinishAndClearDelivery(orderId) {
+  if (!confirm('Clear this delivery and return to waiting for next orders?')) {
+    return;
+  }
+  doDeliveryAction(orderId, 'clear_order');
+}
+
+let _riderCustToastTimer = null;
+function showRiderCustomerMessageToast(displayText, senderName) {
+  const toast = document.getElementById('riderCustomerToast');
+  const titleEl = document.getElementById('rctTitle');
+  const textEl = document.getElementById('rctText');
+  if (toast && textEl) {
+    if (titleEl) titleEl.textContent = 'Message from ' + (senderName || 'Customer');
+    textEl.textContent = displayText;
+    toast.classList.add('show');
+    clearTimeout(_riderCustToastTimer);
+    _riderCustToastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+    }, 6500);
+  }
+  toastRider(displayText);
+}
+
+function dismissRiderCustomerToast() {
+  const toast = document.getElementById('riderCustomerToast');
+  if (toast) toast.classList.remove('show');
+}
+
+function openOrderChatFromToast() {
+  dismissRiderCustomerToast();
+  if (activeRiderDeliveryOrderId) {
+    openOrderChat(activeRiderDeliveryOrderId, currentActiveCustomerName || 'Customer', currentActiveCustomerPhone || '+639171234567');
+  }
+}
+
+function playRiderChime() {
+  // 1. Web Audio API synthesized melodic two-tone chime (880Hz -> 1320Hz)
+  try {
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtxClass) {
+      const ctx = new AudioCtxClass();
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(880, now);
+      gain1.gain.setValueAtTime(0.2, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.28);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1320, now + 0.12);
+      gain2.gain.setValueAtTime(0.25, now + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.12);
+      osc2.stop(now + 0.5);
+    }
+  } catch (e) {}
+
+  // 2. Audio file fallback
+  try {
+    const snd = new Audio('assets/notification_chime.wav');
+    snd.volume = 0.85;
+    snd.play().catch(() => {});
+  } catch (e) {}
+}
+
+function appendCustomerMessageToRiderChat(msg) {
+  const container = document.getElementById('chatMessagesList');
+  if (!container) return;
+  const msgId = msg.message_id || 0;
+  if (msgId > 0 && container.querySelector(`[data-msg-id="${msgId}"]`)) {
+    return;
+  }
+  const hint = container.querySelector('.chat-empty-hint');
+  if (hint) hint.remove();
+
+  const isMe = msg.sender_role === 'rider';
+  const bubble = document.createElement('div');
+  bubble.className = `msg-bubble ${isMe ? 'me' : 'them'}`;
+  if (msgId > 0) bubble.setAttribute('data-msg-id', msgId);
+  const timeFormatted = msg.time_formatted || (new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const senderName = msg.sender_name || (isMe ? 'You' : 'Customer');
+
+  bubble.innerHTML = `
+    <div>${escapeHtml(msg.message_text)}</div>
+    <div class="msg-meta">${escapeHtml(senderName)} • ${escapeHtml(timeFormatted)}</div>
+  `;
+  container.appendChild(bubble);
+  container.scrollTop = container.scrollHeight;
+}
 
 function initiateCustomerCall(orderId, customerName, customerPhone) {
   if (window.FoodDashCall) {
@@ -2525,7 +2777,7 @@ function initiateCustomerCall(orderId, customerName, customerPhone) {
 async function pollRiderOrderCommunication() {
   if (!activeRiderDeliveryOrderId) return;
   try {
-    const res = await fetch(`order_communication_api.php?action=get_updates&order_id=${activeRiderDeliveryOrderId}&_t=${Date.now()}`, { cache: 'no-store' });
+    const res = await fetch(`order_communication_api.php?action=get_updates&order_id=${activeRiderDeliveryOrderId}&after_message_id=${highestSeenMessageId}&_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
     if (!data.success) return;
@@ -2541,15 +2793,82 @@ async function pollRiderOrderCommunication() {
       const ackResp = data.arrival_ack_response || 'Coming outside!';
       const badge = document.getElementById(`riderAckBadge_${activeRiderDeliveryOrderId}`);
       if (badge) {
-        badge.innerHTML = `<i class="fa-solid fa-circle-check"></i> Customer Acknowledged: <b>"${ackResp}"</b>`;
+        badge.innerHTML = `<i class="fa-solid fa-circle-check"></i> Customer Acknowledged: <b>"${escapeHtml(ackResp)}"</b>`;
         badge.style.display = 'flex';
       }
       toastRider(`🔔 Customer Acknowledged Arrival: "${ackResp}"`);
-      try {
-        const chime = new Audio('assets/notification_chime.wav');
-        chime.volume = 0.8;
-        chime.play().catch(()=>{});
-      } catch(e){}
+      playRiderChime();
+    }
+
+    // 3. Live Customer Message Alerts & Dynamic Chat Append
+    if (Array.isArray(data.messages) && data.messages.length > 0) {
+      if (isFirstCommPoll) {
+        data.messages.forEach(m => {
+          if (m.message_id) seenRiderMessageIds.add(m.message_id);
+        });
+        if (data.latest_message_id) {
+          highestSeenMessageId = Math.max(highestSeenMessageId, data.latest_message_id);
+        }
+        isFirstCommPoll = false;
+      } else {
+        data.messages.forEach(msg => {
+          const mId = msg.message_id;
+          if (mId && seenRiderMessageIds.has(mId)) return;
+          if (mId) {
+            seenRiderMessageIds.add(mId);
+            highestSeenMessageId = Math.max(highestSeenMessageId, mId);
+          }
+
+          if (msg.sender_role === 'customer' || msg.sender_role !== 'rider') {
+            let displayText = msg.message_text || '';
+            if (!displayText.toLowerCase().startsWith('customer:')) {
+              displayText = 'Customer: ' + displayText;
+            }
+            // a. Instantly display floating toast alert: "Customer: [Message]"
+            showRiderCustomerMessageToast(displayText, msg.sender_name);
+            // b. Play audio chime alert
+            playRiderChime();
+            // c. Automatically append customer's message into rider's chat box without page refresh
+            appendCustomerMessageToRiderChat(msg);
+          } else {
+            appendCustomerMessageToRiderChat(msg);
+          }
+        });
+        if (data.latest_message_id) {
+          highestSeenMessageId = Math.max(highestSeenMessageId, data.latest_message_id);
+        }
+      }
+    } else if (isFirstCommPoll) {
+      if (data.latest_message_id) {
+        highestSeenMessageId = Math.max(highestSeenMessageId, data.latest_message_id);
+      }
+      isFirstCommPoll = false;
+    }
+
+    // 4. Two-Way Delivery Handshake: Retain active summary card when delivered
+    const currentStatus = (data.status || '').toLowerCase();
+    const currentDelStatus = (data.delivery_status || '').toLowerCase();
+    if (currentStatus === 'delivered' || currentDelStatus === 'delivered') {
+      const summaryCard = document.getElementById(`deliveryCompleteSummary_${activeRiderDeliveryOrderId}`);
+      const actionsContainer = document.getElementById(`riderOrderActions_${activeRiderDeliveryOrderId}`);
+      if (!summaryCard && actionsContainer) {
+        actionsContainer.innerHTML = `
+          <div class="delivery-complete-summary" id="deliveryCompleteSummary_${activeRiderDeliveryOrderId}" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;">
+            <div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;">
+              <i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i>
+              <span>Delivery Handover Completed!</span>
+            </div>
+            <div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">
+              Delivery handover is confirmed by customer. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:
+            </div>
+            <button type="button" class="btn success full" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(${activeRiderDeliveryOrderId})">
+              <i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order
+            </button>
+          </div>
+        `;
+        toastRider('🎉 Customer confirmed receipt of delivery!');
+        playRiderChime();
+      }
     }
   } catch(e) {}
 }

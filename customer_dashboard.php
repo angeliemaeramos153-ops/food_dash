@@ -106,12 +106,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         $stmt->execute([$order_id, $user_id]);
+
+        try {
+            $conn->prepare("UPDATE orders SET status = 'delivered', updated_at = NOW() WHERE order_id = ?")->execute([$order_id]);
+        } catch (Throwable $e) {}
         
         // Record audit log entry
         record_order_audit_log($conn, $order_id, $curr['status'], 'DELIVERED', $user_id, 'customer', 'Customer confirmed receipt of order');
 
         // Notify Admin for settlement reconciliation
         notify_role($conn, 'admin', 'order_delivered', 'Order Delivered - Ready for Settlement', "Order {$curr['order_ref']} marked delivered by customer. Ready for reconciliation.", $order_id);
+
+        // Add a customer receipt confirmation message into order_messages so rider gets live alert
+        try {
+            $chk_m = $conn->prepare("SELECT message_id FROM order_messages WHERE order_id = :oid AND message_text LIKE '%Order receipt confirmed%' LIMIT 1");
+            $chk_m->execute([':oid' => $order_id]);
+            if (!$chk_m->fetch()) {
+                $cname = $user_name ?: 'Customer';
+                $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'customer', :uid, :cname, :txt, NOW())");
+                $ins_m->execute([
+                    ':oid'   => $order_id,
+                    ':uid'   => $user_id,
+                    ':cname' => $cname,
+                    ':txt'   => 'Customer: 📦 Order receipt confirmed. Thank you!'
+                ]);
+            }
+        } catch (Throwable $e) {}
 
         api_response(['success' => true, 'message' => 'Order marked as DELIVERED successfully!']);
     }
