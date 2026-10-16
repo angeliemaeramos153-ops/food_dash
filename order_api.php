@@ -2,6 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
+require_once 'payment_helper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -164,6 +165,10 @@ if ($action === 'get_orders' || $action === 'my_orders' || ($method === 'GET' &&
         ORDER BY order_id DESC LIMIT 50");
     $stmt->execute([':cid' => $user_id]);
     $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($orders as &$ord) {
+        $ord['payment_meta'] = get_payment_method_meta($ord['payment_method'] ?? 'Cash on Delivery (COD)');
+    }
+    unset($ord);
 
     order_api_out(true, 'Orders retrieved.', ['orders' => $orders]);
 }
@@ -182,6 +187,8 @@ if ($action === 'order_details') {
     if (!$order) {
         order_api_out(false, 'Order not found.', [], 404);
     }
+
+    $order['payment_meta'] = get_payment_method_meta($order['payment_method'] ?? 'Cash on Delivery (COD)');
 
     $l_stmt = $conn->prepare("SELECT log_id, old_status, new_status, action_by_role, notes, created_at FROM order_audit_logs WHERE order_id = :oid ORDER BY log_id ASC");
     $l_stmt->execute([':oid' => $order_id]);

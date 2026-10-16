@@ -1,6 +1,7 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once 'db_connect.php';
+require_once 'payment_helper.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: index.php");
@@ -465,18 +466,50 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
   flex-shrink: 0;
 }
 
-/* Pay Method Badge */
+/* Official Payment Brand Badges */
+.pm-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  font-size: 8.5px;
+  font-weight: 700;
+  vertical-align: middle;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  user-select: none;
+}
+.pm-brand-badge .pm-logo {
+  height: 18px;
+  max-height: 20px;
+  width: auto;
+  max-width: 55px;
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+.pm-brand-badge .pm-brand-name {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
+}
+.pm-badge-cod { background: #f0fdf4 !important; border: 1px solid #86efac !important; color: #15803d !important; }
+.pm-badge-gcash { background: #eff6ff !important; border: 1px solid #93c5fd !important; color: #1d4ed8 !important; }
+.pm-badge-maya { background: #0f172a !important; border: 1px solid #05de82 !important; color: #05de82 !important; }
+.pm-badge-gotyme { background: #1e1b4b !important; border: 1px solid #818cf8 !important; color: #38bdf8 !important; }
+.pm-badge-apple { background: #000000 !important; border: 1px solid #374151 !important; color: #ffffff !important; }
+
+/* Legacy compatibility */
 .pay-method-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  padding: 2px 7px;
-  border-radius: 10px;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  font-size: 8.5px;
   font-weight: 700;
-  font-size: 10.5px;
-  border: 1px solid #bfdbfe;
 }
 
 /* In-App Customer Chat Drawer */
@@ -697,7 +730,7 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
     </a>
     <div class="header-title">
       <h2><?= htmlspecialchars($order['order_ref'] ?? 'Live Delivery') ?></h2>
-      <small><?= htmlspecialchars($order['store_name'] ?? 'Store') ?> • <span class="pay-method-badge"><i class="fa-solid fa-wallet"></i> <?= htmlspecialchars($order['payment_method'] ?? 'Cash on Delivery (COD)') ?></span></small>
+      <small><?= htmlspecialchars($order['store_name'] ?? 'Store') ?> • <?= render_payment_badge($order['payment_method'] ?? 'Cash on Delivery (COD)') ?></small>
     </div>
     <div class="status-pill">
       <i class="fa-solid fa-circle-dot fa-beat-fade"></i>
@@ -744,7 +777,7 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
       </div>
       <small style="font-size:10px; color:var(--muted); text-align:right;">
         Total Bill: <strong style="color:var(--olive-shadow);">₱<?= number_format((float)($order['total_amount'] ?? 0), 2) ?></strong><br>
-        <span class="pay-method-badge" style="margin-top:2px;"><i class="fa-solid fa-wallet"></i> <?= htmlspecialchars($order['payment_method'] ?? 'Cash on Delivery (COD)') ?></span>
+        <span style="display:inline-block; margin-top:3px;"><?= render_payment_badge($order['payment_method'] ?? 'Cash on Delivery (COD)') ?></span>
       </small>
     </div>
     <div class="contact-actions">

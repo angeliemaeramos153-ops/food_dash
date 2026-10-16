@@ -3,6 +3,7 @@ session_start();
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
 require_once 'geocode_lib.php';
+require_once 'payment_helper.php';
 
 // Auth Guard: Ensure user is logged in and is a customer
 if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'customer') {
@@ -578,76 +579,200 @@ button{cursor:pointer}
   flex-direction: column;
   gap: 7px;
 }
+/* Official Payment Brand Badges & Tiles */
+.pm-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  font-size: 8.5px;
+  font-weight: 700;
+  vertical-align: middle;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  user-select: none;
+}
+.pm-brand-badge .pm-logo {
+  height: 18px;
+  max-height: 20px;
+  width: auto;
+  max-width: 55px;
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+.pm-brand-badge .pm-brand-name {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
+}
+.pm-badge-cod { background: #f0fdf4 !important; border: 1px solid #86efac !important; color: #15803d !important; }
+.pm-badge-gcash { background: #eff6ff !important; border: 1px solid #93c5fd !important; color: #1d4ed8 !important; }
+.pm-badge-maya { background: #0f172a !important; border: 1px solid #05de82 !important; color: #05de82 !important; }
+.pm-badge-gotyme { background: #1e1b4b !important; border: 1px solid #818cf8 !important; color: #38bdf8 !important; }
+.pm-badge-apple { background: #000000 !important; border: 1px solid #374151 !important; color: #ffffff !important; }
+
+/* Legacy compatibility */
+.pay-method-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  font-size: 8.5px;
+  font-weight: 700;
+}
+
+/* Distinct Selection Tile in Checkout */
 .pay-option {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  background: #faf8f5;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #ffffff;
   border: 1.5px solid #ebe4d1;
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
 }
 .pay-option:hover {
   border-color: var(--harvest-sun);
   background: #fffdf9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(75,83,32,0.08);
 }
 .pay-option.active {
   border-color: var(--olive-shadow);
-  background: #f4f6ec;
-  box-shadow: 0 2px 8px rgba(75,83,32,.08);
+  background: #fbfcf8;
+  box-shadow: 0 0 0 1px var(--olive-shadow), 0 4px 12px rgba(75,83,32,0.12);
 }
-.pay-option-icon {
-  width: 32px;
+.pay-option-logo-box {
+  width: 52px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  background: transparent;
   flex-shrink: 0;
+  padding: 2px 4px;
 }
-.pay-option-icon.cod { background: #ecfdf5; color: #059669; }
-.pay-option-icon.gcash { background: #eff6ff; color: #2563eb; }
-.pay-option-icon.maya { background: #fdf2f8; color: #db2777; }
-.pay-option-icon.gotyme { background: #fefce8; color: #ca8a04; }
-.pay-option-icon.apple { background: #f1f5f9; color: #0f172a; }
+.pay-option-brand-logo, .pay-tile-logo {
+  height: 20px;
+  max-height: 22px;
+  width: auto;
+  max-width: 48px;
+  object-fit: contain;
+  display: block;
+}
 .pay-option-info {
   flex: 1;
   min-width: 0;
 }
 .pay-option-info strong {
   display: block;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--olive-dark);
 }
 .pay-option-info small {
   display: block;
-  font-size: 8px;
-  color: var(--muted);
+  font-size: 8.5px;
+  color: #6b7280;
+  margin-top: 1.5px;
 }
 .pay-option .pay-check {
-  font-size: 13px;
+  font-size: 15px;
   color: #cbd5e1;
-  transition: color 0.2s ease;
+  transition: all 0.2s ease;
 }
 .pay-option.active .pay-check {
   color: var(--olive-shadow);
 }
-.pay-method-badge {
-  display: inline-flex;
+
+/* Distinct Selection Tile in Payment Methods Modal */
+.pay-option-card {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 2.5px 7px;
-  border-radius: 6px;
-  font-size: 8px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  margin-bottom: 9px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  user-select: none;
+}
+.pay-option-card:hover {
+  border-color: #4B5320;
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 12px rgba(75,83,32,0.09);
+}
+.pay-option-card.selected, .pay-option-card.active {
+  border-color: #4B5320;
+  background: #fafbf7;
+  box-shadow: 0 0 0 1px #4B5320, 0 4px 14px rgba(75,83,32,0.12);
+}
+.pay-tile-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.pay-tile-logo-box {
+  width: 56px;
+  height: 34px;
+  border-radius: 8px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 5px;
+  flex-shrink: 0;
+}
+.pay-tile-info h4 {
+  margin: 0;
+  font-size: 12px;
   font-weight: 700;
-  background: #eff6ff;
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
+  color: #1f2937;
+  line-height: 1.25;
+}
+.pay-tile-info p {
+  margin: 2px 0 0;
+  font-size: 10px;
+  color: #6b7280;
+  line-height: 1.25;
+}
+.pay-radio-indicator {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.pay-option-card.selected .pay-radio-indicator, .pay-option-card.active .pay-radio-indicator {
+  border-color: #4B5320;
+  background: #4B5320;
+}
+.pay-radio-indicator i {
+  color: #ffffff;
+  font-size: 10px;
+  display: none;
+}
+.pay-option-card.selected .pay-radio-indicator i, .pay-option-card.active .pay-radio-indicator i {
+  display: block;
 }
 .cust-chat-unread-badge {
   background: #ef4444;
@@ -2010,42 +2135,52 @@ button{cursor:pointer}
       </div>
       <div class="payment-options-grid" id="checkoutPaymentOptions">
         <div class="pay-option active" data-method="Cash on Delivery (COD)" onclick="setCustomerPaymentMethod('Cash on Delivery (COD)', this)">
-          <div class="pay-option-icon cod"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+          <div class="pay-option-logo-box">
+            <img src="assets/logos/cod.svg" alt="Cash on Delivery" class="pay-option-brand-logo">
+          </div>
           <div class="pay-option-info">
             <strong>Cash on Delivery (COD)</strong>
-            <small>Pay with cash upon arrival</small>
+            <small>Cash on Delivery - Pay upon arrival</small>
           </div>
           <i class="fa-solid fa-circle-check pay-check"></i>
         </div>
         <div class="pay-option" data-method="GCash" onclick="setCustomerPaymentMethod('GCash', this)">
-          <div class="pay-option-icon gcash"><i class="fa-solid fa-mobile-screen"></i></div>
+          <div class="pay-option-logo-box">
+            <img src="assets/logos/gcash.svg" alt="GCash" class="pay-option-brand-logo">
+          </div>
           <div class="pay-option-info">
             <strong>GCash</strong>
-            <small>Scan QR or instant transfer</small>
+            <small>GCash - E-Wallet</small>
           </div>
           <i class="fa-regular fa-circle pay-check"></i>
         </div>
         <div class="pay-option" data-method="Maya (PayMaya)" onclick="setCustomerPaymentMethod('Maya (PayMaya)', this)">
-          <div class="pay-option-icon maya"><i class="fa-solid fa-credit-card"></i></div>
+          <div class="pay-option-logo-box">
+            <img src="assets/logos/maya.svg" alt="Maya" class="pay-option-brand-logo">
+          </div>
           <div class="pay-option-info">
             <strong>Maya (PayMaya)</strong>
-            <small>E-Wallet, Visa & Mastercard</small>
+            <small>Maya - Wallet & Bank</small>
           </div>
           <i class="fa-regular fa-circle pay-check"></i>
         </div>
         <div class="pay-option" data-method="GoTyme Bank" onclick="setCustomerPaymentMethod('GoTyme Bank', this)">
-          <div class="pay-option-icon gotyme"><i class="fa-solid fa-building-columns"></i></div>
+          <div class="pay-option-logo-box">
+            <img src="assets/logos/gotyme.svg" alt="GoTyme Bank" class="pay-option-brand-logo">
+          </div>
           <div class="pay-option-info">
             <strong>GoTyme Bank</strong>
-            <small>Digital Bank & Go Rewards</small>
+            <small>GoTyme - Digital Bank</small>
           </div>
           <i class="fa-regular fa-circle pay-check"></i>
         </div>
         <div class="pay-option" data-method="Apple Pay" onclick="setCustomerPaymentMethod('Apple Pay', this)">
-          <div class="pay-option-icon apple"><i class="fa-brands fa-apple"></i></div>
+          <div class="pay-option-logo-box">
+            <img src="assets/logos/apple-pay.svg" alt="Apple Pay" class="pay-option-brand-logo">
+          </div>
           <div class="pay-option-info">
             <strong>Apple Pay</strong>
-            <small>Fast & secure Touch ID / Face ID</small>
+            <small>Apple Pay - Instant Touch/Face ID</small>
           </div>
           <i class="fa-regular fa-circle pay-check"></i>
         </div>
@@ -2108,9 +2243,7 @@ button{cursor:pointer}
             <span class="status-badge status-<?= htmlspecialchars($norm_status) ?>" id="status-tag-<?= $ord['order_id'] ?>">
               <?= htmlspecialchars($status_label) ?>
             </span>
-            <span class="pay-method-badge">
-              <i class="fa-solid fa-wallet"></i> <?= htmlspecialchars(!empty($ord['payment_method']) ? $ord['payment_method'] : 'Cash on Delivery (COD)') ?>
-            </span>
+            <?= render_payment_badge($ord['payment_method'] ?? 'Cash on Delivery (COD)') ?>
             <?php if ($is_settled): ?>
               <span class="settled-tag"><i class="fa-solid fa-circle-check"></i> Reconciled</span>
             <?php endif; ?>
@@ -2541,47 +2674,67 @@ button{cursor:pointer}
     </div>
 
     <div class="payment-options-list">
-      <div class="pay-option-card" id="payOpt_cod" onclick="selectDefaultPaymentMethod('Cash on Delivery (COD)')">
-        <div class="pay-icon-box cod"><i class="fa-solid fa-money-bill-wave"></i></div>
-        <div class="pay-option-info">
-          <h4>Cash on Delivery (COD)</h4>
-          <p><i class="fa-solid fa-circle" style="color:#16a34a; font-size:7px;"></i> Available &bull; Pay cash to your rider</p>
+      <div class="pay-option-card selected" id="payOpt_cod" onclick="selectDefaultPaymentMethod('Cash on Delivery (COD)')">
+        <div class="pay-tile-left">
+          <div class="pay-tile-logo-box">
+            <img src="assets/logos/cod.svg" alt="Cash on Delivery" class="pay-tile-logo">
+          </div>
+          <div class="pay-tile-info">
+            <h4>Cash on Delivery (COD)</h4>
+            <p>Cash on Delivery - Pay upon arrival</p>
+          </div>
         </div>
         <div class="pay-radio-indicator"><i class="fa-solid fa-check"></i></div>
       </div>
 
       <div class="pay-option-card" id="payOpt_gcash" onclick="selectDefaultPaymentMethod('GCash')">
-        <div class="pay-icon-box gcash"><i class="fa-solid fa-mobile-screen"></i></div>
-        <div class="pay-option-info">
-          <h4>GCash</h4>
-          <p><i class="fa-solid fa-circle" style="color:#16a34a; font-size:7px;"></i> Instant e-wallet transfer &bull; 0% Fee</p>
+        <div class="pay-tile-left">
+          <div class="pay-tile-logo-box">
+            <img src="assets/logos/gcash.svg" alt="GCash" class="pay-tile-logo">
+          </div>
+          <div class="pay-tile-info">
+            <h4>GCash</h4>
+            <p>GCash - E-Wallet</p>
+          </div>
         </div>
         <div class="pay-radio-indicator"><i class="fa-solid fa-check"></i></div>
       </div>
 
       <div class="pay-option-card" id="payOpt_maya" onclick="selectDefaultPaymentMethod('Maya (PayMaya)')">
-        <div class="pay-icon-box maya"><i class="fa-solid fa-wallet"></i></div>
-        <div class="pay-option-info">
-          <h4>Maya (PayMaya)</h4>
-          <p><i class="fa-solid fa-circle" style="color:#16a34a; font-size:7px;"></i> Visa / Mastercard / Digital Bank</p>
+        <div class="pay-tile-left">
+          <div class="pay-tile-logo-box">
+            <img src="assets/logos/maya.svg" alt="Maya" class="pay-tile-logo">
+          </div>
+          <div class="pay-tile-info">
+            <h4>Maya (PayMaya)</h4>
+            <p>Maya - Wallet & Bank</p>
+          </div>
         </div>
         <div class="pay-radio-indicator"><i class="fa-solid fa-check"></i></div>
       </div>
 
       <div class="pay-option-card" id="payOpt_gotyme" onclick="selectDefaultPaymentMethod('GoTyme Bank')">
-        <div class="pay-icon-box gotyme"><i class="fa-solid fa-building-columns"></i></div>
-        <div class="pay-option-info">
-          <h4>GoTyme Bank</h4>
-          <p><i class="fa-solid fa-circle" style="color:#16a34a; font-size:7px;"></i> Go Rewards points on every meal</p>
+        <div class="pay-tile-left">
+          <div class="pay-tile-logo-box">
+            <img src="assets/logos/gotyme.svg" alt="GoTyme Bank" class="pay-tile-logo">
+          </div>
+          <div class="pay-tile-info">
+            <h4>GoTyme Bank</h4>
+            <p>GoTyme - Digital Bank</p>
+          </div>
         </div>
         <div class="pay-radio-indicator"><i class="fa-solid fa-check"></i></div>
       </div>
 
       <div class="pay-option-card" id="payOpt_apple" onclick="selectDefaultPaymentMethod('Apple Pay')">
-        <div class="pay-icon-box apple"><i class="fa-brands fa-apple"></i></div>
-        <div class="pay-option-info">
-          <h4>Apple Pay</h4>
-          <p><i class="fa-solid fa-circle" style="color:#16a34a; font-size:7px;"></i> One-tap Face ID / Touch ID payment</p>
+        <div class="pay-tile-left">
+          <div class="pay-tile-logo-box">
+            <img src="assets/logos/apple-pay.svg" alt="Apple Pay" class="pay-tile-logo">
+          </div>
+          <div class="pay-tile-info">
+            <h4>Apple Pay</h4>
+            <p>Apple Pay - Instant Touch/Face ID</p>
+          </div>
         </div>
         <div class="pay-radio-indicator"><i class="fa-solid fa-check"></i></div>
       </div>

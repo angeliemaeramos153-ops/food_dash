@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 86 28" width="86" height="28">
+  <defs>
+    <linearGradient id="mayaNeon" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#05de82"/>
+      <stop offset="100%" stop-color="#22f59b"/>
+    </linearGradient>
+  </defs>
+  <!-- Background Badge -->
+  <rect x="0.5" y="0.5" width="85" height="27" rx="6" fill="#0d1117" stroke="#05de82" stroke-width="1"/>
+  <!-- Maya Icon Pill -->
+  <g transform="translate(6, 5)">
+    <circle cx="9" cy="9" r="8" fill="#05de82" fill-opacity="0.15"/>
+    <path d="M 5,13 L 5,6 L 8.5,10.5 L 12,6 L 12,13" fill="none" stroke="#05de82" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <!-- Maya Official Wordmark -->
+  <text x="27" y="18.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Poppins', sans-serif" font-size="14.5" font-weight="900" fill="url(#mayaNeon)" letter-spacing="-0.6">maya</text>
+</svg>

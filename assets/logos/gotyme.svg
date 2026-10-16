@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 28" width="96" height="28">
+  <defs>
+    <linearGradient id="gotymeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00d2d2"/>
+      <stop offset="100%" stop-color="#5925dc"/>
+    </linearGradient>
+    <linearGradient id="gotymeBg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1e1035"/>
+      <stop offset="100%" stop-color="#0e1726"/>
+    </linearGradient>
+  </defs>
+  <!-- Background Badge -->
+  <rect x="0.5" y="0.5" width="95" height="27" rx="6" fill="url(#gotymeBg)" stroke="#5925dc" stroke-width="1"/>
+  <!-- GoTyme Infinite Loop Ribbon Mark -->
+  <g transform="translate(6, 4)">
+    <circle cx="10" cy="10" r="9" fill="url(#gotymeGrad)" fill-opacity="0.25"/>
+    <path d="M 6.5,13.5 C 4,11 4,7.5 6.5,5.5 C 9,3.5 12.5,4 14.5,6.5 L 15,7.2 C 16.5,9.2 16.5,12 14.8,13.8 C 13,15.5 10,15.5 8.2,14" fill="none" stroke="#00d2d2" stroke-width="2.2" stroke-linecap="round"/>
+    <circle cx="12.5" cy="9.5" r="2.2" fill="#5925dc"/>
+    <circle cx="12.5" cy="9.5" r="1.1" fill="#ffffff"/>
+  </g>
+  <!-- GoTyme Text -->
+  <text x="28" y="14.2" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Poppins', sans-serif" font-size="9" font-weight="900" fill="#ffffff" letter-spacing="-0.3">GoTyme</text>
+  <text x="28" y="21.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="6.5" font-weight="700" fill="#00d2d2" letter-spacing="1">BANK</text>
+</svg>

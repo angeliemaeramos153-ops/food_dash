@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 86 28" width="86" height="28">
+  <defs>
+    <linearGradient id="codGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#15803d"/>
+      <stop offset="100%" stop-color="#16a34a"/>
+    </linearGradient>
+  </defs>
+  <!-- Background Badge -->
+  <rect x="0.5" y="0.5" width="85" height="27" rx="6" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
+  <!-- Banknote Icon -->
+  <g transform="translate(6, 4.5)">
+    <!-- Back note -->
+    <rect x="2" y="1" width="22" height="13" rx="2" fill="#86efac" opacity="0.6"/>
+    <!-- Front note -->
+    <rect x="0" y="3" width="22" height="13" rx="2" fill="url(#codGrad)" stroke="#14532d" stroke-width="0.5"/>
+    <!-- Inner dashed border -->
+    <rect x="1.5" y="4.5" width="19" height="10" rx="1" fill="none" stroke="#bbf7d0" stroke-width="0.5" stroke-dasharray="1.5,1"/>
+    <!-- Center circle with Peso -->
+    <circle cx="11" cy="9.5" r="3.2" fill="#f0fdf4"/>
+    <text x="11" y="11.8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="5.5" font-weight="900" fill="#15803d" text-anchor="middle">₱</text>
+  </g>
+  <!-- Label Text -->
+  <text x="34" y="13.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Poppins', sans-serif" font-size="9" font-weight="800" fill="#14532d" letter-spacing="0.5">CASH</text>
+  <text x="34" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="6.5" font-weight="700" fill="#16a34a" letter-spacing="0.3">ON DELIVERY</text>
+</svg>
