@@ -1500,6 +1500,321 @@ button{cursor:pointer}
   gap: 4px;
   flex-shrink: 0;
 }
+
+/* Order Cancellation UI */
+.btn-cancel-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #ffffff;
+  color: #dc2626;
+  border: 1.5px solid #dc2626;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 9.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  margin-top: 5px;
+}
+.btn-cancel-order:hover {
+  background: #fef2f2;
+  border-color: #b91c1c;
+  color: #b91c1c;
+}
+.btn-cancel-order:active {
+  transform: scale(0.96);
+}
+.cancel-chip {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cancel-chip.active {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+/* Saved Addresses UI */
+.addr-card {
+  background: #ffffff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  text-align: left;
+}
+.addr-card.default-addr {
+  border-color: #708238;
+  background: #fafaf5;
+  box-shadow: 0 2px 10px rgba(112, 130, 56, 0.12);
+}
+.addr-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.addr-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #4B5320;
+  background: #eef2db;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.addr-badge-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid #86efac;
+}
+.addr-full-text {
+  font-size: 11px;
+  color: #1f2937;
+  line-height: 1.4;
+  margin: 2px 0;
+}
+.addr-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.btn-addr-set-default {
+  background: #f4efe4;
+  border: 1px solid #d8cbb5;
+  color: #4B5320;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-addr-set-default:hover {
+  background: #e8decc;
+}
+.btn-addr-delete {
+  background: transparent;
+  border: none;
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-left: auto;
+}
+.btn-addr-delete:hover {
+  text-decoration: underline;
+}
+.btn-add-new-addr {
+  width: 100%;
+  background: #4B5320;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(75, 83, 32, 0.25);
+  margin-top: 8px;
+}
+.btn-add-new-addr:hover {
+  background: #3c431a;
+}
+
+/* Payment Methods UI */
+.pay-option-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 9px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+.pay-option-card:hover {
+  border-color: #4B5320;
+  background: #fafaf6;
+}
+.pay-option-card.active {
+  border-color: #4B5320;
+  background: #f7f6ed;
+  box-shadow: 0 2px 10px rgba(75, 83, 32, 0.12);
+}
+.pay-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.pay-icon-box.cod { background: #dcfce7; color: #15803d; }
+.pay-icon-box.gcash { background: #dbeafe; color: #1d4ed8; }
+.pay-icon-box.maya { background: #ccfbf1; color: #0f766e; }
+.pay-icon-box.gotyme { background: #fae8ff; color: #86198f; }
+.pay-icon-box.apple { background: #f1f5f9; color: #0f172a; }
+.pay-option-info {
+  flex: 1;
+}
+.pay-option-info h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1f2937;
+}
+.pay-option-info p {
+  margin: 2px 0 0;
+  font-size: 9.5px;
+  color: #6b7280;
+}
+.pay-radio-indicator {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: transparent;
+  flex-shrink: 0;
+}
+.pay-option-card.active .pay-radio-indicator {
+  border-color: #4B5320;
+  background: #4B5320;
+  color: #ffffff;
+}
+
+/* Help & Support UI */
+.faq-box {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  text-align: left;
+}
+.faq-q {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1f2937;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  background: #fdfdfc;
+}
+.faq-a {
+  padding: 8px 12px 10px;
+  font-size: 10px;
+  color: #4b5563;
+  line-height: 1.45;
+  border-top: 1px dashed #e5e7eb;
+  display: none;
+  background: #fafaf8;
+}
+.support-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  margin-bottom: 8px;
+}
+.support-action-btn.call {
+  background: #16a34a;
+  color: #ffffff;
+  box-shadow: 0 3px 12px rgba(22, 163, 74, 0.25);
+}
+.support-action-btn.email {
+  background: #4B5320;
+  color: #ffffff;
+  box-shadow: 0 3px 12px rgba(75, 83, 32, 0.25);
+}
+.support-action-btn:active {
+  transform: scale(0.98);
+}
+
+/* About Food Dash UI */
+.about-hero-box {
+  text-align: center;
+  padding: 16px 12px;
+  background: #f7f6ed;
+  border: 1px solid #d8cbb5;
+  border-radius: 16px;
+  margin-bottom: 12px;
+}
+.about-ver-pill {
+  display: inline-block;
+  background: #4B5320;
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 10px;
+  margin-top: 6px;
+}
+.about-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 13px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  margin-bottom: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: left;
+}
+.about-link-row:hover {
+  background: #f9fafb;
+}
 </style>
 </head>
 <body>
@@ -1757,6 +2072,7 @@ button{cursor:pointer}
     <button class="chip" onclick="filterOrders('out_for_delivery',this)">On Delivery</button>
     <button class="chip" onclick="filterOrders('delivered',this)">Delivered</button>
     <button class="chip" onclick="filterOrders('settled',this)">Settled</button>
+    <button class="chip" onclick="filterOrders('cancelled',this)">Cancelled</button>
   </div>
   <div class="list" id="orderList">
     <?php if (empty($db_orders)): ?>
@@ -1764,19 +2080,21 @@ button{cursor:pointer}
     <?php else: foreach ($db_orders as $ord): 
       $raw_status = strtoupper(trim(str_replace([' ', '-'], '_', $ord['status'])));
       $norm_status = strtolower($raw_status);
-      $is_ontheway = in_array($raw_status, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER']);
+      $is_ontheway = in_array($raw_status, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED']);
       $is_delivered = ($raw_status === 'DELIVERED' || $raw_status === 'COMPLETED');
       $is_settled = ($raw_status === 'SETTLED');
-      $is_prep = ($raw_status === 'PREPARING');
-      $is_ready = in_array($raw_status, ['READY_FOR_PICKUP', 'READY']);
+      $is_prep = in_array($raw_status, ['PREPARING', 'ACCEPTED']);
+      $is_pending = in_array($raw_status, ['PENDING', 'SUBMITTED']);
+      $is_cancelled = ($raw_status === 'CANCELLED');
+      $can_cancel = ($is_pending || $is_prep);
       
       $status_label = ucwords(strtolower(str_replace('_', ' ', $raw_status)));
       if ($raw_status === 'READY_FOR_PICKUP') $status_label = 'Ready for Pickup';
       elseif ($raw_status === 'OUT_FOR_DELIVERY') $status_label = 'Out for Delivery';
     ?>
       <div class="row-card order-row <?= $is_ontheway ? 'on-the-way-card' : '' ?>" data-status="<?= htmlspecialchars($norm_status) ?>" id="order-card-<?= $ord['order_id'] ?>" <?= $is_ontheway ? 'onclick="openCustomerTrackingModal(' . (int)$ord['order_id'] . ')" style="cursor:pointer;" title="Tap to view live delivery tracking map"' : '' ?>>
-        <div class="row-icon <?= $is_ontheway ? 'jolli' : ($is_settled ? 'settled-icon' : 'green') ?>">
-          <?= $is_ontheway ? '🛵' : ($is_settled ? '🛡️' : ($is_delivered ? '📦' : ($is_prep ? '🍳' : '🛍️'))) ?>
+        <div class="row-icon <?= $is_cancelled ? 'grey' : ($is_ontheway ? 'jolli' : ($is_settled ? 'settled-icon' : 'green')) ?>">
+          <?= $is_cancelled ? '🚫' : ($is_ontheway ? '🛵' : ($is_settled ? '🛡️' : ($is_delivered ? '📦' : ($is_prep ? '🍳' : '🛍️')))) ?>
         </div>
         <div class="info">
           <strong><?= htmlspecialchars($ord['order_ref']) ?></strong>
@@ -1797,6 +2115,18 @@ button{cursor:pointer}
               <span class="settled-tag"><i class="fa-solid fa-circle-check"></i> Reconciled</span>
             <?php endif; ?>
           </div>
+
+          <?php if ($can_cancel): ?>
+            <div style="margin-top:6px;" id="cancel-wrap-<?= $ord['order_id'] ?>">
+              <button type="button" class="btn-cancel-order" id="btn-cancel-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); promptCancelOrder(<?= (int)$ord['order_id'] ?>, '<?= htmlspecialchars(addslashes($ord['order_ref'])) ?>', '<?= htmlspecialchars(addslashes($status_label)) ?>')">
+                <i class="fa-solid fa-ban"></i> Cancel Order
+              </button>
+            </div>
+          <?php elseif ($is_cancelled): ?>
+            <div style="font-size: 8.5px; color: #dc2626; font-weight:700; margin-top:4px;">
+              <i class="fa-solid fa-circle-xmark"></i> Cancelled by Customer
+            </div>
+          <?php endif; ?>
 
           <?php if ($is_ontheway): ?>
             <div style="font-size: 8px; color: var(--harvest-sun); font-weight:600; margin-top:4px;">
@@ -1825,12 +2155,12 @@ button{cursor:pointer}
   <div class="section-title"><h3>My Account</h3><i class="fa-solid fa-gear"></i></div>
   <div class="profile"><div class="profile-pic">👤</div><div><strong><?php echo htmlspecialchars($full_name); ?></strong><small>Customer account</small></div></div>
   <div class="menu">
-    <a href="#" onclick="showScreen('orders');return false;"><span><i class="fa-regular fa-clipboard"></i>My Orders</span><i class="fa-solid fa-chevron-right"></i></a>
-    <a href="#" onclick="accountNotice('Addresses');return false;"><span><i class="fa-solid fa-location-dot"></i>Addresses</span><i class="fa-solid fa-chevron-right"></i></a>
-    <a href="#" onclick="accountNotice('Payment Methods');return false;"><span><i class="fa-regular fa-credit-card"></i>Payment Methods</span><i class="fa-solid fa-chevron-right"></i></a>
-    <a href="#" onclick="openNotifications();return false;"><span><i class="fa-regular fa-bell"></i>Notifications</span><i class="fa-solid fa-chevron-right"></i></a>
-    <a href="#" onclick="accountNotice('Help & Support');return false;"><span><i class="fa-regular fa-circle-question"></i>Help & Support</span><i class="fa-solid fa-chevron-right"></i></a>
-    <a href="#" onclick="accountNotice('About Food Dash');return false;"><span><i class="fa-solid fa-circle-info"></i>About Food Dash</span><i class="fa-solid fa-chevron-right"></i></a>
+    <a href="javascript:void(0)" onclick="showScreen('orders')"><span><i class="fa-regular fa-clipboard"></i>My Orders</span><i class="fa-solid fa-chevron-right"></i></a>
+    <a href="javascript:void(0)" onclick="openSavedAddressesModal()"><span><i class="fa-solid fa-location-dot"></i>Addresses</span><i class="fa-solid fa-chevron-right"></i></a>
+    <a href="javascript:void(0)" onclick="openPaymentMethodsModal()"><span><i class="fa-regular fa-credit-card"></i>Payment Methods</span><i class="fa-solid fa-chevron-right"></i></a>
+    <a href="javascript:void(0)" onclick="openNotifications()"><span><i class="fa-regular fa-bell"></i>Notifications</span><i class="fa-solid fa-chevron-right"></i></a>
+    <a href="javascript:void(0)" onclick="openHelpSupportModal()"><span><i class="fa-regular fa-circle-question"></i>Help & Support</span><i class="fa-solid fa-chevron-right"></i></a>
+    <a href="javascript:void(0)" onclick="openAboutModal()"><span><i class="fa-solid fa-circle-info"></i>About Food Dash</span><i class="fa-solid fa-chevron-right"></i></a>
   </div>
   <button class="logout" type="button" onclick="openLogout()">Log Out</button>
 </section>
@@ -1902,7 +2232,7 @@ button{cursor:pointer}
   </div>
 </div>
 
-<div class="logout-modal" id="logoutModal" onclick="if(event.target===this)closeLogout()"><div class="logout-box"><img class="logout-logo" src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out. You can log in again anytime.</p><div class="logout-actions"><button class="logout-cancel" type="button" onclick="closeLogout()">Cancel</button><a class="logout-confirm" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
+<div class="logout-modal" id="logoutModal" onclick="if(event.target===this)closeLogout()"><div class="logout-box"><img class="logout-logo" src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out. You can log in again anytime.</p><div class="logout-actions"><button class="logout-cancel" type="button" onclick="closeLogout()">Cancel</button><button class="logout-confirm" type="button" onclick="executeLogout()">Yes, Log Out</button></div></div></div>
 
 <!-- Customer Live Delivery Tracking Modal -->
 <div class="fd-modal" id="customerTrackingModal" onclick="if(event.target===this)closeCustomerTrackingModal()">
@@ -2004,7 +2334,7 @@ button{cursor:pointer}
     <div class="chat-input-bar">
       <input type="text" id="custChatInputText" placeholder="Type message to rider..." oninput="updateCustChatSmsLink(this.value)" onkeydown="if(event.key==='Enter') sendCustChatMessage()">
       <button type="button" class="chat-send-btn" onclick="sendCustChatMessage()" title="Send in App"><i class="fa-solid fa-paper-plane"></i></button>
-      <a href="#" id="custChatSmsLink" class="chat-sms-btn" target="_blank" title="Send via native SMS"><i class="fa-solid fa-comment-dots"></i> SMS</a>
+      <a href="javascript:void(0)" id="custChatSmsLink" class="chat-sms-btn" target="_blank" title="Send via native SMS"><i class="fa-solid fa-comment-dots"></i> SMS</a>
     </div>
   </div>
 </div>
@@ -2074,6 +2404,324 @@ button{cursor:pointer}
   </div>
   <div class="msg-banner-action">
     <span class="tap-reply-pill">Reply <i class="fa-solid fa-chevron-right"></i></span>
+  </div>
+</div>
+
+<!-- 1. Order Cancellation Confirmation Modal -->
+<div class="fd-modal" id="cancelOrderModal" onclick="if(event.target===this)closeCancelOrderModal()">
+  <div class="fd-modal-box" style="max-width:360px; padding:22px 20px;">
+    <div class="fd-modal-header" style="padding-bottom:8px; border-bottom:1px solid #fee2e2;">
+      <h3 style="color:#b91c1c; display:flex; align-items:center; gap:8px;">
+        <i class="fa-solid fa-triangle-exclamation"></i> Cancel Order
+      </h3>
+      <button class="fd-modal-close" onclick="closeCancelOrderModal()">&times;</button>
+    </div>
+    <div style="margin:12px 0 10px; text-align:left;">
+      <p style="font-size:12px; font-weight:700; color:#1f2937; margin-bottom:4px;" id="cancelOrderModalRef">
+        Are you sure you want to cancel this order?
+      </p>
+      <p style="font-size:10px; color:#6b7280; line-height:1.45; margin-bottom:12px;">
+        Please select or provide a reason for cancelling this order:
+      </p>
+
+      <div class="cancel-reason-chips" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;">
+        <button type="button" class="cancel-chip active" onclick="selectCancelReason(this, 'Changed mind')">Changed mind</button>
+        <button type="button" class="cancel-chip" onclick="selectCancelReason(this, 'Duplicate order')">Duplicate order</button>
+        <button type="button" class="cancel-chip" onclick="selectCancelReason(this, 'Wrong delivery address')">Wrong address</button>
+        <button type="button" class="cancel-chip" onclick="selectCancelReason(this, 'Taking too long to prepare')">Taking too long</button>
+        <button type="button" class="cancel-chip" onclick="selectCancelReason(this, 'Need to modify items')">Need to modify</button>
+      </div>
+
+      <textarea id="cancelOrderReasonInput" class="delivery-textarea" placeholder="Additional details (optional)..." rows="2" style="font-size:11px;">Changed mind</textarea>
+      <input type="hidden" id="cancelTargetOrderId" value="">
+    </div>
+
+    <div class="fd-modal-actions" style="margin-top:14px; display:flex; gap:8px;">
+      <button type="button" class="btn-fd-secondary" onclick="closeCancelOrderModal()" style="flex:1;">
+        Keep Order
+      </button>
+      <button type="button" id="btnConfirmCancelOrder" class="btn-fd-primary" onclick="executeCancelOrder()" style="background:#dc2626; color:#fff; flex:1; box-shadow:0 3px 10px rgba(220,38,38,0.3);">
+        <i class="fa-solid fa-ban"></i> Yes, Cancel Order
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 2. Saved Addresses Modal -->
+<div class="fd-modal" id="savedAddressesModal" onclick="if(event.target===this)closeSavedAddressesModal()">
+  <div class="fd-modal-box" style="max-width:400px; max-height:85vh; display:flex; flex-direction:column; padding:20px;">
+    <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
+      <h3><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> Saved Addresses</h3>
+      <button class="fd-modal-close" onclick="closeSavedAddressesModal()">&times;</button>
+    </div>
+    <div id="savedAddressesList" style="overflow-y:auto; flex:1; margin:12px 0; padding-right:2px;">
+      <div style="text-align:center; padding:20px; font-size:11px; color:var(--muted);">Loading your addresses...</div>
+    </div>
+    <button type="button" class="btn-add-new-addr" onclick="openAddAddressModal()">
+      <i class="fa-solid fa-plus"></i> Add New Address
+    </button>
+  </div>
+</div>
+
+<!-- 3. Add New Address Modal with Map Pin Picker -->
+<div class="fd-modal" id="addAddressModal" onclick="if(event.target===this)closeAddAddressModal()">
+  <div class="fd-modal-box" style="max-width:400px; max-height:90vh; overflow-y:auto; padding:20px;">
+    <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
+      <h3><i class="fa-solid fa-map-location-dot" style="color:var(--harvest-sun)"></i> Add New Delivery Address</h3>
+      <button class="fd-modal-close" onclick="closeAddAddressModal()">&times;</button>
+    </div>
+    
+    <div style="text-align:left; margin:10px 0 6px;">
+      <label style="display:block; font-size:10px; font-weight:700; color:var(--olive-shadow); margin-bottom:3px;">Address Label</label>
+      <div style="display:flex; gap:6px; margin-bottom:10px;">
+        <button type="button" class="cancel-chip active" id="chipLabelHome" onclick="selectNewAddrLabel('Home')"><i class="fa-solid fa-house"></i> Home</button>
+        <button type="button" class="cancel-chip" id="chipLabelWork" onclick="selectNewAddrLabel('Work')"><i class="fa-solid fa-building"></i> Work</button>
+        <button type="button" class="cancel-chip" id="chipLabelOther" onclick="selectNewAddrLabel('Other')"><i class="fa-solid fa-location-dot"></i> Other</button>
+      </div>
+      <input type="hidden" id="newAddrLabel" value="Home">
+
+      <label style="display:block; font-size:10px; font-weight:700; color:var(--olive-shadow); margin-bottom:3px;">Street Address / Building *</label>
+      <input type="text" id="newAddrStreet" class="delivery-textarea" placeholder="Unit, House/Building No., Street Name" style="height:36px; padding:6px 10px; margin-bottom:8px; font-size:11px;">
+
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <div style="flex:1;">
+          <label style="display:block; font-size:10px; font-weight:700; color:var(--olive-shadow); margin-bottom:3px;">Barangay</label>
+          <input type="text" id="newAddrBarangay" class="delivery-textarea" placeholder="e.g. Barangay Cogon" style="height:36px; padding:6px 10px; font-size:11px;">
+        </div>
+        <div style="flex:1;">
+          <label style="display:block; font-size:10px; font-weight:700; color:var(--olive-shadow); margin-bottom:3px;">City</label>
+          <input type="text" id="newAddrCity" class="delivery-textarea" value="Ormoc City" style="height:36px; padding:6px 10px; font-size:11px;">
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="display:block; font-size:10px; font-weight:700; color:var(--olive-shadow); margin-bottom:3px;">Postal Code</label>
+        <input type="text" id="newAddrZip" class="delivery-textarea" value="6541" style="height:36px; padding:6px 10px; font-size:11px;">
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <label style="font-size:10px; font-weight:700; color:var(--olive-shadow); margin:0;">
+          <i class="fa-solid fa-crosshairs" style="color:var(--harvest-sun)"></i> Pin Exact Delivery Location
+        </label>
+        <button type="button" class="gps-detect-btn" onclick="useLocationForNewAddress()" style="font-size:9px; padding:3px 8px;">
+          <i class="fa-solid fa-location-crosshairs"></i> Detect Location
+        </button>
+      </div>
+
+      <!-- Leaflet map picker -->
+      <div id="add-address-picker-map" style="height:170px; width:100%; border-radius:10px; border:1px solid #d8cbb5; margin-bottom:8px;"></div>
+      <div id="newAddrGpsNotice" style="font-size:9.5px; color:#15803d; font-weight:600; margin-bottom:10px;">
+        <i class="fa-solid fa-circle-check"></i> <span id="newAddrCoordsText">Pin set: 11.00762, 124.60749</span>
+      </div>
+      <input type="hidden" id="newAddrLat" value="11.00762">
+      <input type="hidden" id="newAddrLng" value="124.60749">
+
+      <label style="display:flex; align-items:center; gap:8px; font-size:11px; color:#374151; cursor:pointer; margin-bottom:14px;">
+        <input type="checkbox" id="newAddrSetDefault" checked style="width:16px; height:16px; accent-color:#4B5320;">
+        <span>Set as my default delivery address</span>
+      </label>
+    </div>
+
+    <div class="fd-modal-actions">
+      <button type="button" class="btn-fd-secondary" onclick="closeAddAddressModal()">Cancel</button>
+      <button type="button" id="btnSaveNewAddress" class="btn-fd-primary" onclick="submitNewAddress()">Save Address</button>
+    </div>
+  </div>
+</div>
+
+<!-- 4. Payment Methods Modal / Drawer -->
+<div class="fd-modal" id="paymentMethodsModal" onclick="if(event.target===this)closePaymentMethodsModal()">
+  <div class="fd-modal-box" style="max-width:390px; padding:22px 20px;">
+    <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
+      <h3><i class="fa-regular fa-credit-card" style="color:var(--harvest-sun)"></i> Payment Methods</h3>
+      <button class="fd-modal-close" onclick="closePaymentMethodsModal()">&times;</button>
+    </div>
+    <div style="font-size:10px; color:#6b7280; text-align:left; margin:8px 0 12px; line-height:1.4;">
+      Select your preferred default payment method for swift one-tap checkouts.
+    </div>
+
+    <div class="payment-options-list">
+      <div class="pay-option-card" id="payOpt_cod" onclick="selectDefaultPaymentMethod('Cash on Delivery (COD)')">
+        <div class="pay-icon-box cod"><i class="fa-solid fa-money-bill-wave"></i></div>
+        <div class="pay-option-info">
+          <h4>Cash on Delivery (COD)</h4>
+          <p><i class="fa-solid fa-circle" style="color:#16a34a; font-size:7px;"></i> Available &bull; Pay cash to your rider</p>
+        </div>
+        <div class="pay-radio-indicator"><i class="fa-solid fa-check"></i></div>
+      </div>
+
+      <div class="pay-option-card" id="payOpt_gcash" onclick="selectDefaultPaymentMethod('GCash')">
+        <div class="pay-icon-box gcash"><i class="fa-solid fa-mobile-screen"></i></div>
+        <div class="pay-option-info">
+          <h4>GCash</h4>
+          <p><i class="fa-solid fa-circle" style="color:#16a34a; font-size:7px;"></i> Instant e-wallet transfer &bull; 0% Fee</p>
+        </div>
+        <div class="pay-radio-indicator"><i class="fa-solid fa-check"></i></div>
+      </div>
+
+      <div class="pay-option-card" id="payOpt_maya" onclick="selectDefaultPaymentMethod('Maya (PayMaya)')">
+        <div class="pay-icon-box maya"><i class="fa-solid fa-wallet"></i></div>
+        <div class="pay-option-info">
+          <h4>Maya (PayMaya)</h4>
+          <p><i class="fa-solid fa-circle" style="color:#16a34a; font-size:7px;"></i> Visa / Mastercard / Digital Bank</p>
+        </div>
+        <div class="pay-radio-indicator"><i class="fa-solid fa-check"></i></div>
+      </div>
+
+      <div class="pay-option-card" id="payOpt_gotyme" onclick="selectDefaultPaymentMethod('GoTyme Bank')">
+        <div class="pay-icon-box gotyme"><i class="fa-solid fa-building-columns"></i></div>
+        <div class="pay-option-info">
+          <h4>GoTyme Bank</h4>
+          <p><i class="fa-solid fa-circle" style="color:#16a34a; font-size:7px;"></i> Go Rewards points on every meal</p>
+        </div>
+        <div class="pay-radio-indicator"><i class="fa-solid fa-check"></i></div>
+      </div>
+
+      <div class="pay-option-card" id="payOpt_apple" onclick="selectDefaultPaymentMethod('Apple Pay')">
+        <div class="pay-icon-box apple"><i class="fa-brands fa-apple"></i></div>
+        <div class="pay-option-info">
+          <h4>Apple Pay</h4>
+          <p><i class="fa-solid fa-circle" style="color:#16a34a; font-size:7px;"></i> One-tap Face ID / Touch ID payment</p>
+        </div>
+        <div class="pay-radio-indicator"><i class="fa-solid fa-check"></i></div>
+      </div>
+    </div>
+
+    <div class="fd-modal-actions" style="margin-top:14px;">
+      <button type="button" class="btn-fd-primary" onclick="closePaymentMethodsModal()" style="width:100%;">
+        Save & Done
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 5. Help & Support Modal -->
+<div class="fd-modal" id="helpSupportModal" onclick="if(event.target===this)closeHelpSupportModal()">
+  <div class="fd-modal-box" style="max-width:400px; max-height:88vh; overflow-y:auto; padding:22px 20px;">
+    <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
+      <h3><i class="fa-regular fa-circle-question" style="color:var(--harvest-sun)"></i> Help & Support</h3>
+      <button class="fd-modal-close" onclick="closeHelpSupportModal()">&times;</button>
+    </div>
+
+    <div style="text-align:left; margin:10px 0 14px;">
+      <div style="font-size:10px; font-weight:800; color:var(--olive-shadow); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">
+        Direct Contact Support
+      </div>
+      <a href="tel:+639175550192" class="support-action-btn call">
+        <i class="fa-solid fa-phone-volume"></i> Call Hotline (+63 917 555 0192)
+      </a>
+      <a href="mailto:support@fooddash.ph?subject=Customer%20Support%20Inquiry%20-%20Food%20Dash" class="support-action-btn email">
+        <i class="fa-solid fa-envelope"></i> Email Support (support@fooddash.ph)
+      </a>
+
+      <div style="font-size:10px; font-weight:800; color:var(--olive-shadow); text-transform:uppercase; letter-spacing:0.5px; margin:16px 0 8px;">
+        Frequently Asked Questions
+      </div>
+
+      <div class="faq-box">
+        <div class="faq-q" onclick="toggleFaq('faq1')">
+          <span><i class="fa-solid fa-motorcycle" style="color:var(--harvest-sun); margin-right:6px;"></i> How do I track my order in real-time?</span>
+          <i class="fa-solid fa-chevron-down" id="faq1_icon"></i>
+        </div>
+        <div class="faq-a" id="faq1">
+          Open the <b>My Orders</b> tab and tap on any active delivery card. This opens your live Leaflet GPS map showing your store pickup, your delivery pin, live rider motorcycle movement on actual streets, and estimated time of arrival.
+        </div>
+      </div>
+
+      <div class="faq-box">
+        <div class="faq-q" onclick="toggleFaq('faq2')">
+          <span><i class="fa-solid fa-clock" style="color:var(--harvest-sun); margin-right:6px;"></i> What are the estimated delivery times?</span>
+          <i class="fa-solid fa-chevron-down" id="faq2_icon"></i>
+        </div>
+        <div class="faq-a" id="faq2">
+          Meals are typically prepared by our restaurant chefs within 15–20 minutes. Once picked up by your rider, delivery takes approximately 10–20 minutes depending on road distance and traffic.
+        </div>
+      </div>
+
+      <div class="faq-box">
+        <div class="faq-q" onclick="toggleFaq('faq3')">
+          <span><i class="fa-regular fa-credit-card" style="color:var(--harvest-sun); margin-right:6px;"></i> What payment methods are supported?</span>
+          <i class="fa-solid fa-chevron-down" id="faq3_icon"></i>
+        </div>
+        <div class="faq-a" id="faq3">
+          Food Dash supports Cash on Delivery (COD), GCash, Maya (PayMaya), GoTyme Bank, and Apple Pay. You can switch your default payment anytime in Account &gt; Payment Methods.
+        </div>
+      </div>
+
+      <div class="faq-box">
+        <div class="faq-q" onclick="toggleFaq('faq4')">
+          <span><i class="fa-solid fa-ban" style="color:#dc2626; margin-right:6px;"></i> Can I cancel my order once placed?</span>
+          <i class="fa-solid fa-chevron-down" id="faq4_icon"></i>
+        </div>
+        <div class="faq-a" id="faq4">
+          Yes! Orders in <b>Pending</b> or <b>Preparing</b> status can be cancelled directly by tapping the red "Cancel Order" button on your order card. Once an order is Out for Delivery, cancellation is disabled to protect active transit.
+        </div>
+      </div>
+    </div>
+
+    <div class="fd-modal-actions">
+      <button type="button" class="btn-fd-primary" onclick="closeHelpSupportModal()" style="width:100%;">
+        Close Support
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 6. About Food Dash Modal -->
+<div class="fd-modal" id="aboutModal" onclick="if(event.target===this)closeAboutModal()">
+  <div class="fd-modal-box" style="max-width:390px; max-height:88vh; overflow-y:auto; padding:22px 20px;">
+    <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
+      <h3><i class="fa-solid fa-circle-info" style="color:var(--harvest-sun)"></i> About Food Dash</h3>
+      <button class="fd-modal-close" onclick="closeAboutModal()">&times;</button>
+    </div>
+
+    <div style="margin:14px 0 10px;">
+      <div class="about-hero-box">
+        <img src="logo.jpg" alt="Food Dash" style="width:64px; height:64px; border-radius:50%; object-fit:cover; border:2px solid #d8cbb5; margin-bottom:8px;">
+        <h3 style="margin:0; font-size:16px; color:#1f2937;">FOOD DASH</h3>
+        <span class="about-ver-pill">Version 1.0.0 (Official Release)</span>
+        <p style="font-size:10.5px; color:#4b5563; line-height:1.45; margin:10px 0 0;">
+          Good Food. Faster. Real-time food ordering, multi-vendor restaurant integration, and live GPS delivery tracking.
+        </p>
+      </div>
+
+      <div style="text-align:left; margin-bottom:14px;">
+        <h4 style="font-size:11px; font-weight:800; color:var(--olive-shadow); text-transform:uppercase; margin-bottom:6px;">Our Mission</h4>
+        <p style="font-size:10px; color:#4b5563; line-height:1.5; margin:0 0 12px;">
+          Empowering local food communities with real-time, farm-to-table delivery and seamless rider-customer communication.
+        </p>
+
+        <h4 style="font-size:11px; font-weight:800; color:var(--olive-shadow); text-transform:uppercase; margin-bottom:6px;">Legal & Policies</h4>
+        <div class="about-link-row" onclick="openTermsModal('terms')">
+          <span><i class="fa-solid fa-file-contract" style="color:var(--harvest-sun); margin-right:8px;"></i> Terms of Service</span>
+          <i class="fa-solid fa-chevron-right" style="color:#9ca3af; font-size:10px;"></i>
+        </div>
+        <div class="about-link-row" onclick="openTermsModal('privacy')">
+          <span><i class="fa-solid fa-shield-halved" style="color:#16a34a; margin-right:8px;"></i> Privacy Policy</span>
+          <i class="fa-solid fa-chevron-right" style="color:#9ca3af; font-size:10px;"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="fd-modal-actions">
+      <button type="button" class="btn-fd-primary" onclick="closeAboutModal()" style="width:100%;">
+        Close
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 7. Terms & Privacy Viewer Sub-Modal -->
+<div class="fd-modal" id="termsPrivacyModal" onclick="if(event.target===this)closeTermsModal()">
+  <div class="fd-modal-box" style="max-width:400px; max-height:85vh; overflow-y:auto; padding:20px;">
+    <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
+      <h3 id="termsModalTitle">Terms of Service</h3>
+      <button class="fd-modal-close" onclick="closeTermsModal()">&times;</button>
+    </div>
+    <div id="termsModalBody" style="font-size:10.5px; color:#4b5563; line-height:1.55; text-align:left; margin:14px 0;"></div>
+    <div class="fd-modal-actions">
+      <button type="button" class="btn-fd-primary" onclick="closeTermsModal()" style="width:100%;">Understood</button>
+    </div>
   </div>
 </div>
 
@@ -3250,6 +3898,8 @@ function filterOrders(status, btn) {
       row.style.display = ['delivered', 'completed'].includes(cardStatus) ? 'flex' : 'none';
     } else if (status === 'settled') {
       row.style.display = cardStatus === 'settled' ? 'flex' : 'none';
+    } else if (status === 'cancelled') {
+      row.style.display = cardStatus === 'cancelled' ? 'flex' : 'none';
     } else {
       row.style.display = cardStatus === status.toLowerCase() ? 'flex' : 'none';
     }
@@ -3260,12 +3910,605 @@ function accountNotice(section) {
   toast(section + ' clicked');
 }
 
+/* ========================================================
+   ORDER CANCELLATION FEATURE
+   ======================================================== */
+let activeCancelOrderId = null;
+
+function promptCancelOrder(orderId, orderRef, orderStatus) {
+  const normStatus = String(orderStatus || '').toLowerCase().trim();
+  const blockedStatuses = ['on delivery', 'on_delivery', 'out for delivery', 'out_for_delivery', 'on_the_way', 'near_customer', 'arrived', 'delivered', 'completed', 'settled'];
+  
+  // Business Rule Guardrail: If an order is already "On Delivery" or "Delivered", disable cancellation
+  if (blockedStatuses.includes(normStatus)) {
+    alert("Orders out for delivery cannot be cancelled. Please contact support or rider.");
+    return;
+  }
+
+  activeCancelOrderId = parseInt(orderId, 10);
+  const targetInput = document.getElementById('cancelTargetOrderId');
+  if (targetInput) targetInput.value = activeCancelOrderId;
+
+  const modalRef = document.getElementById('cancelOrderModalRef');
+  if (modalRef) {
+    modalRef.textContent = `Are you sure you want to cancel order #${orderRef || activeCancelOrderId}?`;
+  }
+
+  // Reset chips & textarea
+  const chips = document.querySelectorAll('.cancel-reason-chips .cancel-chip');
+  chips.forEach((c, i) => {
+    if (i === 0) c.classList.add('active');
+    else c.classList.remove('active');
+  });
+  const reasonInput = document.getElementById('cancelOrderReasonInput');
+  if (reasonInput) reasonInput.value = 'Changed mind';
+
+  const btn = document.getElementById('btnConfirmCancelOrder');
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-ban"></i> Yes, Cancel Order';
+  }
+
+  const modal = document.getElementById('cancelOrderModal');
+  if (modal) modal.classList.add('show');
+}
+
+function closeCancelOrderModal() {
+  const modal = document.getElementById('cancelOrderModal');
+  if (modal) modal.classList.remove('show');
+  activeCancelOrderId = null;
+}
+
+function selectCancelReason(btn, reasonText) {
+  document.querySelectorAll('.cancel-reason-chips .cancel-chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const input = document.getElementById('cancelOrderReasonInput');
+  if (input) input.value = reasonText;
+}
+
+async function executeCancelOrder() {
+  const targetId = activeCancelOrderId || parseInt(document.getElementById('cancelTargetOrderId')?.value, 10);
+  if (!targetId) {
+    toast('No order selected for cancellation.', 'error');
+    return;
+  }
+
+  const reasonInput = document.getElementById('cancelOrderReasonInput');
+  const reason = (reasonInput ? reasonInput.value.trim() : '') || 'Changed mind, duplicate order, wrong address';
+
+  const btn = document.getElementById('btnConfirmCancelOrder');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Cancelling...';
+  }
+
+  try {
+    const res = await fetch('order_api.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'cancel_order',
+        order_id: targetId,
+        reason: reason
+      })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      toast('Order cancelled successfully.', 'success');
+      closeCancelOrderModal();
+
+      // Update order card in UI immediately
+      const card = document.getElementById(`order-card-${targetId}`);
+      if (card) {
+        card.setAttribute('data-status', 'cancelled');
+        const iconDiv = card.querySelector('.row-icon');
+        if (iconDiv) {
+          iconDiv.className = 'row-icon grey';
+          iconDiv.textContent = '🚫';
+        }
+        const badge = document.getElementById(`status-tag-${targetId}`);
+        if (badge) {
+          badge.className = 'status-badge status-cancelled';
+          badge.textContent = 'Cancelled';
+        }
+        const cancelWrap = document.getElementById(`cancel-wrap-${targetId}`);
+        if (cancelWrap) {
+          cancelWrap.innerHTML = '<div style="font-size:8.5px; color:#dc2626; font-weight:700; margin-top:4px;"><i class="fa-solid fa-circle-xmark"></i> Cancelled by Customer</div>';
+        }
+      }
+
+      setTimeout(() => {
+        if (typeof loadNotifications === 'function') loadNotifications();
+        window.location.reload();
+      }, 900);
+    } else {
+      alert(data.message || 'Could not cancel order. Please contact support or rider.');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-ban"></i> Yes, Cancel Order';
+      }
+    }
+  } catch (err) {
+    console.error('Cancel order error:', err);
+    alert('A network error occurred. Please try again.');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-ban"></i> Yes, Cancel Order';
+    }
+  }
+}
+
+/* ========================================================
+   SAVED ADDRESSES MANAGEMENT
+   ======================================================== */
+let addAddressPickerMap = null;
+let addAddressPickerMarker = null;
+
+function openSavedAddressesModal() {
+  const modal = document.getElementById('savedAddressesModal');
+  if (modal) modal.classList.add('show');
+  loadSavedAddresses();
+}
+
+function closeSavedAddressesModal() {
+  const modal = document.getElementById('savedAddressesModal');
+  if (modal) modal.classList.remove('show');
+}
+
+async function loadSavedAddresses() {
+  const container = document.getElementById('savedAddressesList');
+  if (!container) return;
+  container.innerHTML = '<div style="text-align:center; padding:18px; font-size:11px; color:var(--muted);"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading saved addresses...</div>';
+
+  try {
+    const res = await fetch('address_api.php?action=get_addresses', { cache: 'no-store' });
+    const data = await res.json();
+    if (!data.success || !Array.isArray(data.addresses) || data.addresses.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding:20px; font-size:11px; color:var(--muted);">No saved addresses yet. Tap "+ Add New Address" below!</div>';
+      return;
+    }
+
+    container.innerHTML = data.addresses.map(addr => {
+      const isDef = parseInt(addr.is_default, 10) === 1;
+      const label = addr.label || 'Home';
+      let icon = 'fa-house';
+      if (label.toLowerCase() === 'work') icon = 'fa-building';
+      else if (label.toLowerCase() === 'other') icon = 'fa-location-dot';
+
+      return `
+        <div class="addr-card ${isDef ? 'default' : ''}" id="addr-card-${addr.address_id}">
+          <div class="addr-card-header">
+            <span class="addr-card-title"><i class="fa-solid ${icon}"></i> ${esc(label)}</span>
+            ${isDef ? '<span class="addr-default-pill"><i class="fa-solid fa-circle-check"></i> Default</span>' : ''}
+          </div>
+          <div class="addr-card-body">${esc(addr.full_address || (addr.street + ', ' + addr.barangay + ', ' + addr.city))}</div>
+          <div class="addr-card-actions">
+            ${!isDef ? `
+              <button type="button" class="addr-action-btn" onclick="setDefaultAddress(${addr.address_id})">
+                <i class="fa-solid fa-check"></i> Set Default
+              </button>
+            ` : `
+              <span style="font-size:9.5px; color:#15803d; font-weight:700;"><i class="fa-solid fa-shield-heart"></i> Active Delivery Address</span>
+            `}
+            <button type="button" class="addr-action-btn delete" onclick="deleteSavedAddress(${addr.address_id}, ${isDef ? 1 : 0})" title="Delete address">
+              <i class="fa-regular fa-trash-can"></i> Delete
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Error loading addresses:', err);
+    container.innerHTML = '<div style="text-align:center; padding:18px; font-size:11px; color:#dc2626;">Failed to load addresses. Please retry.</div>';
+  }
+}
+
+async function setDefaultAddress(addrId) {
+  try {
+    const res = await fetch('address_api.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set_default', address_id: addrId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast('Default address updated!', 'success');
+      loadSavedAddresses();
+      const modalAddr = document.getElementById('modalDeliveryAddress');
+      if (modalAddr && data.full_address) modalAddr.value = data.full_address;
+    } else {
+      toast(data.message || 'Failed to update default address', 'error');
+    }
+  } catch (err) {
+    console.error('Set default address error:', err);
+    toast('Network error while updating default address', 'error');
+  }
+}
+
+async function deleteSavedAddress(addrId, isDefault) {
+  if (isDefault) {
+    toast('Default address cannot be deleted. Set another address as default first.', 'info');
+    return;
+  }
+  if (!confirm('Are you sure you want to remove this saved address?')) return;
+
+  try {
+    const res = await fetch('address_api.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete_address', address_id: addrId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast('Address removed.');
+      loadSavedAddresses();
+    } else {
+      toast(data.message || 'Failed to delete address.', 'error');
+    }
+  } catch (err) {
+    console.error('Delete address error:', err);
+    toast('Network error deleting address.', 'error');
+  }
+}
+
+function openAddAddressModal() {
+  const modal = document.getElementById('addAddressModal');
+  if (modal) modal.classList.add('show');
+
+  const st = document.getElementById('newAddrStreet');
+  if (st) st.value = '';
+  const bg = document.getElementById('newAddrBarangay');
+  if (bg) bg.value = '';
+  const ct = document.getElementById('newAddrCity');
+  if (ct) ct.value = 'Ormoc City';
+  const zp = document.getElementById('newAddrZip');
+  if (zp) zp.value = '6541';
+  selectNewAddrLabel('Home');
+
+  const defaultLat = 11.00762;
+  const defaultLng = 124.60749;
+  updateNewAddrCoords(defaultLat, defaultLng);
+
+  setTimeout(() => {
+    initAddAddressPickerMap(defaultLat, defaultLng);
+  }, 200);
+}
+
+function closeAddAddressModal() {
+  const modal = document.getElementById('addAddressModal');
+  if (modal) modal.classList.remove('show');
+}
+
+function selectNewAddrLabel(label) {
+  const hidden = document.getElementById('newAddrLabel');
+  if (hidden) hidden.value = label;
+
+  ['Home', 'Work', 'Other'].forEach(l => {
+    const chip = document.getElementById(`chipLabel${l}`);
+    if (chip) {
+      if (l === label) chip.classList.add('active');
+      else chip.classList.remove('active');
+    }
+  });
+}
+
+function updateNewAddrCoords(lat, lng) {
+  const latEl = document.getElementById('newAddrLat');
+  const lngEl = document.getElementById('newAddrLng');
+  const textEl = document.getElementById('newAddrCoordsText');
+  if (latEl) latEl.value = lat;
+  if (lngEl) lngEl.value = lng;
+  if (textEl) textEl.textContent = `Pin set: ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
+}
+
+function initAddAddressPickerMap(lat, lng) {
+  const container = document.getElementById('add-address-picker-map');
+  if (!container || typeof L === 'undefined') return;
+
+  if (!addAddressPickerMap) {
+    addAddressPickerMap = L.map('add-address-picker-map', {
+      center: [lat, lng],
+      zoom: 15,
+      zoomControl: true
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(addAddressPickerMap);
+
+    const pinIcon = L.divIcon({
+      className: 'custom-pin-icon',
+      html: '<div style="background:#4B5320; color:#fff; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(0,0,0,0.3); border:2px solid #fff;"><i class="fa-solid fa-location-dot" style="font-size:14px;"></i></div>',
+      iconSize: [28, 28],
+      iconAnchor: [14, 28]
+    });
+
+    addAddressPickerMarker = L.marker([lat, lng], {
+      draggable: true,
+      icon: pinIcon
+    }).addTo(addAddressPickerMap);
+
+    addAddressPickerMarker.on('dragend', function (e) {
+      const pos = e.target.getLatLng();
+      updateNewAddrCoords(pos.lat, pos.lng);
+    });
+
+    addAddressPickerMap.on('click', function (e) {
+      if (addAddressPickerMarker) {
+        addAddressPickerMarker.setLatLng(e.latlng);
+      }
+      updateNewAddrCoords(e.latlng.lat, e.latlng.lng);
+    });
+  } else {
+    addAddressPickerMap.invalidateSize();
+    addAddressPickerMap.setView([lat, lng], 15);
+    if (addAddressPickerMarker) {
+      addAddressPickerMarker.setLatLng([lat, lng]);
+    }
+  }
+}
+
+function useLocationForNewAddress() {
+  if (!navigator.geolocation) {
+    toast('Geolocation not supported by this browser.', 'error');
+    return;
+  }
+  toast('Detecting GPS location...', 'info');
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      updateNewAddrCoords(lat, lng);
+      if (addAddressPickerMap) {
+        addAddressPickerMap.setView([lat, lng], 16);
+        if (addAddressPickerMarker) addAddressPickerMarker.setLatLng([lat, lng]);
+      }
+      toast('Location detected!', 'success');
+      const st = document.getElementById('newAddrStreet');
+      if (st && !st.value.trim()) {
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`)
+          .then(r => r.json())
+          .then(d => {
+            if (d && d.address) {
+              const road = d.address.road || d.address.pedestrian || d.address.suburb || '';
+              const brgy = d.address.neighbourhood || d.address.village || '';
+              if (road && !st.value) st.value = road;
+              const bg = document.getElementById('newAddrBarangay');
+              if (bg && brgy && !bg.value) bg.value = brgy;
+            }
+          })
+          .catch(() => {});
+      }
+    },
+    (err) => {
+      console.warn('Geolocation error:', err);
+      toast('Could not detect location. Please tap the map to pin manually.', 'error');
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+}
+
+async function submitNewAddress() {
+  const streetInput = document.getElementById('newAddrStreet');
+  const street = streetInput ? streetInput.value.trim() : '';
+  if (!street) {
+    alert('Please enter your street address or house/building number.');
+    if (streetInput) streetInput.focus();
+    return;
+  }
+
+  const label = document.getElementById('newAddrLabel')?.value || 'Home';
+  const barangay = document.getElementById('newAddrBarangay')?.value.trim() || '';
+  const city = document.getElementById('newAddrCity')?.value.trim() || 'Ormoc City';
+  const postal_code = document.getElementById('newAddrZip')?.value.trim() || '6541';
+  const lat = parseFloat(document.getElementById('newAddrLat')?.value || '11.00762');
+  const lng = parseFloat(document.getElementById('newAddrLng')?.value || '124.60749');
+  const is_default = document.getElementById('newAddrSetDefault')?.checked ? 1 : 0;
+
+  const btn = document.getElementById('btnSaveNewAddress');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+  }
+
+  try {
+    const res = await fetch('address_api.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'add_address',
+        label: label,
+        street: street,
+        barangay: barangay,
+        city: city,
+        postal_code: postal_code,
+        latitude: lat,
+        longitude: lng,
+        is_default: is_default
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast('New address saved!', 'success');
+      closeAddAddressModal();
+      loadSavedAddresses();
+
+      if (is_default && data.address && data.address.full_address) {
+        const modalAddr = document.getElementById('modalDeliveryAddress');
+        if (modalAddr) modalAddr.value = data.address.full_address;
+      }
+    } else {
+      alert(data.message || 'Failed to save address.');
+    }
+  } catch (err) {
+    console.error('Save address error:', err);
+    alert('Network error while saving address.');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Save Address';
+    }
+  }
+}
+
+/* ========================================================
+   PAYMENT METHODS DRAWER & MODAL
+   ======================================================== */
+const PAYMENT_KEY = 'fooddash_default_payment';
+
+function openPaymentMethodsModal() {
+  const modal = document.getElementById('paymentMethodsModal');
+  if (modal) modal.classList.add('show');
+
+  const currentPref = localStorage.getItem(PAYMENT_KEY) || 'Cash on Delivery (COD)';
+  highlightSelectedPayment(currentPref);
+}
+
+function closePaymentMethodsModal() {
+  const modal = document.getElementById('paymentMethodsModal');
+  if (modal) modal.classList.remove('show');
+}
+
+function highlightSelectedPayment(methodName) {
+  const mapping = {
+    'Cash on Delivery (COD)': 'payOpt_cod',
+    'GCash': 'payOpt_gcash',
+    'Maya (PayMaya)': 'payOpt_maya',
+    'GoTyme Bank': 'payOpt_gotyme',
+    'Apple Pay': 'payOpt_apple'
+  };
+
+  document.querySelectorAll('.payment-options-list .pay-option-card').forEach(c => c.classList.remove('selected'));
+  const targetId = mapping[methodName] || 'payOpt_cod';
+  const targetEl = document.getElementById(targetId);
+  if (targetEl) targetEl.classList.add('selected');
+}
+
+function selectDefaultPaymentMethod(methodName) {
+  try {
+    localStorage.setItem(PAYMENT_KEY, methodName);
+  } catch(e){}
+
+  highlightSelectedPayment(methodName);
+
+  const hiddenSel = document.getElementById('selectedPaymentMethod');
+  if (hiddenSel) hiddenSel.value = methodName;
+
+  const modalSelect = document.getElementById('modalPaymentSelect');
+  if (modalSelect) {
+    modalSelect.value = methodName;
+    if (typeof syncCustomerPaymentMethod === 'function') {
+      syncCustomerPaymentMethod(methodName);
+    }
+  }
+
+  document.querySelectorAll('.pay-option').forEach(opt => {
+    const isThis = opt.dataset.method === methodName;
+    opt.classList.toggle('active', isThis);
+    const radio = opt.querySelector('.pay-check');
+    if (radio) {
+      radio.className = isThis ? 'fa-solid fa-circle-dot pay-check' : 'fa-regular fa-circle pay-check';
+    }
+  });
+
+  toast(`Default payment set to: ${methodName}`, 'success');
+}
+
+/* ========================================================
+   HELP & SUPPORT MODAL
+   ======================================================== */
+function openHelpSupportModal() {
+  const modal = document.getElementById('helpSupportModal');
+  if (modal) modal.classList.add('show');
+}
+
+function closeHelpSupportModal() {
+  const modal = document.getElementById('helpSupportModal');
+  if (modal) modal.classList.remove('show');
+}
+
+function toggleFaq(id) {
+  const answer = document.getElementById(id);
+  const icon = document.getElementById(`${id}_icon`);
+  if (!answer) return;
+
+  const isVisible = answer.style.display === 'block';
+  answer.style.display = isVisible ? 'none' : 'block';
+  if (icon) {
+    icon.className = isVisible ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up';
+  }
+}
+
+/* ========================================================
+   ABOUT FOOD DASH MODAL & POLICIES
+   ======================================================== */
+function openAboutModal() {
+  const modal = document.getElementById('aboutModal');
+  if (modal) modal.classList.add('show');
+}
+
+function closeAboutModal() {
+  const modal = document.getElementById('aboutModal');
+  if (modal) modal.classList.remove('show');
+}
+
+function openTermsModal(type) {
+  const modal = document.getElementById('termsPrivacyModal');
+  const title = document.getElementById('termsModalTitle');
+  const body = document.getElementById('termsModalBody');
+  if (!modal || !title || !body) return;
+
+  if (type === 'terms') {
+    title.textContent = 'Terms of Service';
+    body.innerHTML = `
+      <p style="margin-bottom:8px;"><b>1. Acceptance of Terms:</b> By accessing or ordering through Food Dash, you agree to comply with our platform policies and fair community standards.</p>
+      <p style="margin-bottom:8px;"><b>2. Orders & Preparation:</b> Once submitted, orders are dispatched immediately to local chefs. You can track preparation status live on your dashboard.</p>
+      <p style="margin-bottom:8px;"><b>3. Order Cancellations:</b> Orders in 'Pending' or 'Preparing' status may be cancelled free of charge. Orders already dispatched with riders (Out for Delivery) cannot be cancelled.</p>
+      <p style="margin-bottom:8px;"><b>4. Delivery & GPS:</b> Food Dash utilizes real-time GPS telemetry to calculate route travel times and road distances between kitchens and delivery destinations.</p>
+      <p style="margin:0;"><b>5. Contact:</b> For disputes or order inquiries, reach out to support@fooddash.ph or call (+63 917 555 0192).</p>
+    `;
+  } else {
+    title.textContent = 'Privacy Policy';
+    body.innerHTML = `
+      <p style="margin-bottom:8px;"><b>1. Data Protection:</b> Food Dash protects customer information according to the Philippine Data Privacy Act of 2012 (RA 10173).</p>
+      <p style="margin-bottom:8px;"><b>2. Location Data:</b> GPS location coordinates are only collected during active order fulfillment to calculate accurate delivery routes and assist dispatchers.</p>
+      <p style="margin-bottom:8px;"><b>3. Communication Privacy:</b> In-app rider calls and chats are strictly order-scoped and encrypted in transit.</p>
+      <p style="margin:0;"><b>4. Security:</b> We never store raw credit card credentials on platform servers. E-wallet payments are securely routed via accredited payment gateways.</p>
+    `;
+  }
+  modal.classList.add('show');
+}
+
+function closeTermsModal() {
+  const modal = document.getElementById('termsPrivacyModal');
+  if (modal) modal.classList.remove('show');
+}
+
+/* ========================================================
+   LOGOUT WORKFLOW
+   ======================================================== */
 function openLogout() {
   document.getElementById('logoutModal').classList.add('show');
 }
 
 function closeLogout() {
   document.getElementById('logoutModal').classList.remove('show');
+}
+
+function executeLogout() {
+  try {
+    localStorage.removeItem('fooddash_auth_token');
+    localStorage.removeItem('fooddash_user');
+    localStorage.removeItem('fooddash_cart');
+    sessionStorage.clear();
+  } catch (e) {}
+
+  toast('Logging out securely...', 'info');
+  setTimeout(() => {
+    window.location.href = 'logout.php?confirm=1';
+  }, 350);
 }
 
 // Initial setup
@@ -3289,11 +4532,18 @@ document.addEventListener('keydown', e => {
     closeNotifications(); 
     closeAddressPromptModal(); 
     closeCustomerTrackingModal(); 
-    closeCustomerChat(); 
+    closeCustomerChat();
+    closeCancelOrderModal();
+    closeSavedAddressesModal();
+    closeAddAddressModal();
+    closePaymentMethodsModal();
+    closeHelpSupportModal();
+    closeAboutModal();
+    closeTermsModal();
   }
 });
 
-// URL Query Parameter Routing (e.g. ?track=123 or ?screen=orders)
+// URL Query Parameter Routing (e.g. ?track=123 or ?screen=orders or ?screen=account)
 const customerUrlParams = new URLSearchParams(window.location.search);
 if (customerUrlParams.has('track') || customerUrlParams.has('track_order') || customerUrlParams.has('order_id')) {
   const trackId = parseInt(customerUrlParams.get('track') || customerUrlParams.get('track_order') || customerUrlParams.get('order_id'));
@@ -3302,6 +4552,8 @@ if (customerUrlParams.has('track') || customerUrlParams.has('track_order') || cu
   }
 } else if (customerUrlParams.get('screen') === 'orders') {
   showScreen('orders');
+} else if (customerUrlParams.get('screen') === 'account') {
+  showScreen('account');
 }
 
 // Customer Live GPS Tracking & Rider Chat

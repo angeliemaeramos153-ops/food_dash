@@ -297,7 +297,7 @@ if ($method === 'POST') {
     }
 
     // 2. LIFECYCLE TRANSITION: update_status across all 4 roles
-    if ($action === 'update_status' || $action === 'update_order_status' || in_array($action, ['chef_accept', 'chef_ready', 'claim', 'on_way', 'near', 'delivered', 'reconcile', 'settle'], true)) {
+    if ($action === 'update_status' || $action === 'update_order_status' || in_array($action, ['chef_accept', 'chef_ready', 'claim', 'on_way', 'near', 'delivered', 'reconcile', 'settle', 'cancel_order', 'cancel'], true)) {
         $order_id = (int)($payload['order_id'] ?? 0);
         if ($order_id <= 0) respond(false, 'Invalid order ID.', [], 400);
 
@@ -332,6 +332,8 @@ if ($method === 'POST') {
             $target_status = 'DELIVERED';
         } elseif ($action === 'reconcile' || $action === 'settle') {
             $target_status = 'SETTLED';
+        } elseif ($action === 'cancel_order' || $action === 'cancel') {
+            $target_status = 'CANCELLED';
         }
 
         if ($target_status === '') {
@@ -390,10 +392,20 @@ if ($method === 'POST') {
                 $allowed = true;
                 $new_delivery_status = 'delivered';
                 $notes = 'Customer confirmed order receipt';
-            } elseif ($target_status === 'CANCELLED' && in_array($current_canonical, ['PENDING'], true)) {
-                $allowed = true;
-                $new_delivery_status = 'cancelled';
-                $notes = 'Order cancelled by customer';
+            } elseif ($target_status === 'CANCELLED') {
+                if (in_array($current_canonical, ['OUT_FOR_DELIVERY', 'DELIVERED', 'SETTLED', 'ARRIVED'], true)) {
+                    $conn->rollBack();
+                    respond(false, 'Orders out for delivery cannot be cancelled. Please contact support or rider.', [
+                        'order_id'       => $order_id,
+                        'current_status' => $current_canonical
+                    ], 422);
+                }
+                if (in_array($current_canonical, ['PENDING', 'PREPARING', 'READY_FOR_PICKUP', 'SUBMITTED', 'ACCEPTED', 'READY'], true)) {
+                    $allowed = true;
+                    $new_delivery_status = 'cancelled';
+                    $reason = trim((string)($payload['reason'] ?? 'Changed mind, duplicate order, wrong address'));
+                    $notes = 'Order cancelled by customer. Reason: ' . $reason;
+                }
             }
         }
 
@@ -502,7 +514,30 @@ if ($method === 'POST') {
                     create_notification($conn, (int)$rider_id_val, 'settled', 'Delivery Settled', "Order {$ref} delivery payment settled.", $order_id);
                 }
                 log_activity($conn, $user_id, 'SETTLEMENT_CLOSED', "Order {$ref} reconciled and settled by Admin {$user_name}. Total: ₱" . number_format((float)$order['total_amount'], 2));
+            } elseif ($target_status === 'CANCELLED') {
+                if ($rider_id_val) {
+                    $u_rider = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE user_id = :uid OR rider_id = :rid");
+                    $u_rider->execute([':uid' => $rider_id_val, ':rid' => $rider_id_val]);
+                    create_notification($conn, (int)$rider_id_val, 'order_cancelled', 'Order Cancelled', "Order {$ref} has been cancelled by the customer. Delivery released.", $order_id);
+                }
+                $reason_txt = trim((string)($payload['reason'] ?? 'Customer changed mind'));
+                create_notification($conn, $cust_id, 'order_cancelled', 'Order Cancelled', "Your order {$ref} has been cancelled ({$reason_txt}).", $order_id);
+                notify_role($conn, 'chef', 'order_cancelled', 'Order Cancelled', "Order {$ref} was cancelled by customer: {$reason_txt}", $order_id);
+                notify_role($conn, 'admin', 'order_cancelled', 'Order Cancelled by Customer', "Order {$ref} was cancelled by customer {$user_name}. Reason: {$reason_txt}", $order_id);
+                try {
+                    $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'system', :uid, 'System', :txt, NOW())");
+                    $ins_m->execute([':oid' => $order_id, ':uid' => $user_id, ':txt' => "❌ Order {$ref} has been cancelled by customer. Reason: {$reason_txt}"]);
+                } catch (Throwable $e) {}
+                log_activity($conn, $user_id, 'ORDER_CANCELLED', "Order {$ref} cancelled by customer {$user_name}. Reason: {$reason_txt}");
             }
+
+            // Sync with orders table
+            try {
+                $conn->prepare("UPDATE orders SET status = :st WHERE order_id = :oid")->execute([
+                    ':st'  => ($target_status === 'CANCELLED' ? 'Cancelled' : $target_status),
+                    ':oid' => $order_id
+                ]);
+            } catch (Throwable $e) {}
 
             $conn->commit();
             respond(true, "Order status updated to {$target_status}.", [
