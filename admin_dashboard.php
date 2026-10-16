@@ -295,7 +295,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $ord = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($ord && strtoupper(trim($ord['status'])) === 'DELIVERED') {
-                $ref = !empty($ord['order_ref']) ? $ord['order_ref'] : '#' . $ord['order_id'];
+                $ref = '#' . ltrim(!empty($ord['order_ref']) ? $ord['order_ref'] : ('FD-' . $ord['order_id']), '#');
                 $total_amount = (float)$ord['total_amount'];
                 $subtotal = max(0, $total_amount - 49.00);
                 $delivery_fee = 49.00;
@@ -3419,7 +3419,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
                 <div style="background:#FAF6EE; border:1px solid #D4C5A5; border-radius:7px; padding:6px 8px; margin-bottom:6px;">
                   <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="font-size:8.5px; color:#74776a; font-weight:600;">ACTIVE ORDER</span>
-                    <span style="font-size:10.5px; font-weight:700; color:#D88F2A;">${r.order_ref || '#FD-ACTIVE'}</span>
+                    <span style="font-size:10.5px; font-weight:700; color:#D88F2A;">${r.order_ref ? ('#' + String(r.order_ref).replace(/^#+/, '')) : '#FD-ACTIVE'}</span>
                   </div>
                   <div style="font-size:9.5px; color:#333; margin-top:2px; font-weight:600;">
                     <i class="fa-solid fa-utensils" style="color:#788A6E;"></i> ${r.items_summary || 'Food Dash Package'}

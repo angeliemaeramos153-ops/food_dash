@@ -285,7 +285,7 @@ try {
 
     // Send contextual notifications
     $cust_id = (int)$order['customer_id'];
-    $ref = $order['order_ref'];
+    $ref = '#' . ltrim(!empty($order['order_ref']) ? $order['order_ref'] : ('FD-' . $order_id), '#');
 
     if ($target_status === 'PREPARING') {
         create_notification($pdo, $cust_id, 'chef_preparing', 'Kitchen Preparing Order', "Your order {$ref} is now being prepared by the Chef.", $order_id);

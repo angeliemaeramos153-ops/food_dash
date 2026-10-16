@@ -27,17 +27,23 @@ $isApi = (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')
     || (isset($_SERVER['CONTENT_TYPE']) && strpos($_SERVER['CONTENT_TYPE'], 'application/json') !== false);
 
 // 1. STRICT ACCOUNT-SPECIFIC ORDER SCOPING:
-// Query strictly scopes to logged-in customer:
-$stmt = $conn->prepare("SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC");
+// Query strictly scopes to logged-in customer (or demo accounts):
+$is_demo = ($user_id === 15 || $user_id === 26 || strtolower($customer_name) === 'customer');
+$scope_orders = $is_demo ? "(customer_id = ? OR customer_id IN (15, 26, 0))" : "(customer_id = ?)";
+$stmt = $conn->prepare("SELECT * FROM orders WHERE {$scope_orders} ORDER BY created_at DESC");
 $stmt->execute([$user_id]);
 $raw_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Also fetch corresponding details from food_orders table for complete item/store details
-$f_stmt = $conn->prepare("SELECT * FROM food_orders WHERE customer_id = ? ORDER BY order_id DESC");
-$f_stmt->execute([$user_id]);
+$scope_food = $is_demo 
+    ? "(customer_id = ? OR user_id = ? OR customer_id IN (15, 26, 0) OR user_id IN (15, 26, 0))" 
+    : "(customer_id = ? OR user_id = ?)";
+$f_stmt = $conn->prepare("SELECT * FROM food_orders WHERE {$scope_food} ORDER BY order_id DESC");
+$f_stmt->execute([$user_id, $user_id]);
 $food_orders_raw = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
 $fo_map = [];
 foreach ($food_orders_raw as $fo) {
+    $fo['order_ref'] = '#' . ltrim($fo['order_ref'] ?: ('FD-' . $fo['order_id']), '#');
     $fo_map[(int)$fo['order_id']] = $fo;
 }
 
@@ -46,11 +52,13 @@ if (!empty($raw_orders)) {
     foreach ($raw_orders as $ro) {
         $oid = (int)($ro['order_id'] ?? $ro['id'] ?? 0);
         $merged = isset($fo_map[$oid]) ? array_merge($fo_map[$oid], $ro) : $ro;
+        $merged['order_ref'] = '#' . ltrim($merged['order_ref'] ?? ('FD-' . $oid), '#');
         $merged['payment_meta'] = get_payment_method_meta($merged['payment_method'] ?? 'Cash on Delivery (COD)');
         $orders[] = $merged;
     }
 } elseif (!empty($food_orders_raw)) {
     foreach ($food_orders_raw as $fo) {
+        $fo['order_ref'] = '#' . ltrim($fo['order_ref'] ?: ('FD-' . $fo['order_id']), '#');
         $fo['payment_meta'] = get_payment_method_meta($fo['payment_method'] ?? 'Cash on Delivery (COD)');
         $orders[] = $fo;
     }
@@ -544,17 +552,21 @@ if ($isApi) {
           $oid = (int)($ord['order_id'] ?? $ord['id'] ?? 0);
           $raw_status = strtoupper(trim(str_replace([' ', '-'], '_', (string)($ord['status'] ?? 'PENDING'))));
           $del_status = strtolower(trim((string)($ord['delivery_status'] ?? '')));
+          $status_lower = strtolower(trim((string)($ord['status'] ?? '')));
           
-          $is_arrived = ($raw_status === 'ARRIVED' || $del_status === 'arrived');
-          $is_near = ($raw_status === 'NEAR_CUSTOMER' || $del_status === 'near_customer');
+          $is_arrived = ($raw_status === 'ARRIVED' || $del_status === 'arrived' || $status_lower === 'arrived');
+          $is_near = ($raw_status === 'NEAR_CUSTOMER' || $del_status === 'near_customer' || $status_lower === 'near_customer');
           $is_ontheway = in_array($raw_status, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'])
                       || in_array($del_status, ['on_the_way', 'on_delivery', 'picked_up'])
+                      || in_array($status_lower, ['out_for_delivery', 'on_the_way', 'on_delivery'])
                       || $is_near || $is_arrived;
                       
-          $is_delivered = ($raw_status === 'DELIVERED' || $raw_status === 'COMPLETED' || $del_status === 'delivered');
-          $is_prep = in_array($raw_status, ['PREPARING', 'ACCEPTED']);
-          $is_pending = in_array($raw_status, ['PENDING', 'SUBMITTED']);
-          $is_cancelled = ($raw_status === 'CANCELLED' || $del_status === 'cancelled');
+          $is_delivered = ($raw_status === 'DELIVERED' || $raw_status === 'COMPLETED' || $del_status === 'delivered' || $status_lower === 'delivered' || $status_lower === 'completed');
+          $is_prep = in_array($raw_status, ['PREPARING', 'ACCEPTED', 'COOKING', 'IN_KITCHEN', 'PREP'])
+                  || in_array($status_lower, ['preparing', 'accepted', 'cooking', 'in_kitchen', 'prep'])
+                  || in_array($del_status, ['preparing', 'cooking', 'in_kitchen', 'accepted']);
+          $is_pending = in_array($raw_status, ['PENDING', 'SUBMITTED']) || in_array($status_lower, ['pending', 'submitted']);
+          $is_cancelled = ($raw_status === 'CANCELLED' || $del_status === 'cancelled' || $status_lower === 'cancelled');
           
           $can_cancel = ($is_pending || $is_prep) && !$is_ontheway && !$is_delivered && !$is_cancelled;
           
@@ -567,7 +579,7 @@ if ($isApi) {
           } elseif ($is_ontheway) {
               $status_label = 'On Delivery';
               $norm_status = 'on_delivery';
-          } elseif ($raw_status === 'READY_FOR_PICKUP') {
+          } elseif ($raw_status === 'READY_FOR_PICKUP' || $status_lower === 'ready_for_pickup' || $status_lower === 'ready') {
               $status_label = 'Ready for Pickup';
               $norm_status = 'ready_for_pickup';
           } elseif ($is_prep) {
@@ -581,7 +593,7 @@ if ($isApi) {
               $norm_status = strtolower($raw_status);
           }
           
-          $order_ref = $ord['order_ref'] ?? ('#FD-' . $oid);
+          $order_ref = '#' . ltrim($ord['order_ref'] ?? ('FD-' . $oid), '#');
           $store_name = $ord['store_name'] ?? 'Food Dash Store';
           $items_summary = $ord['items_summary'] ?? 'Delicious Food Items';
           $total_amount = (float)($ord['total_amount'] ?? $ord['total_price'] ?? 0);

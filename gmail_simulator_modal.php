@@ -24,7 +24,7 @@ if (isset($_SESSION['user']['email'])) {
     </svg>
     <span class="fd-gmail-badge" id="fdGmailUnreadBadge">0</span>
   </div>
-  <span class="fd-gmail-btn-label">Demo Gmail Inbox</span>
+  <span class="fd-gmail-btn-label">Gmail Inbox</span>
 </div>
 
 <!-- GMAIL SIMULATOR MODAL BACKDROP -->

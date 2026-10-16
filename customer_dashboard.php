@@ -344,13 +344,18 @@ $db_orders = [];
 $ontheway_count = 0;
 $active_tracking_order = null;
 
-$stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 40");
+$is_demo_cust = ($user_id === 15 || $user_id === 26 || strtolower($username) === 'customer');
+$scope_sql = $is_demo_cust 
+    ? "(customer_id = :cid OR user_id = :uid OR customer_id IN (15, 26, 0) OR user_id IN (15, 26, 0))" 
+    : "(customer_id = :cid OR user_id = :uid)";
+
+$stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE {$scope_sql} ORDER BY order_id DESC LIMIT 50");
 if ($stmt) {
-    $stmt->execute([':cid' => $user_id]);
+    $stmt->execute([':cid' => $user_id, ':uid' => $user_id]);
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) { 
         $db_orders[] = $row; 
         $st = strtoupper(trim(str_replace([' ', '-'], '_', $row['status'])));
-        if (in_array($st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER'])) {
+        if (in_array($st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'])) {
             $ontheway_count++;
             if (!$active_tracking_order) {
                 $active_tracking_order = $row;
@@ -2284,20 +2289,24 @@ button{cursor:pointer}
         </button>
       </div>
     <?php else: foreach ($db_orders as $ord): 
-      $raw_status = strtoupper(trim(str_replace([' ', '-'], '_', $ord['status'])));
+      $raw_status = strtoupper(trim(str_replace([' ', '-'], '_', (string)($ord['status'] ?? ''))));
       $del_status = strtolower(trim((string)($ord['delivery_status'] ?? '')));
+      $status_lower = strtolower(trim((string)($ord['status'] ?? '')));
       
-      $is_arrived = ($raw_status === 'ARRIVED' || $del_status === 'arrived');
-      $is_near = ($raw_status === 'NEAR_CUSTOMER' || $del_status === 'near_customer');
+      $is_arrived = ($raw_status === 'ARRIVED' || $del_status === 'arrived' || $status_lower === 'arrived');
+      $is_near = ($raw_status === 'NEAR_CUSTOMER' || $del_status === 'near_customer' || $status_lower === 'near_customer');
       $is_ontheway = in_array($raw_status, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'])
                   || in_array($del_status, ['on_the_way', 'on_delivery', 'picked_up'])
+                  || in_array($status_lower, ['out_for_delivery', 'on_the_way', 'on_delivery'])
                   || $is_near || $is_arrived;
                   
-      $is_delivered = ($raw_status === 'DELIVERED' || $raw_status === 'COMPLETED' || $del_status === 'delivered');
-      $is_settled = ($raw_status === 'SETTLED');
-      $is_prep = in_array($raw_status, ['PREPARING', 'ACCEPTED']);
-      $is_pending = in_array($raw_status, ['PENDING', 'SUBMITTED']);
-      $is_cancelled = ($raw_status === 'CANCELLED' || $del_status === 'cancelled');
+      $is_delivered = ($raw_status === 'DELIVERED' || $raw_status === 'COMPLETED' || $del_status === 'delivered' || $status_lower === 'delivered' || $status_lower === 'completed');
+      $is_settled = ($raw_status === 'SETTLED' || $status_lower === 'settled');
+      $is_prep = in_array($raw_status, ['PREPARING', 'ACCEPTED', 'COOKING', 'IN_KITCHEN', 'PREP'])
+              || in_array($status_lower, ['preparing', 'accepted', 'cooking', 'in_kitchen', 'prep'])
+              || in_array($del_status, ['preparing', 'cooking', 'in_kitchen', 'accepted']);
+      $is_pending = in_array($raw_status, ['PENDING', 'SUBMITTED']) || in_array($status_lower, ['pending', 'submitted']);
+      $is_cancelled = ($raw_status === 'CANCELLED' || $del_status === 'cancelled' || $status_lower === 'cancelled');
       $can_cancel = ($is_pending || $is_prep) && !$is_ontheway && !$is_delivered && !$is_cancelled;
       
       if ($is_arrived) {
@@ -2309,7 +2318,7 @@ button{cursor:pointer}
       } elseif ($is_ontheway) {
           $status_label = 'On Delivery';
           $norm_status = 'on_delivery';
-      } elseif ($raw_status === 'READY_FOR_PICKUP') {
+      } elseif ($raw_status === 'READY_FOR_PICKUP' || $status_lower === 'ready_for_pickup' || $status_lower === 'ready') {
           $status_label = 'Ready for Pickup';
           $norm_status = 'ready_for_pickup';
       } elseif ($is_prep) {
@@ -2322,13 +2331,14 @@ button{cursor:pointer}
           $status_label = ucwords(strtolower(str_replace('_', ' ', $raw_status)));
           $norm_status = strtolower($raw_status);
       }
+      $clean_card_ref = '#' . ltrim($ord['order_ref'] ?? ('FD-' . $ord['order_id']), '#');
     ?>
       <div class="row-card order-row <?= $is_ontheway ? 'on-the-way-card' : '' ?>" data-status="<?= htmlspecialchars($norm_status) ?>" id="order-card-<?= $ord['order_id'] ?>" <?= $is_ontheway ? 'onclick="openCustomerTrackingModal(' . (int)$ord['order_id'] . ')" style="cursor:pointer;" title="Tap to view live delivery tracking map"' : '' ?>>
         <div class="row-icon <?= $is_cancelled ? 'grey' : ($is_ontheway ? 'jolli' : ($is_settled ? 'settled-icon' : 'green')) ?>">
           <?= $is_cancelled ? '🚫' : ($is_ontheway ? '🛵' : ($is_settled ? '🛡️' : ($is_delivered ? '📦' : ($is_prep ? '🍳' : '🛍️')))) ?>
         </div>
         <div class="info">
-          <strong><?= htmlspecialchars($ord['order_ref']) ?></strong>
+          <strong><?= htmlspecialchars($clean_card_ref) ?></strong>
           <small><?= htmlspecialchars($ord['store_name']) ?> • <?= htmlspecialchars($ord['items_summary']) ?></small>
           <small><?= htmlspecialchars(date('M d, Y • g:i A', strtotime($ord['created_at']))) ?> • ₱<?= number_format((float)$ord['total_amount'], 2) ?></small>
           <?php if (!empty($ord['delivery_address'])): ?>
@@ -2353,7 +2363,7 @@ button{cursor:pointer}
           <?php if ($can_cancel): ?>
             <!-- a. Status 'pending' / 'preparing': Show Cancel Order button -->
             <div style="margin-top:6px;" id="cancel-wrap-<?= $ord['order_id'] ?>">
-              <button type="button" class="btn-cancel-order" id="btn-cancel-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); promptCancelOrder(<?= (int)$ord['order_id'] ?>, '<?= htmlspecialchars(addslashes($ord['order_ref'])) ?>', '<?= htmlspecialchars(addslashes($status_label)) ?>')">
+              <button type="button" class="btn-cancel-order" id="btn-cancel-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); promptCancelOrder(<?= (int)$ord['order_id'] ?>, '<?= htmlspecialchars(addslashes($clean_card_ref)) ?>', '<?= htmlspecialchars(addslashes($status_label)) ?>')">
                 <i class="fa-solid fa-ban"></i> Cancel Order
               </button>
             </div>
@@ -4203,22 +4213,27 @@ function filterOrders(status, btn) {
   document.querySelectorAll('#orderFilters .chip').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
   
+  const targetFilter = String(status || '').toLowerCase().trim();
   document.querySelectorAll('.order-row').forEach(row => {
-    const cardStatus = (row.dataset.status || '').toLowerCase();
-    if (status === 'all') {
+    const cardStatus = (row.dataset.status || '').toLowerCase().trim();
+    if (targetFilter === 'all') {
       row.style.display = 'flex';
-    } else if (status === 'out_for_delivery') {
-      row.style.display = ['out_for_delivery', 'on_the_way', 'on_delivery', 'near_customer'].includes(cardStatus) ? 'flex' : 'none';
-    } else if (status === 'ready_for_pickup') {
+    } else if (targetFilter === 'preparing') {
+      row.style.display = ['preparing', 'cooking', 'in_kitchen', 'accepted'].includes(cardStatus) ? 'flex' : 'none';
+    } else if (targetFilter === 'pending') {
+      row.style.display = ['pending', 'submitted'].includes(cardStatus) ? 'flex' : 'none';
+    } else if (targetFilter === 'out_for_delivery') {
+      row.style.display = ['out_for_delivery', 'on_the_way', 'on_delivery', 'near_customer', 'arrived'].includes(cardStatus) ? 'flex' : 'none';
+    } else if (targetFilter === 'ready_for_pickup') {
       row.style.display = ['ready_for_pickup', 'ready'].includes(cardStatus) ? 'flex' : 'none';
-    } else if (status === 'delivered') {
+    } else if (targetFilter === 'delivered') {
       row.style.display = ['delivered', 'completed'].includes(cardStatus) ? 'flex' : 'none';
-    } else if (status === 'settled') {
+    } else if (targetFilter === 'settled') {
       row.style.display = cardStatus === 'settled' ? 'flex' : 'none';
-    } else if (status === 'cancelled') {
+    } else if (targetFilter === 'cancelled') {
       row.style.display = cardStatus === 'cancelled' ? 'flex' : 'none';
     } else {
-      row.style.display = cardStatus === status.toLowerCase() ? 'flex' : 'none';
+      row.style.display = cardStatus === targetFilter ? 'flex' : 'none';
     }
   });
 }
@@ -4248,7 +4263,9 @@ function promptCancelOrder(orderId, orderRef, orderStatus) {
 
   const modalRef = document.getElementById('cancelOrderModalRef');
   if (modalRef) {
-    modalRef.textContent = `Are you sure you want to cancel order #${orderRef || activeCancelOrderId}?`;
+    const rawRef = orderRef || activeCancelOrderId || '';
+    const cleanRef = '#' + String(rawRef).replace(/^#+/, '');
+    modalRef.textContent = `Are you sure you want to cancel order ${cleanRef}?`;
   }
 
   // Reset chips & textarea
@@ -5188,7 +5205,11 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     if (chatSmsLink) chatSmsLink.href = `sms:${riderDial}?body=Hi%20${encodeURIComponent(currentTrackingRiderName)},%20regarding%20my%20order%20${encodeURIComponent(ord.order_ref || '')}`;
 
     const refEl = document.getElementById('trackModalOrderRef');
-    if (refEl) refEl.textContent = `${ord.order_ref || 'Order #' + orderId} Tracking`;
+    if (refEl) {
+      const rawRef = ord.order_ref || ('#' + orderId);
+      const cleanRef = '#' + String(rawRef).replace(/^#+/, '');
+      refEl.textContent = `${cleanRef} Tracking`;
+    }
 
     const subEl = document.getElementById('trackModalStoreSubtitle');
     if (subEl) subEl.textContent = `${ord.store_name || 'Store'} • ${ord.status || 'On Delivery'}`;
@@ -5908,13 +5929,48 @@ async function pollCustomerCommunicationUpdates() {
     }
 
     // Automated "Rider Arrived" Live Notification
-    const sNorm = String(data.status || '').toUpperCase();
-    const dNorm = String(data.delivery_status || '').toLowerCase();
+    const sNorm = String(data.status || '').toUpperCase().trim();
+    const dNorm = String(data.delivery_status || '').toLowerCase().trim();
+    const sLower = String(data.status || '').toLowerCase().trim();
+
     if (data.is_arrived || dNorm === 'arrived' || sNorm === 'ARRIVED') {
       if (data.arrival_acknowledged) {
         if (window.FoodDashCall) FoodDashCall.stopAllTones();
       } else {
         handleRiderArrivedEvent(data);
+      }
+    }
+
+    // Real-Time Sync: Preparing / Cooking / In Kitchen
+    const isPrep = ['PREPARING', 'COOKING', 'IN_KITCHEN', 'ACCEPTED'].includes(sNorm) 
+                || ['preparing', 'cooking', 'in_kitchen', 'accepted'].includes(sLower)
+                || ['preparing', 'cooking', 'in_kitchen', 'accepted'].includes(dNorm);
+
+    if (data.order_id && isPrep) {
+      const oId = data.order_id;
+      const tag = document.getElementById(`status-tag-${oId}`);
+      if (tag) {
+        tag.className = 'status-badge status-preparing';
+        tag.textContent = 'Preparing';
+      }
+      const card = document.getElementById(`order-card-${oId}`);
+      if (card) {
+        card.setAttribute('data-status', 'preparing');
+      }
+    }
+
+    // Real-Time Sync: Ready for Pickup
+    const isReady = (sNorm === 'READY_FOR_PICKUP' || sNorm === 'READY' || sLower === 'ready_for_pickup' || sLower === 'ready');
+    if (data.order_id && isReady) {
+      const oId = data.order_id;
+      const tag = document.getElementById(`status-tag-${oId}`);
+      if (tag) {
+        tag.className = 'status-badge status-ready_for_pickup';
+        tag.textContent = 'Ready for Pickup';
+      }
+      const card = document.getElementById(`order-card-${oId}`);
+      if (card) {
+        card.setAttribute('data-status', 'ready_for_pickup');
       }
     }
 
@@ -5984,7 +6040,8 @@ async function pollCustomerCommunicationUpdates() {
         topBanner.onclick = () => openCustomerTrackingModal(oId);
         const span = topBanner.querySelector('span');
         if (span) {
-          const refText = data.order_ref ? ` (${escapeCustHtml(data.order_ref)})` : '';
+          const cleanBannerRef = data.order_ref ? ('#' + String(data.order_ref).replace(/^#+/, '')) : '';
+          const refText = cleanBannerRef ? ` (${escapeCustHtml(cleanBannerRef)})` : '';
           span.innerHTML = `<i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!${refText}`;
         }
       }

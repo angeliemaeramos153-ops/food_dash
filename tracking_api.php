@@ -277,7 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
             $eta_mins = $eta_val . ' mins (' . $distance_km . ' km)';
         }
 
-        $order_ref_display = !empty($ord['order_ref']) ? $ord['order_ref'] : (!empty($rd['current_order']) && $rd['current_order'] !== 'None' ? $rd['current_order'] : '#FD-' . ($ord['order_id'] ?? rand(1000, 9999)));
+        $order_ref_display = !empty($ord['order_ref']) ? ('#' . ltrim($ord['order_ref'], '#')) : (!empty($rd['current_order']) && $rd['current_order'] !== 'None' ? ('#' . ltrim($rd['current_order'], '#')) : '#FD-' . ($ord['order_id'] ?? rand(1000, 9999)));
 
         $riders[] = [
             'rider_id'         => $rid,
@@ -345,10 +345,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         out(false, 'Order not found.', [], 404);
     }
 
-    // Customer can only view their own orders
-    if ($role === 'customer' && (int)$o['customer_id'] !== $uid) {
+    // Customer can only view their own orders (or demo accounts)
+    $is_demo = ($uid === 15 || $uid === 26 || strtolower($uname ?? '') === 'customer');
+    if ($role === 'customer' && (int)$o['customer_id'] !== $uid && (int)($o['user_id'] ?? 0) !== $uid && (!$is_demo || !in_array((int)$o['customer_id'], [15, 26, 0]))) {
         out(false, 'Access denied.', [], 403);
     }
+
+    $o['order_ref'] = '#' . ltrim($o['order_ref'] ?: ('FD-' . $o['order_id']), '#');
 
     // Cast and normalize numeric coordinates with high precision (at least 6 decimal places)
     $store_lat = (isset($o['store_lat']) && is_numeric($o['store_lat'])) ? round((float)$o['store_lat'], 7) : null;

@@ -56,11 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             record_order_audit_log($conn, $order_id, $old_st, $new_status, $user_id, 'chef', $notes);
 
             // Contextual notifications
+            $clean_chef_ref = '#' . ltrim(!empty($ord_data['order_ref']) ? $ord_data['order_ref'] : ('FD-' . $order_id), '#');
             if ($new_status === 'PREPARING') {
-                create_notification($conn, (int)$ord_data['customer_id'], 'chef_preparing', 'Kitchen Preparing Order', "Your order {$ord_data['order_ref']} is now being prepared by the Chef.", $order_id);
+                create_notification($conn, (int)$ord_data['customer_id'], 'chef_preparing', 'Kitchen Preparing Order', "Your order {$clean_chef_ref} is now being prepared by the Chef.", $order_id);
             } elseif ($new_status === 'READY_FOR_PICKUP') {
-                create_notification($conn, (int)$ord_data['customer_id'], 'order_ready', 'Order Ready for Pickup', "Your order {$ord_data['order_ref']} is freshly prepared and ready for rider pickup.", $order_id);
-                notify_role($conn, 'rider', 'pickup_ready', 'Order Ready for Pickup', "{$ord_data['order_ref']} at {$ord_data['store_name']} is ready for dispatch.", $order_id);
+                create_notification($conn, (int)$ord_data['customer_id'], 'order_ready', 'Order Ready for Pickup', "Your order {$clean_chef_ref} is freshly prepared and ready for rider pickup.", $order_id);
+                notify_role($conn, 'rider', 'pickup_ready', 'Order Ready for Pickup', "{$clean_chef_ref} at {$ord_data['store_name']} is ready for dispatch.", $order_id);
             }
 
             echo json_encode(['success' => true, 'message' => 'Status updated to ' . $new_status]);
@@ -769,7 +770,11 @@ html, body {
       ?>
         <div class="card">
           <div class="card-header">
-            <strong style="font-size:11px;">#<?php echo htmlspecialchars(isset($ord['order_ref']) ? $ord['order_ref'] : $ord['order_id']); ?> — <?php echo htmlspecialchars(isset($ord['store_name']) ? $ord['store_name'] : 'Shop'); ?></strong>
+            <?php 
+              $raw_ref = !empty($ord['order_ref']) ? $ord['order_ref'] : $ord['order_id'];
+              $display_ref = '#' . ltrim($raw_ref, '#');
+            ?>
+            <strong style="font-size:11px;"><?php echo htmlspecialchars($display_ref); ?> — <?php echo htmlspecialchars(isset($ord['store_name']) ? $ord['store_name'] : 'Shop'); ?></strong>
             <span class="status-badge status-<?php echo strtolower($st); ?>"><?php echo htmlspecialchars($st); ?></span>
           </div>
           <p style="font-size:10px;color:var(--muted);">Items: <strong><?php echo htmlspecialchars(isset($ord['items_summary']) ? $ord['items_summary'] : 'Order'); ?></strong></p>

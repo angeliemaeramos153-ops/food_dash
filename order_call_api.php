@@ -106,14 +106,15 @@ if ($action === 'start_call' || $action === 'trigger_call' || $action === 'call'
 
     try {
         if ($caller_role === 'rider' && $customer_id > 0) {
-            create_notification(
-                $conn,
-                $customer_id,
-                'incoming_call',
-                'Incoming Call from Rider (' . $user_name . ')',
-                'Your delivery rider is calling regarding order ' . ($order['order_ref'] ?: '#' . $order_id) . '.',
-                $order_id
-            );
+                $clean_ref = '#' . ltrim($order['order_ref'] ?: ('FD-' . $order_id), '#');
+                create_notification(
+                    $conn,
+                    $customer_id,
+                    'incoming_call',
+                    'Incoming Call from Rider (' . $user_name . ')',
+                    'Your delivery rider is calling regarding order ' . $clean_ref . '.',
+                    $order_id
+                );
         }
     } catch (Throwable $e) {}
 
