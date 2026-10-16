@@ -37,6 +37,7 @@ $error_msg = "";
 $success_msg = "";
 $active_tab = "login";
 $lockout_remaining_seconds = 0;
+$saved_demo_user_js = null;
 
 // 1. Handle URL Query Alerts
 if (isset($_GET['msg'])) {
@@ -205,6 +206,15 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
                         $new_uid = (int)$conn->lastInsertId();
                         $success_msg = "Account created with strong password encryption! You can now sign in.";
                         $active_tab = 'login';
+                        if (!empty($_POST['remember_demo'])) {
+                            $saved_demo_user_js = [
+                                'role'     => $reg_role,
+                                'name'     => $reg_user,
+                                'username' => $reg_user,
+                                'email'    => $reg_email,
+                                'password' => $reg_pass
+                            ];
+                        }
                         log_activity($conn, $new_uid, 'USER_CREATED', "New user registration: {$reg_user} ({$reg_role}) with BCRYPT password.", $reg_user, $reg_role);
                     } else {
                         $error_msg = "Registration failed. Please try again.";
@@ -939,6 +949,69 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       font-weight: 400;
     }
 
+    /* QUICK DEMO LOGINS CHIPS SECTION */
+    .quick-demo-chips-section {
+      margin: 6px 0 10px;
+      width: 100%;
+    }
+    .quick-demo-chip {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: linear-gradient(135deg, #fefaf3 0%, #f7f1e1 100%);
+      border: 1px solid rgba(197, 160, 89, 0.5);
+      border-radius: 9px;
+      padding: 7px 12px;
+      font-size: 0.74rem;
+      color: #3b4124;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+      text-align: left;
+    }
+    .quick-demo-chip:hover {
+      background: linear-gradient(135deg, #ffffff 0%, #faecd5 100%);
+      border-color: var(--fd-gold);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(197, 160, 89, 0.22);
+    }
+    .chip-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chip-delete-btn {
+      font-size: 13px;
+      color: #94a3b8;
+      padding: 0 4px;
+      line-height: 1;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .chip-delete-btn:hover {
+      color: #dc2626;
+      background: rgba(220, 38, 38, 0.08);
+    }
+    .remember-demo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 8px 0 12px;
+      text-align: left;
+      padding: 7px 10px;
+      background: rgba(197, 160, 89, 0.12);
+      border: 1px solid rgba(197, 160, 89, 0.35);
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
     .input-box.autofill-flash {
       border-bottom-color: #2e7d32 !important;
       animation: autofillPulse 0.85s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -1169,6 +1242,14 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
             </button>
           </div>
 
+          <!-- DYNAMIC QUICK DEMO LOGINS CONTAINER -->
+          <div id="quickDemoChipsSection" class="quick-demo-chips-section" style="display:none;">
+            <div style="font-size: 0.72rem; font-weight: 700; color: #788a6e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; text-align: center;">
+              <i class="fa-solid fa-bolt" style="color: var(--fd-gold, #c5a059);"></i> Quick Demo Logins
+            </div>
+            <div id="quickDemoChipsList" style="display: flex; flex-direction: column; gap: 6px; width: 100%;"></div>
+          </div>
+
           <!-- SUBTLE AUTOFILL TOAST CONFIRMATION -->
           <div class="demo-autofill-toast" id="demoAutofillToast" aria-live="polite"></div>
 
@@ -1227,6 +1308,14 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
           </select>
           <div class="role-help">Customer • Store Manager • Rider • Admin</div>
 
+          <!-- REMEMBER PASSWORD CHECKBOX FOR QUICK DEMO LOGIN -->
+          <div class="remember-demo-wrap">
+            <input type="checkbox" id="rememberDemoCheckbox" name="remember_demo" value="1" checked style="width: 16px; height: 16px; accent-color: var(--fd-gold, #c5a059); cursor: pointer;">
+            <label for="rememberDemoCheckbox" style="font-size: 0.74rem; font-weight: 600; color: #434731; cursor: pointer; user-select: none;">
+              Remember Password for Quick Demo Login
+            </label>
+          </div>
+
           <button type="submit" name="register" class="btn"><span>Register</span></button>
         </form>
       </div>
@@ -1247,6 +1336,24 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       </div>
     </div>
   </div>
+
+  <?php if (!empty($saved_demo_user_js)): ?>
+  <script>
+    (function() {
+      try {
+        const u = <?= json_encode($saved_demo_user_js, JSON_UNESCAPED_SLASHES) ?>;
+        const key = 'fooddash_demo_users';
+        let arr = JSON.parse(localStorage.getItem(key) || '[]');
+        if (!Array.isArray(arr)) arr = [];
+        arr = arr.filter(x => x.username !== u.username && x.email !== u.email);
+        arr.unshift(u);
+        localStorage.setItem(key, JSON.stringify(arr));
+      } catch (e) {
+        console.warn('Storage sync failed:', e);
+      }
+    })();
+  </script>
+  <?php endif; ?>
 
   <script>
     function switchTab(target) {
@@ -1728,9 +1835,153 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
           }
 
           errEl.style.display = 'none';
+
+          // Sign-Up "Remember Password for Quick Demo Login": save credentials to localStorage
+          const rememberBox = document.getElementById('rememberDemoCheckbox');
+          if (rememberBox && rememberBox.checked) {
+            const u = (document.getElementById('reg-user') || {}).value || '';
+            const em = (document.getElementById('reg-email') || {}).value || '';
+            const r = (document.querySelector('select[name="role"]') || {}).value || 'customer';
+            const p = pass;
+            if (u && p) {
+              const demoUser = {
+                role: r,
+                name: u,
+                username: u,
+                email: em,
+                password: p,
+                created_at: Date.now()
+              };
+              try {
+                const key = 'fooddash_demo_users';
+                let arr = JSON.parse(localStorage.getItem(key) || '[]');
+                if (!Array.isArray(arr)) arr = [];
+                arr = arr.filter(x => x.username !== u && x.email !== em);
+                arr.unshift(demoUser);
+                localStorage.setItem(key, JSON.stringify(arr));
+              } catch (err) {}
+            }
+          }
         });
       }
+
+      // Initialize dynamic Quick Demo Logins chips
+      renderRegisteredDemoLogins();
     });
+
+    // ================================================================
+    // DYNAMIC REGISTERED QUICK DEMO LOGINS FUNCTIONS
+    // ================================================================
+    function renderRegisteredDemoLogins() {
+      const key = 'fooddash_demo_users';
+      let demoUsers = [];
+      try {
+        demoUsers = JSON.parse(localStorage.getItem(key) || '[]');
+      } catch (e) {
+        demoUsers = [];
+      }
+
+      const section = document.getElementById('quickDemoChipsSection');
+      const container = document.getElementById('quickDemoChipsList');
+      const popupList = document.getElementById('demoAccountsList');
+      if (!section || !container) return;
+
+      container.innerHTML = '';
+      if (Array.isArray(demoUsers) && demoUsers.length > 0) {
+        section.style.display = 'block';
+        demoUsers.forEach((u, idx) => {
+          const roleCapital = (u.role || 'customer').charAt(0).toUpperCase() + (u.role || 'customer').slice(1);
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'quick-demo-chip';
+          chip.title = `1-Click Demo Login as ${u.name || u.username}`;
+          chip.innerHTML = `
+            <span class="chip-left">
+              <i class="fa-solid fa-bolt" style="color:var(--fd-gold, #c5a059); font-size: 11px;"></i>
+              <span>Login as New <strong>${escapeHtml(roleCapital)}</strong>: ${escapeHtml(u.name || u.username)}</span>
+            </span>
+            <span class="chip-delete-btn" title="Remove" onclick="event.stopPropagation(); removeRegisteredDemoUser(${idx})">&times;</span>
+          `;
+          chip.onclick = function() {
+            executeOneClickDemoLogin(u.username, u.password, u.name || u.username, roleCapital);
+          };
+          container.appendChild(chip);
+
+          // Also prepend into demoAccountsPopup dropdown if not already present
+          if (popupList && !popupList.querySelector(`[data-custom-user="${u.username}"]`)) {
+            const item = document.createElement('div');
+            item.className = 'demo-account-item';
+            item.dataset.customUser = u.username;
+            item.dataset.role = (u.role || 'customer').toLowerCase();
+            item.dataset.user = u.username;
+            item.dataset.pass = u.password;
+            item.dataset.name = `New ${roleCapital} (${u.name || u.username})`;
+            item.tabIndex = 0;
+            item.setAttribute('role', 'button');
+            item.innerHTML = `
+              <div class="demo-item-left">
+                <div class="demo-item-avatar avatar-${u.role || 'customer'}"><i class="fa-solid fa-user-plus"></i></div>
+                <div class="demo-item-details">
+                  <div class="demo-item-top">
+                    <strong class="demo-item-username">${escapeHtml(u.username)}</strong>
+                    <span class="demo-badge badge-${u.role || 'customer'}">New ${roleCapital}</span>
+                  </div>
+                  <div class="demo-item-bottom">
+                    <span class="demo-pass-hint"><i class="fa-solid fa-key"></i> ${escapeHtml(u.password)}</span>
+                    <span class="demo-role-desc">Registered Demo Login</span>
+                  </div>
+                </div>
+              </div>
+              <div class="demo-fill-action"><i class="fa-solid fa-bolt"></i> Login</div>
+            `;
+            item.onclick = function() {
+              executeOneClickDemoLogin(u.username, u.password, u.name || u.username, roleCapital);
+            };
+            popupList.prepend(item);
+          }
+        });
+      } else {
+        section.style.display = 'none';
+      }
+    }
+
+    function executeOneClickDemoLogin(user, pass, displayName, roleTitle) {
+      const loginUser = document.getElementById('login_username');
+      const loginPass = document.getElementById('login_password');
+      const loginForm = document.getElementById('login-form');
+      if (!loginUser || !loginPass || !loginForm) return;
+
+      loginUser.value = user;
+      loginPass.value = pass;
+      loginUser.dispatchEvent(new Event('input', { bubbles: true }));
+      loginUser.dispatchEvent(new Event('change', { bubbles: true }));
+      loginPass.dispatchEvent(new Event('input', { bubbles: true }));
+      loginPass.dispatchEvent(new Event('change', { bubbles: true }));
+
+      showAutofillToast(`⚡ Logging in as <strong>${escapeHtml(displayName || user)}</strong> (${roleTitle})...`);
+
+      // Instantly submit login form for classroom demonstrations
+      setTimeout(() => {
+        loginForm.submit();
+      }, 220);
+    }
+
+    function removeRegisteredDemoUser(idx) {
+      const key = 'fooddash_demo_users';
+      try {
+        let arr = JSON.parse(localStorage.getItem(key) || '[]');
+        if (Array.isArray(arr)) {
+          arr.splice(idx, 1);
+          localStorage.setItem(key, JSON.stringify(arr));
+          renderRegisteredDemoLogins();
+        }
+      } catch (e) {}
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
 
     function triggerSocialLogin(provider) {
       let url = "";

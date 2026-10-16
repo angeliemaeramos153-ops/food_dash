@@ -159,18 +159,44 @@ if ($action === 'cancel_order' || $action === 'cancel') {
 
 // 2. GET CUSTOMER ORDERS
 if ($action === 'get_orders' || $action === 'my_orders' || ($method === 'GET' && empty($action))) {
-    $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, rider_id, delivery_address, created_at 
+    // Strictly scope query to the logged-in user:
+    $stmt = $conn->prepare("SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC");
+    $stmt->execute([$user_id]);
+    $raw_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Also fetch food_orders details if available to enrich items_summary, store_name, delivery_address
+    $f_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, rider_id, delivery_address, created_at 
         FROM food_orders 
         WHERE customer_id = :cid 
         ORDER BY order_id DESC LIMIT 50");
-    $stmt->execute([':cid' => $user_id]);
-    $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($orders as &$ord) {
-        $ord['payment_meta'] = get_payment_method_meta($ord['payment_method'] ?? 'Cash on Delivery (COD)');
+    $f_stmt->execute([':cid' => $user_id]);
+    $food_orders = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $fo_map = [];
+    foreach ($food_orders as $fo) {
+        $fo_map[(int)$fo['order_id']] = $fo;
     }
-    unset($ord);
 
-    order_api_out(true, 'Orders retrieved.', ['orders' => $orders]);
+    $orders = [];
+    if (!empty($raw_orders)) {
+        foreach ($raw_orders as $ro) {
+            $oid = (int)($ro['order_id'] ?? $ro['id'] ?? 0);
+            $merged = isset($fo_map[$oid]) ? array_merge($fo_map[$oid], $ro) : $ro;
+            $merged['payment_meta'] = get_payment_method_meta($merged['payment_method'] ?? 'Cash on Delivery (COD)');
+            $orders[] = $merged;
+        }
+    } elseif (!empty($food_orders)) {
+        foreach ($food_orders as $fo) {
+            $fo['payment_meta'] = get_payment_method_meta($fo['payment_method'] ?? 'Cash on Delivery (COD)');
+            $orders[] = $fo;
+        }
+    }
+
+    $is_empty = empty($orders);
+    order_api_out(true, $is_empty ? 'No orders placed yet!' : 'Orders retrieved.', [
+        'orders'      => $orders,
+        'count'       => count($orders),
+        'empty_state' => $is_empty ? 'No orders placed yet! [Browse Stores]' : null
+    ]);
 }
 
 // 3. ORDER DETAILS & TIMELINE

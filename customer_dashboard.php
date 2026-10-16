@@ -280,6 +280,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 }
 
+                // Sync into orders compatibility table
+                try {
+                    $ins_ord = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, shop_id, payment_method, created_at) VALUES (:oid, :uid, 'Pending', :tot, :sid, :pm, NOW()) ON DUPLICATE KEY UPDATE status='Pending', total_price=:tot");
+                    $ins_ord->execute([
+                        ':oid' => $new_order_id,
+                        ':uid' => $user_id,
+                        ':tot' => $total_amount,
+                        ':sid' => $shop_id,
+                        ':pm'  => $payment_method ?? 'Cash on Delivery (COD)'
+                    ]);
+                } catch (Throwable $e) {}
+
                 // Record audit log for PENDING
                 record_order_audit_log($conn, $new_order_id, null, 'PENDING', $user_id, 'customer', 'Order submitted by customer');
 
@@ -531,10 +543,14 @@ button{cursor:pointer}
 
 /* Status Badges - Food Dash Palette */
 .status-badge { display:inline-flex; align-items:center; gap:3px; padding: 2.5px 8px; border-radius: 99px; font-size: 8px; font-weight:700; text-transform: capitalize; }
-.status-pending { background: #FAF6EE; color: var(--harvest-sun); border: 1px solid var(--harvest-sun); }
-.status-preparing { background: #FAF6EE; color: var(--sagebrush); border: 1px solid var(--sagebrush); }
-.status-ready_for_pickup, .status-ready { background: #FAF6EE; color: var(--olive-shadow); border: 1px solid var(--olive-shadow); }
-.status-out_for_delivery, .status-on_the_way, .status-on_delivery, .status-near_customer { background: #FAF6EE; color: var(--harvest-sun); border: 1px solid var(--harvest-sun); }
+.status-pending { background: #FEF3C7; color: #D97706; border: 1px solid #F59E0B; }
+.status-preparing { background: #E0E7FF; color: #4338CA; border: 1px solid #6366F1; }
+.status-ready_for_pickup, .status-ready { background: #ECFDF5; color: #047857; border: 1px solid #10B981; }
+.status-out_for_delivery, .status-on_the_way, .status-on_delivery { background: #FAF6EE; color: var(--harvest-sun); border: 1px solid var(--harvest-sun); }
+.status-near_customer { background: #FFF8E1; color: #E65100; border: 1px solid #FFA000; animation: cdPulseNear 2s infinite; }
+.status-arrived { background: #E8F5E9; color: #2E7D32; border: 1px solid #4CAF50; animation: cdPulseArrived 1.5s infinite; }
+@keyframes cdPulseNear { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 160, 0, 0.4); } 50% { box-shadow: 0 0 0 4px rgba(255, 160, 0, 0); } }
+@keyframes cdPulseArrived { 0%, 100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.5); } 50% { box-shadow: 0 0 0 5px rgba(76, 175, 80, 0); } }
 .status-delivered { background: #FAF6EE; color: var(--sagebrush); border: 1px solid var(--sagebrush); }
 .status-settled, .status-completed { background: var(--olive-shadow); color: white; border: 1px solid var(--olive-shadow); }
 .settled-tag { font-size: 7.5px; background: #FAF6EE; color: var(--olive-shadow); border: 1px solid var(--olive-shadow); padding: 2px 6px; border-radius: 8px; font-weight: 600; display: inline-flex; align-items:center; gap: 3px; }
@@ -2220,24 +2236,55 @@ button{cursor:pointer}
   </div>
   <div class="list" id="orderList">
     <?php if (empty($db_orders)): ?>
-      <div class="row-card" id="noOrders"><div class="row-icon green">🛍️</div><div class="info"><strong>No database orders yet</strong><small>Your completed checkout will appear here and be sent to the Chef.</small></div></div>
+      <div class="empty-state-card" id="noOrders" style="text-align: center; padding: 36px 18px; background: #ffffff; border-radius: 14px; margin: 12px 0; border: 1.5px dashed #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+        <div style="font-size: 42px; margin-bottom: 10px; line-height: 1;">🛍️</div>
+        <strong style="display: block; font-size: 16px; color: var(--olive-dark, #2f341d); margin-bottom: 6px;">No orders placed yet!</strong>
+        <p style="font-size: 12px; color: var(--muted, #64748b); margin-bottom: 16px; max-width: 280px; margin-left: auto; margin-right: auto; line-height: 1.4;">
+          Your order history is clean. Discover our partner stores and order delicious meals today!
+        </p>
+        <button type="button" class="btn-browse-stores-main" onclick="showScreen('stores')" style="display: inline-flex; align-items: center; gap: 8px; background: var(--harvest-sun, #c5a059); color: #ffffff; padding: 10px 22px; border-radius: 10px; font-weight: 700; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(197, 160, 89, 0.35);">
+          <i class="fa-solid fa-store"></i> Browse Stores
+        </button>
+      </div>
     <?php else: foreach ($db_orders as $ord): 
       $raw_status = strtoupper(trim(str_replace([' ', '-'], '_', $ord['status'])));
       $del_status = strtolower(trim((string)($ord['delivery_status'] ?? '')));
-      $norm_status = strtolower($raw_status);
-      $is_ontheway = in_array($raw_status, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'])
-                  || in_array($del_status, ['on_the_way', 'on_delivery', 'picked_up', 'near_customer', 'arrived'])
-                  || (!empty($ord['rider_id']) && !in_array($raw_status, ['DELIVERED', 'COMPLETED', 'SETTLED', 'CANCELLED']));
-      $is_delivered = ($raw_status === 'DELIVERED' || $raw_status === 'COMPLETED');
+      
+      $is_arrived = ($raw_status === 'ARRIVED' || $del_status === 'arrived');
+      $is_near = ($raw_status === 'NEAR_CUSTOMER' || $del_status === 'near_customer');
+      $is_ontheway = in_array($raw_status, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'])
+                  || in_array($del_status, ['on_the_way', 'on_delivery', 'picked_up'])
+                  || $is_near || $is_arrived;
+                  
+      $is_delivered = ($raw_status === 'DELIVERED' || $raw_status === 'COMPLETED' || $del_status === 'delivered');
       $is_settled = ($raw_status === 'SETTLED');
       $is_prep = in_array($raw_status, ['PREPARING', 'ACCEPTED']);
       $is_pending = in_array($raw_status, ['PENDING', 'SUBMITTED']);
-      $is_cancelled = ($raw_status === 'CANCELLED');
-      $can_cancel = ($is_pending || $is_prep) && !$is_ontheway;
+      $is_cancelled = ($raw_status === 'CANCELLED' || $del_status === 'cancelled');
+      $can_cancel = ($is_pending || $is_prep) && !$is_ontheway && !$is_delivered && !$is_cancelled;
       
-      $status_label = ucwords(strtolower(str_replace('_', ' ', $raw_status)));
-      if ($raw_status === 'READY_FOR_PICKUP') $status_label = 'Ready for Pickup';
-      elseif ($raw_status === 'OUT_FOR_DELIVERY' || $raw_status === 'ON_DELIVERY' || $raw_status === 'ON_THE_WAY') $status_label = 'On Delivery';
+      if ($is_arrived) {
+          $status_label = 'Arrived';
+          $norm_status = 'arrived';
+      } elseif ($is_near) {
+          $status_label = 'Near Customer';
+          $norm_status = 'near_customer';
+      } elseif ($is_ontheway) {
+          $status_label = 'On Delivery';
+          $norm_status = 'on_delivery';
+      } elseif ($raw_status === 'READY_FOR_PICKUP') {
+          $status_label = 'Ready for Pickup';
+          $norm_status = 'ready_for_pickup';
+      } elseif ($is_prep) {
+          $status_label = 'Preparing';
+          $norm_status = 'preparing';
+      } elseif ($is_pending) {
+          $status_label = 'Pending';
+          $norm_status = 'pending';
+      } else {
+          $status_label = ucwords(strtolower(str_replace('_', ' ', $raw_status)));
+          $norm_status = strtolower($raw_status);
+      }
     ?>
       <div class="row-card order-row <?= $is_ontheway ? 'on-the-way-card' : '' ?>" data-status="<?= htmlspecialchars($norm_status) ?>" id="order-card-<?= $ord['order_id'] ?>" <?= $is_ontheway ? 'onclick="openCustomerTrackingModal(' . (int)$ord['order_id'] . ')" style="cursor:pointer;" title="Tap to view live delivery tracking map"' : '' ?>>
         <div class="row-icon <?= $is_cancelled ? 'grey' : ($is_ontheway ? 'jolli' : ($is_settled ? 'settled-icon' : 'green')) ?>">
@@ -2253,6 +2300,11 @@ button{cursor:pointer}
           
           <div style="margin-top: 5px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span class="status-badge status-<?= htmlspecialchars($norm_status) ?>" id="status-tag-<?= $ord['order_id'] ?>">
+              <?php if ($is_arrived): ?>
+                <i class="fa-solid fa-bell fa-shake"></i>
+              <?php elseif ($is_near): ?>
+                <i class="fa-solid fa-person-biking fa-beat"></i>
+              <?php endif; ?>
               <?= htmlspecialchars($status_label) ?>
             </span>
             <?= render_payment_badge($ord['payment_method'] ?? 'Cash on Delivery (COD)') ?>
@@ -2262,6 +2314,7 @@ button{cursor:pointer}
           </div>
 
           <?php if ($can_cancel): ?>
+            <!-- a. Status 'pending' / 'preparing': Show Cancel Order button -->
             <div style="margin-top:6px;" id="cancel-wrap-<?= $ord['order_id'] ?>">
               <button type="button" class="btn-cancel-order" id="btn-cancel-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); promptCancelOrder(<?= (int)$ord['order_id'] ?>, '<?= htmlspecialchars(addslashes($ord['order_ref'])) ?>', '<?= htmlspecialchars(addslashes($status_label)) ?>')">
                 <i class="fa-solid fa-ban"></i> Cancel Order
@@ -2273,16 +2326,23 @@ button{cursor:pointer}
             </div>
           <?php endif; ?>
 
-          <?php if ($is_ontheway): ?>
+          <?php if ($is_ontheway || $is_near || $is_arrived): ?>
+            <!-- b. Status 'on_delivery' / 'near_customer' / 'arrived': Show Live Track Rider and Received buttons -->
             <div style="font-size: 8px; color: var(--harvest-sun); font-weight:600; margin-top:4px;">
-              <i class="fa-solid fa-circle-notch fa-spin"></i> Rider is on the way with your order!
+              <?php if ($is_arrived): ?>
+                <i class="fa-solid fa-bell fa-shake"></i> Rider has arrived at your location!
+              <?php elseif ($is_near): ?>
+                <i class="fa-solid fa-person-biking fa-beat"></i> Rider is near your location (&lt; 200m)!
+              <?php else: ?>
+                <i class="fa-solid fa-circle-notch fa-spin"></i> Rider is on the way with your order!
+              <?php endif; ?>
             </div>
             <div id="track-actions-<?= $ord['order_id'] ?>" style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
               <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openCustomerTrackingModal(<?= (int)$ord['order_id'] ?>)" title="Tap to view live delivery map">
                 <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
               </button>
               <button class="confirm-btn" id="confirm-btn-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); confirmOrderReceived(<?= $ord['order_id'] ?>)">
-                <i class="fa-solid fa-box-open"></i> Received
+                <i class="fa-solid fa-box-open"></i> 📦 Received
               </button>
             </div>
           <?php elseif ($is_delivered && !$is_settled): ?>
@@ -5775,14 +5835,22 @@ async function pollCustomerCommunicationUpdates() {
     if (data.order_id && isDelivering) {
       const oId = data.order_id;
       const tag = document.getElementById(`status-tag-${oId}`);
-      if (tag && tag.textContent.trim().toLowerCase() !== 'on delivery' && tag.textContent.trim().toLowerCase() !== 'arrived') {
-        tag.className = 'status-badge status-out_for_delivery';
-        tag.textContent = 'On Delivery';
+      if (tag) {
+        if (data.is_arrived || dNorm === 'arrived' || sNorm === 'ARRIVED') {
+          tag.className = 'status-badge status-arrived';
+          tag.innerHTML = '<i class="fa-solid fa-bell fa-shake"></i> Arrived';
+        } else if (dNorm === 'near_customer' || sNorm === 'NEAR_CUSTOMER') {
+          tag.className = 'status-badge status-near_customer';
+          tag.innerHTML = '<i class="fa-solid fa-person-biking fa-beat"></i> Near Customer';
+        } else if (tag.textContent.trim().toLowerCase() !== 'on delivery') {
+          tag.className = 'status-badge status-out_for_delivery';
+          tag.textContent = 'On Delivery';
+        }
       }
 
       const card = document.getElementById(`order-card-${oId}`);
       if (card) {
-        card.setAttribute('data-status', 'out_for_delivery');
+        card.setAttribute('data-status', (dNorm === 'arrived' || sNorm === 'ARRIVED') ? 'arrived' : ((dNorm === 'near_customer' || sNorm === 'NEAR_CUSTOMER') ? 'near_customer' : 'out_for_delivery'));
         card.classList.add('on-the-way-card');
         card.style.cursor = 'pointer';
         card.onclick = () => openCustomerTrackingModal(oId);
@@ -5794,11 +5862,11 @@ async function pollCustomerCommunicationUpdates() {
           rowIcon.textContent = '🛵';
         }
 
-        // Hide cancel button if order has transitioned to on_delivery
+        // Hide cancel button if order has transitioned to on_delivery / near / arrived
         const cancelWrap = document.getElementById(`cancel-wrap-${oId}`);
         if (cancelWrap) cancelWrap.style.display = 'none';
 
-        // Ensure the [ 📍 Live Track Rider ] button exists on the card
+        // Ensure the [ 📍 Live Track Rider ] button and [ 📦 Received ] button exist on the card
         let trackActions = document.getElementById(`track-actions-${oId}`);
         if (!trackActions) {
           const infoDiv = card.querySelector('.info');
@@ -5811,7 +5879,7 @@ async function pollCustomerCommunicationUpdates() {
                 <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
               </button>
               <button class="confirm-btn" id="confirm-btn-${oId}" onclick="event.stopPropagation(); confirmOrderReceived(${oId})">
-                <i class="fa-solid fa-box-open"></i> Received
+                <i class="fa-solid fa-box-open"></i> 📦 Received
               </button>
             `;
             infoDiv.appendChild(trackActions);
