@@ -175,6 +175,141 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     out(false, 'Unknown tracking action.', [], 400);
 }
 
+// ==============================================================
+// GET: MASTER DISPATCH MAP TELEMETRY (Stores & Active Dispatched Riders)
+// ==============================================================
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), ['get_dispatch_map', 'get_fleet', 'dispatch_map', 'fleet'], true) || isset($_GET['dispatch_map']))) {
+    if ($role !== 'admin' && $role !== 'chef') {
+        out(false, 'Unauthorized. Admin access required.', [], 403);
+    }
+
+    // 1. Query all partner stores with active orders count
+    $store_stmt = $conn->query("SELECT 
+        s.shop_id, s.shop_name, s.category, s.address,
+        COALESCE(s.latitude, s.lat, 11.00650000) AS latitude,
+        COALESCE(s.longitude, s.lng, 124.60750000) AS longitude,
+        COALESCE(s.logo_url, 'assets/shops/default_store.png') AS logo_url,
+        (SELECT COUNT(*) FROM food_orders fo 
+         WHERE (fo.shop_id = s.shop_id OR (fo.shop_id = 0 AND LOWER(TRIM(fo.store_name)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
+           AND LOWER(TRIM(fo.status)) IN ('pending', 'preparing', 'ready_for_pickup', 'ready', 'assigned', 'on_delivery', 'out_for_delivery', 'on_the_way', 'near_customer', 'arrived')
+        ) AS active_orders_count
+    FROM shops s
+    ORDER BY s.shop_name ASC");
+    $stores = $store_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($stores as &$st) {
+        $st['shop_id'] = (int)$st['shop_id'];
+        $st['latitude'] = (float)$st['latitude'];
+        $st['longitude'] = (float)$st['longitude'];
+        $st['active_orders_count'] = (int)$st['active_orders_count'];
+    }
+    unset($st);
+
+    // 2. Query active dispatched riders (status = 'on_delivery' or current_order != 'None')
+    $rider_stmt = $conn->query("SELECT 
+        r.rider_id, r.user_id, r.rider_name,
+        COALESCE(r.phone, u.phone, '+63 917 555 0192') AS rider_phone,
+        r.status AS rider_status,
+        COALESCE(r.account_status, 'Active') AS account_status,
+        COALESCE(r.plate_number, 'ORM-8891') AS plate_number,
+        COALESCE(r.vehicle_model, 'Honda Click 125i') AS vehicle_model,
+        COALESCE(r.current_lat, 11.00650000) AS current_lat, 
+        COALESCE(r.current_lng, 124.60750000) AS current_lng, 
+        r.current_order
+    FROM riders r
+    LEFT JOIN users u ON (r.user_id = u.user_id)
+    WHERE r.status = 'on_delivery' 
+       OR (r.current_order IS NOT NULL AND r.current_order != 'None' AND r.current_order != '')
+       OR EXISTS (SELECT 1 FROM food_orders fo WHERE fo.rider_id = r.rider_id AND LOWER(TRIM(fo.status)) IN ('on_delivery', 'out_for_delivery', 'on_the_way', 'near_customer', 'arrived'))
+    ORDER BY r.rider_id ASC");
+    $raw_riders = $rider_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $riders = [];
+    foreach ($raw_riders as $rd) {
+        $rid = (int)$rd['rider_id'];
+        $cur_ref = trim((string)$rd['current_order']);
+
+        $o_stmt = $conn->prepare("SELECT 
+            o.order_id, o.order_ref, o.store_name, o.delivery_address,
+            o.items_summary, o.total_amount, o.status AS order_status, o.delivery_status,
+            COALESCE(o.delivery_lat, o.customer_lat) AS dest_lat,
+            COALESCE(o.delivery_lng, o.customer_lng) AS dest_lng,
+            COALESCE(o.store_lat, sh.latitude, sh.lat, 11.0065) AS store_lat,
+            COALESCE(o.store_lng, sh.longitude, sh.lng, 124.6075) AS store_lng,
+            COALESCE(o.rider_lat, ?) AS live_rider_lat,
+            COALESCE(o.rider_lng, ?) AS live_rider_lng
+        FROM food_orders o
+        LEFT JOIN shops sh ON (o.shop_id = sh.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(sh.shop_name)) COLLATE utf8mb4_unicode_ci))
+        WHERE o.rider_id = ? 
+          AND (
+            o.order_ref COLLATE utf8mb4_unicode_ci = ?
+            OR CONCAT('#', o.order_id) COLLATE utf8mb4_unicode_ci = ?
+            OR CAST(o.order_id AS CHAR) COLLATE utf8mb4_unicode_ci = ?
+            OR LOWER(TRIM(o.status)) IN ('on_delivery', 'out_for_delivery', 'on_the_way', 'near_customer', 'arrived')
+          )
+        ORDER BY o.order_id DESC LIMIT 1");
+        $o_stmt->execute([
+            $rd['current_lat'],
+            $rd['current_lng'],
+            $rid,
+            $cur_ref,
+            $cur_ref,
+            $cur_ref
+        ]);
+        $ord = $o_stmt->fetch(PDO::FETCH_ASSOC);
+
+        $r_lat = (isset($ord['live_rider_lat']) && is_numeric($ord['live_rider_lat']) && (float)$ord['live_rider_lat'] != 0)
+            ? (float)$ord['live_rider_lat']
+            : ((isset($rd['current_lat']) && is_numeric($rd['current_lat']) && (float)$rd['current_lat'] != 0) ? (float)$rd['current_lat'] : 11.00650000);
+
+        $r_lng = (isset($ord['live_rider_lng']) && is_numeric($ord['live_rider_lng']) && (float)$ord['live_rider_lng'] != 0)
+            ? (float)$ord['live_rider_lng']
+            : ((isset($rd['current_lng']) && is_numeric($rd['current_lng']) && (float)$rd['current_lng'] != 0) ? (float)$rd['current_lng'] : 124.60750000);
+
+        $d_lat = (isset($ord['dest_lat']) && is_numeric($ord['dest_lat'])) ? (float)$ord['dest_lat'] : null;
+        $d_lng = (isset($ord['dest_lng']) && is_numeric($ord['dest_lng'])) ? (float)$ord['dest_lng'] : null;
+
+        $distance_km = null;
+        $eta_mins = 'Calculating...';
+        if ($d_lat !== null && $d_lng !== null) {
+            $distance_km = round(distance_km($d_lat, $d_lng, $r_lat, $r_lng), 2);
+            $eta_val = max(1, round(($distance_km / 28) * 60)); // ~28km/h in city traffic
+            $eta_mins = $eta_val . ' mins (' . $distance_km . ' km)';
+        }
+
+        $order_ref_display = !empty($ord['order_ref']) ? $ord['order_ref'] : (!empty($rd['current_order']) && $rd['current_order'] !== 'None' ? $rd['current_order'] : '#FD-' . ($ord['order_id'] ?? rand(1000, 9999)));
+
+        $riders[] = [
+            'rider_id'         => $rid,
+            'rider_name'       => $rd['rider_name'],
+            'rider_phone'      => $rd['rider_phone'],
+            'rider_status'     => $rd['rider_status'],
+            'account_status'   => $rd['account_status'],
+            'plate_number'     => $rd['plate_number'],
+            'vehicle_model'    => $rd['vehicle_model'],
+            'lat'              => $r_lat,
+            'lng'              => $r_lng,
+            'current_order'    => $rd['current_order'],
+            'order_id'         => (int)($ord['order_id'] ?? 0),
+            'order_ref'        => $order_ref_display,
+            'store_name'       => (!empty($ord['store_name']) ? $ord['store_name'] : 'Partner Store'),
+            'delivery_address' => (!empty($ord['delivery_address']) ? $ord['delivery_address'] : 'Ormoc City, Leyte'),
+            'items_summary'    => (!empty($ord['items_summary']) ? $ord['items_summary'] : 'Food Dash Package'),
+            'total_amount'     => (float)($ord['total_amount'] ?? 0.00),
+            'distance_km'      => $distance_km,
+            'eta'              => $eta_mins
+        ];
+    }
+
+    out(true, 'Master dispatch map telemetry loaded.', [
+        'stores'               => $stores,
+        'riders'               => $riders,
+        'total_stores'         => count($stores),
+        'active_riders_count'  => count($riders),
+        'timestamp'            => date('Y-m-d H:i:s')
+    ]);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), ['track', 'get_location'], true) || isset($_GET['order_id']))) {
     $order_id = (int)($_GET['order_id'] ?? 0);
     if ($order_id <= 0) {

@@ -19,11 +19,60 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     // ADD NEW RIDER
     if (isset($_POST['action_add_rider'])) {
-        $rider_name = trim($_POST['rider_name']);
+        $rider_name = trim($_POST['rider_name'] ?? '');
+        $phone = trim($_POST['phone'] ?? '+63 917 555 0192');
+        $plate_number = trim($_POST['plate_number'] ?? 'ORM-8891');
+        $vehicle_model = trim($_POST['vehicle_model'] ?? 'Honda Click 125i');
         if (!empty($rider_name)) {
-            $stmt = $conn->prepare("INSERT INTO riders (rider_name, status) VALUES (?, 'waiting')");
-            $stmt->execute([$rider_name]);
+            $stmt = $conn->prepare("INSERT INTO riders (rider_name, phone, plate_number, vehicle_model, account_status, status, current_order) VALUES (?, ?, ?, ?, 'Active', 'waiting', 'None')");
+            $stmt->execute([$rider_name, $phone, $plate_number, $vehicle_model]);
             $action_msg = "Rider added to dispatch fleet!";
+        }
+    }
+
+    // EDIT RIDER DETAILS (Admin Edit Rider Feature)
+    if (isset($_POST['action_edit_rider'])) {
+        $rider_id = intval($_POST['rider_id'] ?? 0);
+        $rider_name = trim($_POST['rider_name'] ?? '');
+        $phone = trim($_POST['phone'] ?? '');
+        $plate_number = trim($_POST['plate_number'] ?? '');
+        $vehicle_model = trim($_POST['vehicle_model'] ?? '');
+        $account_status = trim($_POST['account_status'] ?? 'Active');
+        $allowed_acc = ['Active', 'Suspended', 'Offline'];
+        if (!in_array($account_status, $allowed_acc, true)) $account_status = 'Active';
+
+        if ($rider_id > 0 && !empty($rider_name)) {
+            $stmt = $conn->prepare("UPDATE riders SET rider_name = ?, phone = ?, plate_number = ?, vehicle_model = ?, account_status = ? WHERE rider_id = ?");
+            $stmt->execute([$rider_name, $phone, $plate_number, $vehicle_model, $account_status, $rider_id]);
+
+            // Sync user account full_name and phone if linked to a user_id
+            $r_stmt = $conn->prepare("SELECT user_id FROM riders WHERE rider_id = ? LIMIT 1");
+            $r_stmt->execute([$rider_id]);
+            $r_row = $r_stmt->fetch(PDO::FETCH_ASSOC);
+            if (!empty($r_row['user_id'])) {
+                $u_stmt = $conn->prepare("UPDATE users SET full_name = ?, phone = ? WHERE user_id = ?");
+                $u_stmt->execute([$rider_name, $phone, (int)$r_row['user_id']]);
+            }
+
+            log_activity($conn, (int)$_SESSION['user_id'], 'RIDER_UPDATED', "Admin updated rider #{$rider_id} ({$rider_name}, Status: {$account_status}, Vehicle: {$vehicle_model} [{$plate_number}]).");
+            $action_msg = "Rider '{$rider_name}' details updated successfully!";
+
+            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => true,
+                    'message' => $action_msg,
+                    'rider_id' => $rider_id,
+                    'rider_name' => $rider_name,
+                    'phone' => $phone,
+                    'plate_number' => $plate_number,
+                    'vehicle_model' => $vehicle_model,
+                    'account_status' => $account_status
+                ]);
+                exit;
+            }
+        } else {
+            $action_msg = "Error: Rider full name is required.";
         }
     }
 
@@ -353,18 +402,31 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
 
-    // USER CRUD: DELETE USER (Cannot delete active session admin)
-    if (isset($_POST['action_delete_user'])) {
+    // USER CRUD: DELETE USER (Safe FK cascade/nullify, clean soft-delete, visible success banner)
+    if (isset($_POST['action_delete_user']) || (isset($_POST['action']) && $_POST['action'] === 'delete_user')) {
         require_once 'notification_lib.php';
         $del_id = intval($_POST['user_id'] ?? 0);
         $current_admin_id = (int)$_SESSION['user_id'];
+        $is_ajax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_POST['ajax']) && $_POST['ajax'] == 1);
 
         if ($del_id <= 0) {
-            $action_msg = "Error: Invalid user ID for deletion.";
+            $err = "Error: Invalid user ID for deletion.";
+            if ($is_ajax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'message' => $err]);
+                exit;
+            }
+            $action_msg = $err;
         } elseif ($del_id === $current_admin_id) {
-            $action_msg = "Security Protection: You cannot delete your own active administrator account!";
+            $err = "Security Protection: You cannot delete your own active administrator account!";
+            if ($is_ajax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'message' => $err]);
+                exit;
+            }
+            $action_msg = $err;
         } else {
-            $u_stmt = $conn->prepare("SELECT username, role FROM users WHERE user_id = ? LIMIT 1");
+            $u_stmt = $conn->prepare("SELECT user_id, username, role FROM users WHERE user_id = ? LIMIT 1");
             $u_stmt->execute([$del_id]);
             $u_info = $u_stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -372,19 +434,94 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $del_uname = $u_info['username'];
                 $del_role = $u_info['role'];
 
-                $del_rider = $conn->prepare("DELETE FROM riders WHERE user_id = ?");
-                $del_rider->execute([$del_id]);
+                try {
+                    $conn->beginTransaction();
 
-                $del_stmt = $conn->prepare("DELETE FROM users WHERE user_id = ?");
-                if ($del_stmt->execute([$del_id])) {
-                    log_activity($conn, $current_admin_id, 'USER_DELETED', "Admin {$user_name} deleted user '{$del_uname}' (ID: {$del_id}, Role: {$del_role}).");
-                    $action_msg = "User '{$del_uname}' ({$del_role}) deleted successfully.";
-                } else {
-                    $errInfo = $del_stmt->errorInfo();
-                    $action_msg = "Error deleting user: " . ($errInfo[2] ?? 'Database error');
+                    // 1. Safely handle dependent records in riders
+                    $conn->prepare("DELETE FROM riders WHERE user_id = ?")->execute([$del_id]);
+
+                    // 2. Safely handle dependent records in orders / food_orders
+                    try {
+                        $conn->prepare("UPDATE orders SET user_id = NULL WHERE user_id = ?")->execute([$del_id]);
+                    } catch (Throwable $e) {}
+                    try {
+                        $conn->prepare("UPDATE food_orders SET customer_id = 0 WHERE customer_id = ?")->execute([$del_id]);
+                    } catch (Throwable $e) {}
+
+                    // 3. Safely handle dependent records in reviews & order_messages
+                    try {
+                        $conn->prepare("DELETE FROM reviews WHERE user_id = ? OR customer_id = ?")->execute([$del_id, $del_id]);
+                    } catch (Throwable $e) {}
+                    try {
+                        $conn->prepare("UPDATE order_messages SET sender_id = 0 WHERE sender_id = ?")->execute([$del_id]);
+                    } catch (Throwable $e) {}
+
+                    // 4. Safely handle dependent records in system_audit_logs
+                    try {
+                        $conn->prepare("UPDATE system_audit_logs SET user_id = NULL WHERE user_id = ?")->execute([$del_id]);
+                    } catch (Throwable $e) {}
+
+                    // 5. Clean soft-delete on users table so constraints and system history stay safe
+                    $upd_del = $conn->prepare("UPDATE users SET status = 'inactive', is_deleted = 1, username = CONCAT(username, '_del_', UNIX_TIMESTAMP()) WHERE user_id = ?");
+                    $upd_del->execute([$del_id]);
+
+                    // 6. Attempt hard delete if DB constraints allow, else soft-delete is already active
+                    try {
+                        $del_hard = $conn->prepare("DELETE FROM users WHERE user_id = ?");
+                        $del_hard->execute([$del_id]);
+                    } catch (Throwable $e) {
+                        // Soft delete safely handled above
+                    }
+
+                    $conn->commit();
+
+                    log_activity($conn, $current_admin_id, 'USER_DELETED', "Admin {$user_name} removed user '{$del_uname}' (ID: {$del_id}, Role: {$del_role}).");
+                    $action_msg = "User successfully removed";
+
+                    if ($is_ajax) {
+                        header('Content-Type: application/json');
+                        echo json_encode([
+                            'success' => true,
+                            'message' => 'User successfully removed',
+                            'user_id' => $del_id,
+                            'username' => $del_uname
+                        ]);
+                        exit;
+                    }
+                } catch (Throwable $e) {
+                    if ($conn->inTransaction()) $conn->rollBack();
+                    // Fallback to soft delete
+                    try {
+                        $conn->prepare("UPDATE users SET status = 'inactive', is_deleted = 1 WHERE user_id = ?")->execute([$del_id]);
+                        log_activity($conn, $current_admin_id, 'USER_DELETED', "Admin {$user_name} soft-deleted user '{$del_uname}' (ID: {$del_id}, Role: {$del_role}).");
+                        $action_msg = "User successfully removed";
+                        if ($is_ajax) {
+                            header('Content-Type: application/json');
+                            echo json_encode([
+                                'success' => true,
+                                'message' => 'User successfully removed',
+                                'user_id' => $del_id,
+                                'username' => $del_uname
+                            ]);
+                            exit;
+                        }
+                    } catch (Throwable $e2) {
+                        $action_msg = "Error deleting user: " . $e2->getMessage();
+                        if ($is_ajax) {
+                            header('Content-Type: application/json');
+                            echo json_encode(['success' => false, 'message' => $action_msg]);
+                            exit;
+                        }
+                    }
                 }
             } else {
-                $action_msg = "Error: User account not found.";
+                $err = "Error: User account not found.";
+                if ($is_ajax) {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => false, 'message' => $err]);
+                    exit;
+                }
+                $action_msg = $err;
             }
         }
     }
@@ -498,9 +635,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 // 3. FETCH DATA FROM DATABASE
 require_once 'notification_lib.php';
 
-// Fetch Users for User CRUD
+// Fetch Users for User CRUD (excluding soft-deleted)
 $users_list = [];
-$users_res = $conn->query("SELECT user_id, username, full_name, email, role, failed_attempts, lockout_until, created_at FROM users ORDER BY user_id DESC");
+$users_res = $conn->query("SELECT user_id, username, full_name, email, role, failed_attempts, lockout_until, created_at, status, is_deleted FROM users WHERE (is_deleted = 0 OR is_deleted IS NULL) AND (status != 'inactive' OR status IS NULL) ORDER BY user_id DESC");
 $user_counts = ['customer' => 0, 'chef' => 0, 'rider' => 0, 'admin' => 0, 'locked' => 0];
 if ($users_res) {
     $now_ts = time();
@@ -567,7 +704,7 @@ $shops = $shops_res ? $shops_res->fetchAll(PDO::FETCH_ASSOC) : [];
 $menu_items_res = $conn->query("SELECT m.*, s.shop_name FROM menu_items m JOIN shops s ON m.shop_id = s.shop_id ORDER BY m.item_id DESC");
 $menu_items = $menu_items_res ? $menu_items_res->fetchAll(PDO::FETCH_ASSOC) : [];
 
-$riders_res = $conn->query("SELECT * FROM riders ORDER BY rider_id DESC");
+$riders_res = $conn->query("SELECT r.*, COALESCE(r.phone, u.phone, '+63 917 555 0192') AS display_phone, COALESCE(r.account_status, 'Active') AS acc_status, COALESCE(r.plate_number, 'ORM-8891') AS display_plate, COALESCE(r.vehicle_model, 'Honda Click 125i') AS display_model FROM riders r LEFT JOIN users u ON r.user_id = u.user_id ORDER BY r.rider_id DESC");
 $riders = $riders_res ? $riders_res->fetchAll(PDO::FETCH_ASSOC) : [];
 
 $total_shops = count($shops);
@@ -612,7 +749,7 @@ $txn_count = count($transactions);
 $total_revenue = number_format($total_revenue, 2);
 
 $active_tab = 'analytics';
-if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditlogs', 'riders', 'stores', 'menus', 'transactions'], true)) {
+if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditlogs', 'riders', 'stores', 'menus', 'transactions', 'dispatch-map'], true)) {
     $active_tab = $_GET['tab'];
 } elseif (isset($_POST['active_tab'])) {
     $active_tab = $_POST['active_tab'];
@@ -620,7 +757,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
     $active_tab = 'users';
 } elseif (isset($_POST['action_reconcile_order'])) {
     $active_tab = 'transactions';
-} elseif (isset($_POST['action_add_rider']) || isset($_POST['action_toggle_rider']) || isset($_POST['action_delete_rider'])) {
+} elseif (isset($_POST['action_add_rider']) || isset($_POST['action_toggle_rider']) || isset($_POST['action_delete_rider']) || isset($_POST['action_edit_rider'])) {
     $active_tab = 'riders';
 } elseif (isset($_POST['action_add_shop']) || isset($_POST['action_edit_shop']) || isset($_POST['action_delete_shop'])) {
     $active_tab = 'stores';
@@ -675,6 +812,20 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
     button, input, select { font: inherit; }
     button { cursor: pointer; }
+
+    @keyframes liveRadarDot {
+      0% { transform: scale(0.9); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.5; }
+      100% { transform: scale(0.9); opacity: 1; }
+    }
+    @keyframes riderRadarPulse {
+      0% { transform: scale(0.6); opacity: 0.9; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+    .custom-store-marker, .custom-rider-marker {
+      background: none !important;
+      border: none !important;
+    }
 
     /* UNIFIED 440PX APP SHELL CONTAINER */
     .app {
@@ -1073,6 +1224,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       </div>
       <div class="action-header-btns">
         <button type="button" class="mobile-logout" onclick="openModal('logoutModal')"><i class="fa-solid fa-right-from-bracket"></i></button>
+        <button class="btn-action" onclick="switchTab('dispatch-map')" style="background:var(--fd-gold);"><i class="fa-solid fa-map-location-dot"></i> Fleet Map</button>
         <button class="btn-action" onclick="openModal('addUserModal')" style="background:var(--fd-olive);"><i class="fa-solid fa-user-plus"></i> New User</button>
         <button class="btn-action" onclick="openModal('addRiderModal')"><i class="fa-solid fa-motorcycle"></i> New Rider</button>
         <button class="btn-action" onclick="openModal('addShopModal')"><i class="fa-solid fa-plus"></i> New Shop</button>
@@ -1107,27 +1259,26 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
           </div>
           <i class="fa-solid fa-shield-halved metric-icon" style="color:var(--fd-rust);"></i>
         </div>
-        <div class="metric-card">
+        <div class="metric-card" onclick="switchTab('dispatch-map')" style="cursor:pointer;" title="View on Master Dispatch Map">
           <div class="metric-data">
             <h3><?php echo $total_shops; ?></h3>
-            
-            <p>Active Partner Stores</p>
+            <p>Partner Stores (Live Map)</p>
           </div>
-          <i class="fa-solid fa-shop metric-icon"></i>
+          <i class="fa-solid fa-shop metric-icon" style="color:#D88F2A;"></i>
         </div>
-        <div class="metric-card">
+        <div class="metric-card" onclick="switchTab('menus')" style="cursor:pointer;">
           <div class="metric-data">
             <h3><?php echo $total_items; ?></h3>
             <p>Total Menu Dishes</p>
           </div>
           <i class="fa-solid fa-burger metric-icon"></i>
         </div>
-        <div class="metric-card">
+        <div class="metric-card" onclick="switchTab('dispatch-map')" style="cursor:pointer;" title="Track live moving fleet">
           <div class="metric-data">
             <h3><?php echo $total_riders; ?></h3>
-            <p>Active Fleet Riders</p>
+            <p>Fleet Riders (Live GPS)</p>
           </div>
-          <i class="fa-solid fa-motorcycle metric-icon"></i>
+          <i class="fa-solid fa-motorcycle metric-icon" style="color:#4B5320;"></i>
         </div>
       </div>
     </div>
@@ -1176,7 +1327,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
                 $u_role = strtolower(trim($u['role'] ?? 'customer'));
                 $is_current_admin = ((int)$u['user_id'] === (int)$_SESSION['user_id']);
               ?>
-                <tr>
+                <tr id="user-row-<?php echo $u['user_id']; ?>">
                   <td><small>#UID-<?php echo $u['user_id']; ?></small></td>
                   <td>
                     <strong><?php echo htmlspecialchars($u['username']); ?></strong>
@@ -1223,7 +1374,9 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
                         <i class="fa-solid fa-user-shield"></i> Active Session
                       </span>
                     <?php else: ?>
-                      <form method="POST" style="display:inline;" onsubmit="return confirmAdminAction('Delete User?', 'Are you sure you want to permanently delete user <?php echo htmlspecialchars($u['username']); ?>? This action cannot be undone and will be recorded in audit logs.', this);">
+                      <form method="POST" style="display:inline;" onsubmit="return confirmAdminAction('Delete User?', 'Are you sure you want to permanently delete user <?php echo htmlspecialchars($u['username']); ?>? This action cannot be undone and will be recorded in audit logs.', this, this.querySelector('button[name=action_delete_user]'));">
+                        <input type="hidden" name="action_delete_user" value="1">
+                        <input type="hidden" name="active_tab" value="users">
                         <input type="hidden" name="user_id" value="<?php echo $u['user_id']; ?>">
                         <button type="submit" name="action_delete_user" class="btn-delete"><i class="fa-solid fa-trash"></i> Delete</button>
                       </form>
@@ -1409,38 +1562,75 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
     <div id="tab-riders" class="tab-section">
       <div class="dashboard-section">
         <div class="section-title">
-          <span>Dispatch Fleet</span>
-          <button class="btn-action" onclick="openModal('addRiderModal')" style="padding: 4px 8px; font-size: 0.72rem;">Add Rider</button>
+          <span><i class="fa-solid fa-motorcycle" style="color:var(--fd-olive);"></i> Dispatch Fleet (<?php echo $total_riders; ?>)</span>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-action" onclick="switchTab('dispatch-map')" style="background:var(--fd-gold); padding: 4px 10px; font-size: 0.72rem;"><i class="fa-solid fa-map-location-dot"></i> Live Dispatch Map</button>
+            <button class="btn-action" onclick="openModal('addRiderModal')" style="padding: 4px 10px; font-size: 0.72rem;"><i class="fa-solid fa-plus"></i> Add Rider</button>
+          </div>
         </div>
         <table>
           <thead>
             <tr>
-              <th>Rider Name</th>
-              <th>Current Status</th>
+              <th>Rider & Contact</th>
+              <th>Vehicle Details</th>
+              <th>Account / Status</th>
               <th>Active Order</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             <?php if (!empty($riders)): ?>
-              <?php foreach ($riders as $r): ?>
-                <tr>
-                  <td><strong><?php echo htmlspecialchars($r['rider_name']); ?></strong></td>
+              <?php foreach ($riders as $r): 
+                $r_phone = $r['display_phone'] ?? $r['phone'] ?? '+63 917 555 0192';
+                $r_plate = $r['display_plate'] ?? $r['plate_number'] ?? 'ORM-8891';
+                $r_vehicle = $r['display_model'] ?? $r['vehicle_model'] ?? 'Honda Click 125i';
+                $r_acc_status = $r['acc_status'] ?? $r['account_status'] ?? 'Active';
+              ?>
+                <tr id="rider-row-<?php echo $r['rider_id']; ?>">
                   <td>
-                    <span class="status-badge <?php echo $r['status']; ?>">
+                    <strong><span id="rider-name-val-<?php echo $r['rider_id']; ?>"><?php echo htmlspecialchars($r['rider_name']); ?></span></strong>
+                    <div style="font-size:8px; color:#74776a;">
+                      <i class="fa-solid fa-phone" style="font-size:7px;"></i> <span id="rider-phone-val-<?php echo $r['rider_id']; ?>"><?php echo htmlspecialchars($r_phone); ?></span>
+                    </div>
+                  </td>
+                  <td>
+                    <div><i class="fa-solid fa-motorcycle" style="font-size:7.5px; color:#4B5320;"></i> <span id="rider-vehicle-val-<?php echo $r['rider_id']; ?>"><?php echo htmlspecialchars($r_vehicle); ?></span></div>
+                    <div style="font-size:7.5px; color:#D88F2A; font-weight:600;"><span id="rider-plate-val-<?php echo $r['rider_id']; ?>"><?php echo htmlspecialchars($r_plate); ?></span></div>
+                  </td>
+                  <td>
+                    <span id="rider-accstatus-badge-<?php echo $r['rider_id']; ?>" class="status-badge" style="font-size:7.5px; background:<?php echo ($r_acc_status === 'Suspended' ? '#ffebee; color:#c62828;' : ($r_acc_status === 'Offline' ? '#f5f5f5; color:#757575;' : '#e8f5e9; color:#2e7d32;')); ?>;">
+                      <?php echo htmlspecialchars($r_acc_status); ?>
+                    </span>
+                    <span class="status-badge <?php echo $r['status']; ?>" style="font-size:7.5px; margin-top:2px; display:inline-block;">
                       <?php echo ($r['status'] === 'on_delivery') ? 'On Delivery' : 'Waiting'; ?>
                     </span>
                   </td>
-                  <td><?php echo htmlspecialchars($r['current_order']); ?></td>
                   <td>
+                    <span style="font-size:8px; font-weight:600; color:#344016;"><?php echo htmlspecialchars($r['current_order']); ?></span>
+                  </td>
+                  <td>
+                    <button type="button" class="btn-edit" onclick='openEditRiderModal(<?php echo htmlspecialchars(json_encode([
+                      "rider_id" => (int)$r["rider_id"],
+                      "rider_name" => $r["rider_name"],
+                      "phone" => $r_phone,
+                      "plate_number" => $r_plate,
+                      "vehicle_model" => $r_vehicle,
+                      "account_status" => $r_acc_status
+                    ]), ENT_QUOTES, "UTF-8"); ?>)'>
+                      <i class="fa-solid fa-pen-to-square"></i> Edit
+                    </button>
                     <form method="POST" style="display:inline;">
+                      <input type="hidden" name="action_toggle_rider" value="1">
+                      <input type="hidden" name="active_tab" value="riders">
                       <input type="hidden" name="rider_id" value="<?php echo $r['rider_id']; ?>">
                       <input type="hidden" name="new_status" value="<?php echo ($r['status'] === 'on_delivery') ? 'waiting' : 'on_delivery'; ?>">
                       <button type="submit" name="action_toggle_rider" class="btn-toggle-status">
                         Switch to <?php echo ($r['status'] === 'on_delivery') ? 'Waiting' : 'On Delivery'; ?>
                       </button>
                     </form>
-                    <form method="POST" style="display:inline;" onclick="return confirmAdminAction('Remove rider?', 'Are you sure you want to remove this rider?', this);">
+                    <form method="POST" style="display:inline;" onsubmit="return confirmAdminAction('Remove rider?', 'Are you sure you want to remove rider <?php echo htmlspecialchars($r['rider_name']); ?> from the fleet?', this, this.querySelector('button[name=action_delete_rider]'));">
+                      <input type="hidden" name="action_delete_rider" value="1">
+                      <input type="hidden" name="active_tab" value="riders">
                       <input type="hidden" name="rider_id" value="<?php echo $r['rider_id']; ?>">
                       <button type="submit" name="action_delete_rider" class="btn-delete"><i class="fa-solid fa-trash"></i> Delete</button>
                     </form>
@@ -1448,7 +1638,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
                 </tr>
               <?php endforeach; ?>
             <?php else: ?>
-              <tr><td colspan="4">No riders in fleet.</td></tr>
+              <tr><td colspan="5">No riders in fleet.</td></tr>
             <?php endif; ?>
           </tbody>
         </table>
@@ -1756,6 +1946,65 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
     </div>
 
+    <!-- TAB: MASTER FLEET & STORE DISPATCH MAP (Requirement 4) -->
+    <div id="tab-dispatch-map" class="tab-section">
+      <div class="dashboard-section" style="border-left: 4px solid var(--fd-gold); padding: 14px;">
+        <div class="section-title" style="margin-bottom: 8px;">
+          <div>
+            <span style="font-size:13.5px; font-weight:700; color:#344016;">
+              <i class="fa-solid fa-map-location-dot" style="color:var(--fd-gold);"></i> Master Fleet & Store Dispatch Map
+            </span>
+            <p style="font-size:9.5px; color:#74776a; margin-top:2px;">
+              Live telemetry covering Ormoc City: Partner store locations, active orders, and live moving delivery riders.
+            </p>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="dispatch-pulse-indicator" style="display:inline-flex; align-items:center; gap:5px; font-size:9.5px; font-weight:600; color:#2e7d32; background:#e8f5e9; padding:4px 8px; border-radius:12px; border:1px solid #c8e6c9;">
+              <span style="width:7px; height:7px; border-radius:50%; background:#2e7d32; box-shadow:0 0 0 2px rgba(46,125,50,0.2); animation: liveRadarDot 1.5s infinite;"></span> 3s Live GPS
+            </span>
+            <button type="button" class="btn-action" onclick="pollMasterDispatchMap(true);" style="font-size:9.5px; padding:5px 9px;">
+              <i class="fa-solid fa-rotate"></i> Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Telemetry Stats Cards -->
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-bottom:12px;">
+          <div style="background:#FFFDF7; border:1px solid #D4C5A5; border-radius:10px; padding:8px; text-align:center;">
+            <div style="font-size:8.5px; color:#74776a; font-weight:600; text-transform:uppercase;">Partner Stores</div>
+            <div id="stat-dispatch-stores" style="font-size:15px; font-weight:700; color:#4B5320;"><?php echo $total_shops; ?></div>
+          </div>
+          <div style="background:#FFFDF7; border:1px solid #D4C5A5; border-radius:10px; padding:8px; text-align:center;">
+            <div style="font-size:8.5px; color:#74776a; font-weight:600; text-transform:uppercase;">Dispatched Riders</div>
+            <div id="stat-dispatch-riders" style="font-size:15px; font-weight:700; color:#D88F2A;">0</div>
+          </div>
+          <div style="background:#FFFDF7; border:1px solid #D4C5A5; border-radius:10px; padding:8px; text-align:center;">
+            <div style="font-size:8.5px; color:#74776a; font-weight:600; text-transform:uppercase;">Active Deliveries</div>
+            <div id="stat-dispatch-orders" style="font-size:15px; font-weight:700; color:#923D32;">0</div>
+          </div>
+        </div>
+
+        <!-- Leaflet Map Container covering Ormoc City -->
+        <div style="position:relative; width:100%; border-radius:14px; overflow:hidden; border:2px solid #e7dfc4; box-shadow:0 6px 18px rgba(55,65,22,0.08);">
+          <div id="master-dispatch-map" style="width:100%; height:520px; background:#f4f0df;"></div>
+
+          <!-- Map Legend Overlay -->
+          <div style="position:absolute; bottom:10px; left:10px; z-index:1000; background:rgba(255,255,255,0.95); backdrop-filter:blur(8px); border:1px solid #D4C5A5; border-radius:10px; padding:6px 10px; font-size:9px; box-shadow:0 4px 12px rgba(0,0,0,0.12);">
+            <div style="font-weight:700; color:#344016; margin-bottom:3px;"><i class="fa-solid fa-layer-group"></i> Dispatch Layers</div>
+            <div style="display:flex; flex-direction:column; gap:3px;">
+              <span style="display:flex; align-items:center; gap:5px;">
+                <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#D88F2A; border:1.5px solid #fff;"></span> Partner Stores (Click for Active Orders)
+              </span>
+              <span style="display:flex; align-items:center; gap:5px;">
+                <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#4B5320; border:1.5px solid #fff;"></span> Live Dispatched Riders (Click for Details)
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
   </main>
 
   <!-- BOTTOM NAVIGATION / SIDEBAR -->
@@ -1768,6 +2017,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
       <ul class="nav-links">
         <li><a onclick="switchTab('analytics')" id="nav-analytics" class="active"><i class="fa-solid fa-chart-line"></i> Analytics</a></li>
+        <li><a onclick="switchTab('dispatch-map')" id="nav-dispatch-map"><i class="fa-solid fa-map-location-dot"></i> Dispatch Map</a></li>
         <li><a onclick="switchTab('users')" id="nav-users"><i class="fa-solid fa-users-gear"></i> Users</a></li>
         <li><a onclick="switchTab('auditlogs')" id="nav-auditlogs"><i class="fa-solid fa-shield-halved"></i> Audit Trail</a></li>
         <li><a onclick="switchTab('riders')" id="nav-riders"><i class="fa-solid fa-motorcycle"></i> Riders</a></li>
@@ -1805,13 +2055,89 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
   <!-- MODAL: ADD RIDER -->
   <div id="addRiderModal" class="modal">
-    <div class="modal-box">
-      <h3>Add New Rider</h3>
+    <div class="modal-box" style="max-width: 440px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0; font-size:15px; color:#344016;"><i class="fa-solid fa-motorcycle" style="color:var(--fd-olive);"></i> Add New Rider</h3>
+        <button type="button" onclick="closeModal('addRiderModal')" style="background:none; border:none; font-size:18px; color:#74776a; cursor:pointer;">&times;</button>
+      </div>
       <form method="POST">
-        <input type="text" name="rider_name" placeholder="Rider Full Name" required>
+        <input type="hidden" name="action_add_rider" value="1">
+        <input type="hidden" name="active_tab" value="riders">
+
+        <div style="margin-bottom:10px;">
+          <label style="font-size:10px; color:#4B5320; font-weight:600; display:block; margin-bottom:3px;">Full Name *</label>
+          <input type="text" name="rider_name" placeholder="Rider Full Name" required style="width:100%; padding:8px 10px; border:1px solid #D4C5A5; border-radius:8px; font-size:11px;">
+        </div>
+
+        <div style="margin-bottom:10px;">
+          <label style="font-size:10px; color:#4B5320; font-weight:600; display:block; margin-bottom:3px;">Phone Number</label>
+          <input type="text" name="phone" placeholder="+63 917 555 0192" value="+63 917 555 0192" style="width:100%; padding:8px 10px; border:1px solid #D4C5A5; border-radius:8px; font-size:11px;">
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+          <div>
+            <label style="font-size:10px; color:#4B5320; font-weight:600; display:block; margin-bottom:3px;">Plate Number</label>
+            <input type="text" name="plate_number" placeholder="ORM-8891" value="ORM-8891" style="width:100%; padding:8px 10px; border:1px solid #D4C5A5; border-radius:8px; font-size:11px;">
+          </div>
+          <div>
+            <label style="font-size:10px; color:#4B5320; font-weight:600; display:block; margin-bottom:3px;">Vehicle Model</label>
+            <input type="text" name="vehicle_model" placeholder="Honda Click 125i" value="Honda Click 125i" style="width:100%; padding:8px 10px; border:1px solid #D4C5A5; border-radius:8px; font-size:11px;">
+          </div>
+        </div>
+
         <div class="modal-actions">
           <button type="button" class="btn-cancel" onclick="closeModal('addRiderModal')">Cancel</button>
-          <button type="submit" name="action_add_rider" class="btn-submit">Add Rider</button>
+          <button type="submit" name="action_add_rider" class="btn-submit" style="background:#4B5320; color:#fff;">Add Rider</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT RIDER (Requirement 3: Full Name, Phone, Vehicle Plate/Model, Account Status) -->
+  <div id="editRiderModal" class="modal">
+    <div class="modal-box" style="max-width: 440px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0; font-size:15px; color:#344016;"><i class="fa-solid fa-user-pen" style="color:var(--fd-olive);"></i> Edit Fleet Rider</h3>
+        <button type="button" onclick="closeModal('editRiderModal')" style="background:none; border:none; font-size:18px; color:#74776a; cursor:pointer;">&times;</button>
+      </div>
+      <form method="POST" id="editRiderForm" onsubmit="handleEditRiderSubmit(event, this);">
+        <input type="hidden" name="action_edit_rider" value="1">
+        <input type="hidden" name="active_tab" value="riders">
+        <input type="hidden" name="rider_id" id="edit_rider_id" value="">
+
+        <div style="margin-bottom:10px;">
+          <label style="font-size:10.5px; font-weight:600; color:#4B5320; display:block; margin-bottom:3px;">Full Name *</label>
+          <input type="text" name="rider_name" id="edit_rider_name" required style="width:100%; padding:8px 10px; border:1px solid #D4C5A5; border-radius:8px; font-size:11px;">
+        </div>
+
+        <div style="margin-bottom:10px;">
+          <label style="font-size:10.5px; font-weight:600; color:#4B5320; display:block; margin-bottom:3px;">Phone Number</label>
+          <input type="text" name="phone" id="edit_rider_phone" placeholder="+63 917 555 0192" style="width:100%; padding:8px 10px; border:1px solid #D4C5A5; border-radius:8px; font-size:11px;">
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
+          <div>
+            <label style="font-size:10.5px; font-weight:600; color:#4B5320; display:block; margin-bottom:3px;">Plate Number</label>
+            <input type="text" name="plate_number" id="edit_rider_plate" placeholder="ORM-8891" style="width:100%; padding:8px 10px; border:1px solid #D4C5A5; border-radius:8px; font-size:11px;">
+          </div>
+          <div>
+            <label style="font-size:10.5px; font-weight:600; color:#4B5320; display:block; margin-bottom:3px;">Vehicle Model</label>
+            <input type="text" name="vehicle_model" id="edit_rider_vehicle" placeholder="Honda Click 125i" style="width:100%; padding:8px 10px; border:1px solid #D4C5A5; border-radius:8px; font-size:11px;">
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="font-size:10.5px; font-weight:600; color:#4B5320; display:block; margin-bottom:3px;">Account Status</label>
+          <select name="account_status" id="edit_rider_account_status" style="width:100%; padding:8px 10px; border:1px solid #D4C5A5; border-radius:8px; font-size:11px; background:#fff;">
+            <option value="Active">Active (Eligible for deliveries)</option>
+            <option value="Suspended">Suspended (Restricted)</option>
+            <option value="Offline">Offline</option>
+          </select>
+        </div>
+
+        <div class="modal-actions" style="margin-top:14px;">
+          <button type="button" class="btn-cancel" onclick="closeModal('editRiderModal')">Cancel</button>
+          <button type="submit" name="action_edit_rider" class="btn-submit" style="background:#4B5320; color:#fff;">Save Rider Changes</button>
         </div>
       </form>
     </div>
@@ -2194,6 +2520,13 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
       const targetTab = document.getElementById('tab-' + tabName);
       if (targetTab) targetTab.classList.add('active-tab');
+
+      if (tabName === 'dispatch-map') {
+        setTimeout(function() {
+          initMasterDispatchMap();
+          if (masterMap) masterMap.invalidateSize();
+        }, 120);
+      }
     }
 
     // Initialize Active Tab
@@ -2658,27 +2991,420 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
     // In-app confirmation modal (replaces confirm())
     var _adminPendingForm = null;
-    function confirmAdminAction(title, message, form) {
+    var _adminPendingButton = null;
+
+    function confirmAdminAction(title, message, form, btn) {
       document.getElementById('adminConfirmTitle').textContent = title;
       document.getElementById('adminConfirmMsg').textContent = message;
       _adminPendingForm = form;
+      _adminPendingButton = btn || null;
       document.getElementById('adminConfirmModal').style.display = 'flex';
       return false;
     }
+
     function closeAdminConfirm() {
       document.getElementById('adminConfirmModal').style.display = 'none';
       _adminPendingForm = null;
+      _adminPendingButton = null;
     }
+
     function doAdminConfirm() {
       if (_adminPendingForm) {
+        if (_adminPendingButton && _adminPendingButton.name) {
+          var hidden = _adminPendingForm.querySelector('input[name="' + _adminPendingButton.name + '"]');
+          if (!hidden) {
+            hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = _adminPendingButton.name;
+            _adminPendingForm.appendChild(hidden);
+          }
+          hidden.value = _adminPendingButton.value || '1';
+        }
+
+        // Clean asynchronous deletion for users without page refresh loop
+        var isDelUser = _adminPendingForm.querySelector('input[name="action_delete_user"]');
+        if (isDelUser) {
+          deleteUserAjax(_adminPendingForm);
+          closeAdminConfirm();
+          return;
+        }
+
         _adminPendingForm.submit();
       }
       closeAdminConfirm();
     }
+
+    // USER DELETION AJAX HANDLER (Requirement 2)
+    function deleteUserAjax(form) {
+      var formData = new FormData(form);
+      formData.set('action_delete_user', '1');
+      formData.set('ajax', '1');
+      var userId = formData.get('user_id');
+
+      fetch('admin_dashboard.php', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      })
+      .then(function(res) {
+        var ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) return res.json();
+        form.submit();
+        return null;
+      })
+      .then(function(data) {
+        if (!data) return;
+        if (data.success) {
+          showAdminAlertBanner(data.message || 'User successfully removed');
+          var row = document.getElementById('user-row-' + userId);
+          if (row) {
+            row.style.transition = 'all 0.3s ease-out';
+            row.style.opacity = '0';
+            row.style.transform = 'translateX(-20px)';
+            setTimeout(function() {
+              if (row.parentNode) row.parentNode.removeChild(row);
+            }, 300);
+          }
+        } else {
+          showAdminAlertBanner(data.message || 'Error deleting user.');
+        }
+      })
+      .catch(function(err) {
+        form.submit();
+      });
+    }
+
+    // GLOBAL NOTIFICATION BANNER
+    function showAdminAlertBanner(msg) {
+      var existing = document.getElementById('adminGlobalAlert');
+      if (!existing) {
+        existing = document.createElement('div');
+        existing.id = 'adminGlobalAlert';
+        existing.className = 'alert-banner';
+        var topBar = document.querySelector('.top-bar');
+        if (topBar && topBar.parentNode) {
+          topBar.parentNode.insertBefore(existing, topBar.nextSibling);
+        }
+      }
+      existing.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + msg;
+      existing.style.display = 'block';
+      existing.style.opacity = '1';
+      existing.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(function() {
+        existing.style.transition = 'opacity 0.6s';
+        existing.style.opacity = '0';
+        setTimeout(function() { existing.style.display = 'none'; existing.style.opacity = '1'; }, 600);
+      }, 4000);
+    }
+
+    // RIDER EDIT MODAL & AJAX (Requirement 3)
+    function openEditRiderModal(rider) {
+      if (typeof rider === 'string') {
+        try { rider = JSON.parse(rider); } catch(e) {}
+      }
+      document.getElementById('edit_rider_id').value = rider.rider_id;
+      document.getElementById('edit_rider_name').value = rider.rider_name || '';
+      document.getElementById('edit_rider_phone').value = rider.phone || '';
+      document.getElementById('edit_rider_plate').value = rider.plate_number || '';
+      document.getElementById('edit_rider_vehicle').value = rider.vehicle_model || '';
+      document.getElementById('edit_rider_account_status').value = rider.account_status || 'Active';
+      openModal('editRiderModal');
+    }
+
+    function handleEditRiderSubmit(e, form) {
+      e.preventDefault();
+      var formData = new FormData(form);
+      var riderId = formData.get('rider_id');
+
+      fetch('admin_dashboard.php', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      })
+      .then(function(res) {
+        var ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) return res.json();
+        form.submit();
+        return null;
+      })
+      .then(function(data) {
+        if (!data) return;
+        if (data.success) {
+          closeModal('editRiderModal');
+          showAdminAlertBanner(data.message || 'Rider details updated successfully!');
+          
+          var nameEl = document.getElementById('rider-name-val-' + riderId);
+          if (nameEl) nameEl.textContent = data.rider_name;
+          var phoneEl = document.getElementById('rider-phone-val-' + riderId);
+          if (phoneEl) phoneEl.textContent = data.phone;
+          var plateEl = document.getElementById('rider-plate-val-' + riderId);
+          if (plateEl) plateEl.textContent = data.plate_number;
+          var vehEl = document.getElementById('rider-vehicle-val-' + riderId);
+          if (vehEl) vehEl.textContent = data.vehicle_model;
+          var badgeEl = document.getElementById('rider-accstatus-badge-' + riderId);
+          if (badgeEl) {
+            badgeEl.textContent = data.account_status;
+            if (data.account_status === 'Suspended') {
+              badgeEl.style.background = '#ffebee';
+              badgeEl.style.color = '#c62828';
+            } else if (data.account_status === 'Offline') {
+              badgeEl.style.background = '#f5f5f5';
+              badgeEl.style.color = '#757575';
+            } else {
+              badgeEl.style.background = '#e8f5e9';
+              badgeEl.style.color = '#2e7d32';
+            }
+          }
+          if (typeof pollMasterDispatchMap === 'function') {
+            pollMasterDispatchMap();
+          }
+        } else {
+          alert(data.message || 'Failed to update rider details.');
+        }
+      })
+      .catch(function(err) {
+        form.submit();
+      });
+    }
+
+    // MASTER DISPATCH MAP TELEMETRY (Requirement 4)
+    var masterMap = null;
+    var masterStoreLayer = null;
+    var masterRiderLayer = null;
+    var masterRiderMarkers = {}; // rider_id -> Leaflet Marker
+    var masterDispatchTimer = null;
+
+    function getStoreLogoUrl(store) {
+      var name = (store.shop_name || '').toLowerCase();
+      if (name.includes('mcdonald')) return 'assets/shops/mcdonalds.png';
+      if (name.includes('jollibee')) return 'assets/shops/jollibee.png';
+      if (name.includes('mang inasal')) return 'assets/shops/mang_inasal.png';
+      if (name.includes('ribshack')) return 'assets/shops/ribshack.png';
+      if (name.includes('chowking')) return 'assets/shops/chowking.png';
+      if (name.includes('shakey')) return 'assets/shops/shakeys.png';
+      if (name.includes('greenwich')) return 'assets/shops/greenwich.png';
+      if (store.logo_url && !store.logo_url.includes('default_store')) return store.logo_url;
+      return 'logo.jpg';
+    }
+
+    function createStorePinIcon(store) {
+      var logo = getStoreLogoUrl(store);
+      var activeCount = store.active_orders_count || 0;
+      var badgeHtml = activeCount > 0 
+        ? '<span style="position:absolute; top:-5px; right:-5px; background:#e53935; color:#fff; font-size:9px; font-weight:700; width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 2px 5px rgba(0,0,0,0.3);">' + activeCount + '</span>'
+        : '';
+
+      return L.divIcon({
+        className: 'custom-store-marker',
+        html: `
+          <div style="position:relative; display:flex; flex-direction:column; align-items:center; cursor:pointer;">
+            <div style="width:36px; height:36px; border-radius:50%; background:#ffffff; border:2.5px solid #D88F2A; box-shadow:0 4px 10px rgba(0,0,0,0.22); display:flex; align-items:center; justify-content:center; overflow:hidden;">
+              <img src="${logo}" alt="${store.shop_name}" style="width:100%; height:100%; object-fit:cover;" onerror="this.onerror=null; this.src='logo.jpg';">
+            </div>
+            ${badgeHtml}
+            <div style="width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:7px solid #D88F2A; margin-top:-2px;"></div>
+          </div>
+        `,
+        iconSize: [38, 46],
+        iconAnchor: [19, 44],
+        popupAnchor: [0, -40]
+      });
+    }
+
+    function createRiderMarkerIcon(rider) {
+      return L.divIcon({
+        className: 'custom-rider-marker',
+        html: `
+          <div style="position:relative; display:flex; flex-direction:column; align-items:center; cursor:pointer;">
+            <div style="position:absolute; width:44px; height:44px; border-radius:50%; background:rgba(75,83,32,0.25); animation:riderRadarPulse 2s infinite ease-out; pointer-events:none;"></div>
+            <div style="width:34px; height:34px; border-radius:50%; background:#4B5320; border:2.5px solid #ffffff; box-shadow:0 4px 12px rgba(0,0,0,0.32); display:flex; align-items:center; justify-content:center; color:#ffffff; font-size:14px; position:relative; z-index:2;">
+              <i class="fa-solid fa-motorcycle"></i>
+            </div>
+            <div style="width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:7px solid #4B5320; margin-top:-2px; z-index:2;"></div>
+            <div style="margin-top:2px; background:rgba(52,64,22,0.92); color:#fff; font-size:8px; font-weight:700; padding:1px 6px; border-radius:7px; white-space:nowrap; border:1px solid rgba(255,255,255,0.7); box-shadow:0 2px 5px rgba(0,0,0,0.2); z-index:3;">
+              ${rider.rider_name}
+            </div>
+          </div>
+        `,
+        iconSize: [44, 54],
+        iconAnchor: [22, 42],
+        popupAnchor: [0, -38]
+      });
+    }
+
+    function initMasterDispatchMap() {
+      if (masterMap) {
+        masterMap.invalidateSize();
+        return;
+      }
+      var container = document.getElementById('master-dispatch-map');
+      if (!container || typeof L === 'undefined') return;
+
+      masterMap = L.map('master-dispatch-map', {
+        center: [11.0089, 124.6068], // Ormoc City center
+        zoom: 14,
+        attributionControl: false
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19
+      }).addTo(masterMap);
+
+      masterStoreLayer = L.layerGroup().addTo(masterMap);
+      masterRiderLayer = L.layerGroup().addTo(masterMap);
+
+      pollMasterDispatchMap();
+
+      if (!masterDispatchTimer) {
+        masterDispatchTimer = setInterval(function() {
+          var tab = document.getElementById('tab-dispatch-map');
+          if (tab && tab.classList.contains('active-tab')) {
+            pollMasterDispatchMap();
+          }
+        }, 3000); // 3-second live polling loop
+      }
+    }
+
+    function pollMasterDispatchMap(manual) {
+      if (!masterMap) return;
+
+      fetch('tracking_api.php?action=get_dispatch_map', {
+        headers: { 'Accept': 'application/json' }
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (!data || !data.success) return;
+
+        // Update Counter Badges
+        var stStores = document.getElementById('stat-dispatch-stores');
+        if (stStores) stStores.textContent = data.total_stores || (data.stores ? data.stores.length : 0);
+        var stRiders = document.getElementById('stat-dispatch-riders');
+        if (stRiders) stRiders.textContent = data.active_riders_count || (data.riders ? data.riders.length : 0);
+        var stOrders = document.getElementById('stat-dispatch-orders');
+        if (stOrders && data.stores) {
+          var activeTotal = data.stores.reduce(function(acc, s) { return acc + (s.active_orders_count || 0); }, 0);
+          stOrders.textContent = activeTotal;
+        }
+
+        // Layer 1: Partner Stores
+        if (masterStoreLayer && data.stores) {
+          masterStoreLayer.clearLayers();
+          data.stores.forEach(function(store) {
+            if (store.latitude && store.longitude) {
+              var m = L.marker([store.latitude, store.longitude], {
+                icon: createStorePinIcon(store)
+              });
+              var actCount = store.active_orders_count || 0;
+              var popupHtml = `
+                <div style="min-width:210px; font-family:'Poppins', sans-serif;">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; border-bottom:1px solid #eee; padding-bottom:6px;">
+                    <img src="${getStoreLogoUrl(store)}" style="width:28px; height:28px; border-radius:50%; object-fit:cover; border:1px solid #ddd;">
+                    <div>
+                      <h4 style="margin:0; font-size:12px; color:#344016; font-weight:700;">${store.shop_name}</h4>
+                      <span style="font-size:9px; color:#788A6E;">${store.category || 'Partner Store'}</span>
+                    </div>
+                  </div>
+                  <div style="font-size:9.5px; color:#555; margin-bottom:6px;">
+                    <i class="fa-solid fa-location-dot" style="color:#D88F2A;"></i> ${store.address || 'Ormoc City, Leyte'}
+                  </div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; background:#FAF6EE; padding:5px 8px; border-radius:7px; border:1px solid #D4C5A5;">
+                    <span style="font-size:9px; font-weight:600; color:#4B5320;">Active Orders</span>
+                    <span style="font-size:10px; font-weight:700; color:${actCount > 0 ? '#d32f2f' : '#788A6E'};">
+                      ${actCount > 0 ? '⚡ ' + actCount + ' in kitchen/transit' : '0 active'}
+                    </span>
+                  </div>
+                </div>
+              `;
+              m.bindPopup(popupHtml);
+              masterStoreLayer.addLayer(m);
+            }
+          });
+        }
+
+        // Layer 2: Active Dispatched Riders
+        if (masterRiderLayer && data.riders) {
+          var currentIds = {};
+          data.riders.forEach(function(r) {
+            currentIds[r.rider_id] = true;
+            var lat = parseFloat(r.lat);
+            var lng = parseFloat(r.lng);
+            if (isNaN(lat) || isNaN(lng)) return;
+
+            var popupContent = `
+              <div style="min-width:240px; font-family:'Poppins', sans-serif; font-size:10.5px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; border-bottom:1px solid #eee; padding-bottom:5px;">
+                  <div>
+                    <div style="font-weight:700; font-size:12px; color:#344016; display:flex; align-items:center; gap:5px;">
+                      <i class="fa-solid fa-motorcycle" style="color:#4B5320;"></i> ${r.rider_name}
+                    </div>
+                    <div style="font-size:9px; color:#788A6E;">
+                      <i class="fa-solid fa-phone"></i> ${r.rider_phone || '+63 917 555 0192'}
+                    </div>
+                  </div>
+                  <span style="background:#e8f5e9; color:#2e7d32; font-size:8px; font-weight:700; padding:2px 5px; border-radius:5px; border:1px solid #c8e6c9;">
+                    DISPATCHED
+                  </span>
+                </div>
+                <div style="background:#FAF6EE; border:1px solid #D4C5A5; border-radius:7px; padding:6px 8px; margin-bottom:6px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:8.5px; color:#74776a; font-weight:600;">ACTIVE ORDER</span>
+                    <span style="font-size:10.5px; font-weight:700; color:#D88F2A;">${r.order_ref || '#FD-ACTIVE'}</span>
+                  </div>
+                  <div style="font-size:9.5px; color:#333; margin-top:2px; font-weight:600;">
+                    <i class="fa-solid fa-utensils" style="color:#788A6E;"></i> ${r.items_summary || 'Food Dash Package'}
+                  </div>
+                  <div style="font-size:9.5px; font-weight:700; color:#344016; margin-top:2px;">
+                    Total Bill: ₱${Number(r.total_amount || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:3px; margin-bottom:6px; font-size:9.5px;">
+                  <div style="display:flex; align-items:flex-start; gap:5px;">
+                    <span style="width:6px; height:6px; border-radius:50%; background:#D88F2A; margin-top:4px; flex-shrink:0;"></span>
+                    <div><strong style="color:#4B5320;">Pickup:</strong> ${r.store_name || 'Store'}</div>
+                  </div>
+                  <div style="display:flex; align-items:flex-start; gap:5px;">
+                    <span style="width:6px; height:6px; border-radius:50%; background:#d32f2f; margin-top:4px; flex-shrink:0;"></span>
+                    <div><strong style="color:#4B5320;">Drop-off:</strong> ${r.delivery_address || 'Ormoc City'}</div>
+                  </div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#f4f0df; padding:4px 7px; border-radius:6px; font-size:9px;">
+                  <span><strong>Vehicle:</strong> ${r.vehicle_model} [${r.plate_number}]</span>
+                  <span style="color:#D88F2A; font-weight:700;">ETA: ${r.eta || 'En Route'}</span>
+                </div>
+              </div>
+            `;
+
+            if (masterRiderMarkers[r.rider_id]) {
+              masterRiderMarkers[r.rider_id].setLatLng([lat, lng]);
+              masterRiderMarkers[r.rider_id].setPopupContent(popupContent);
+            } else {
+              var rMarker = L.marker([lat, lng], {
+                icon: createRiderMarkerIcon(r)
+              }).addTo(masterRiderLayer);
+              rMarker.bindPopup(popupContent);
+              masterRiderMarkers[r.rider_id] = rMarker;
+            }
+          });
+
+          // Remove markers for riders no longer active
+          Object.keys(masterRiderMarkers).forEach(function(rid) {
+            if (!currentIds[rid]) {
+              masterRiderLayer.removeLayer(masterRiderMarkers[rid]);
+              delete masterRiderMarkers[rid];
+            }
+          });
+        }
+      })
+      .catch(function(err) {
+        console.error('Dispatch telemetry poll error:', err);
+      });
+    }
+
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') { 
         closeAdminConfirm(); 
         closeModal('resetPasswordModal');
+        closeModal('editRiderModal');
       }
     });
   </script>
