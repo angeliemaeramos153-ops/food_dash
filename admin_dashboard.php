@@ -1,6 +1,53 @@
 <?php
 session_start();
 require_once 'db_connect.php';
+require_once 'notification_lib.php';
+
+// Safe Fallback for Activity Logging
+if (!function_exists('log_activity')) {
+    function log_activity($conn, $user_id_or_action, $action_or_details = '', $details = '') {
+        try {
+            $user_id = null;
+            $action = 'ACTION';
+            $det = '';
+            if (is_numeric($user_id_or_action)) {
+                $user_id = (int)$user_id_or_action;
+                $action = (string)$action_or_details;
+                $det = (string)$details;
+            } else {
+                $action = (string)$user_id_or_action;
+                $det = (string)$action_or_details;
+                $user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+            }
+            $ip = substr($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1', 0, 45);
+            $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? 'System/API', 0, 255);
+            $uname = $_SESSION['username'] ?? $_SESSION['full_name'] ?? 'Admin';
+            $urole = $_SESSION['role'] ?? 'admin';
+            if ($conn instanceof PDO) {
+                try {
+                    $stmt = $conn->prepare("INSERT INTO system_audit_logs (user_id, username, role, action, details, ip_address, user_agent, created_at) VALUES (:uid, :uname, :role, :act, :det, :ip, :ua, NOW())");
+                    $stmt->execute([':uid' => $user_id, ':uname' => $uname, ':role' => $urole, ':act' => $action, ':det' => $det, ':ip' => $ip, ':ua' => $ua]);
+                } catch (Throwable $e1) {
+                    try {
+                        $stmt2 = $conn->prepare("INSERT INTO system_audit_logs (user_id, username, role, action, details, ip_address, user_agent, created_at) VALUES (NULL, :uname, :role, :act, :det, :ip, :ua, NOW())");
+                        $stmt2->execute([':uname' => $uname, ':role' => $urole, ':act' => $action, ':det' => $det, ':ip' => $ip, ':ua' => $ua]);
+                    } catch (Throwable $e2) {
+                        try {
+                            $stmt3 = $conn->prepare("INSERT INTO activity_logs (action, details, created_at) VALUES (:act, :det, NOW())");
+                            $stmt3->execute([':act' => $action, ':det' => $det]);
+                        } catch (Throwable $e3) {
+                            error_log("Activity log notice: " . $e3->getMessage());
+                        }
+                    }
+                }
+            }
+        } catch (Throwable $t) {
+            // Gracefully fallback so it never crashes execution
+            error_log("Activity log notice: " . $t->getMessage());
+        }
+        return true;
+    }
+}
 
 // 1. AUTHENTICATION GUARD
 if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'admin') {
@@ -54,7 +101,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $u_stmt->execute([$rider_name, $phone, (int)$r_row['user_id']]);
             }
 
-            log_activity($conn, (int)$_SESSION['user_id'], 'RIDER_UPDATED', "Admin updated rider #{$rider_id} ({$rider_name}, Status: {$account_status}, Vehicle: {$vehicle_model} [{$plate_number}]).");
+            $admin_uid = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+            log_activity($conn, $admin_uid, 'RIDER_UPDATED', "Admin updated rider #{$rider_id} ({$rider_name}, Status: {$account_status}, Vehicle: {$vehicle_model} [{$plate_number}]).");
             $action_msg = "Rider '{$rider_name}' details updated successfully!";
 
             if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {

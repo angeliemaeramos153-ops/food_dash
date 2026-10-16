@@ -109,6 +109,7 @@ function validate_strong_password(string $password): array {
  * @param string|null $override_role
  * @return bool
  */
+if (!function_exists('log_activity')) {
 function log_activity($conn, ?int $user_id, string $action, ?string $details = null, ?string $override_username = null, ?string $override_role = null): bool {
     if (!($conn instanceof PDO)) return false;
     $action_val = strtoupper(trim($action));
@@ -139,15 +140,34 @@ function log_activity($conn, ?int $user_id, string $action, ?string $details = n
         if ($role === null) $role = $_SESSION['role'] ?? null;
     }
 
-    $stmt = $conn->prepare("INSERT INTO system_audit_logs (user_id, username, role, action, details, ip_address, user_agent, created_at) VALUES (:uid, :uname, :role, :action, :details, :ip, :ua, NOW())");
-    return $stmt->execute([
-        ':uid'     => $actual_user_id,
-        ':uname'   => $username,
-        ':role'    => $role,
-        ':action'  => $action_val,
-        ':details' => $details,
-        ':ip'      => $ip_address,
-        ':ua'      => $user_agent
-    ]);
+    try {
+        $stmt = $conn->prepare("INSERT INTO system_audit_logs (user_id, username, role, action, details, ip_address, user_agent, created_at) VALUES (:uid, :uname, :role, :action, :details, :ip, :ua, NOW())");
+        return $stmt->execute([
+            ':uid'     => $actual_user_id,
+            ':uname'   => $username,
+            ':role'    => $role,
+            ':action'  => $action_val,
+            ':details' => $details,
+            ':ip'      => $ip_address,
+            ':ua'      => $user_agent
+        ]);
+    } catch (Throwable $e) {
+        // If foreign key constraint failed on user_id, retry with user_id = null
+        try {
+            $stmt = $conn->prepare("INSERT INTO system_audit_logs (user_id, username, role, action, details, ip_address, user_agent, created_at) VALUES (NULL, :uname, :role, :action, :details, :ip, :ua, NOW())");
+            return $stmt->execute([
+                ':uname'   => $username,
+                ':role'    => $role,
+                ':action'  => $action_val,
+                ':details' => $details,
+                ':ip'      => $ip_address,
+                ':ua'      => $user_agent
+            ]);
+        } catch (Throwable $t2) {
+            error_log("Activity log notice: " . $t2->getMessage());
+            return false;
+        }
+    }
+}
 }
 ?>
