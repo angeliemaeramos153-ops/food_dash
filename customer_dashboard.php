@@ -411,6 +411,24 @@ if ($menu_items_res) {
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// Strictly enforce in-app notifications only; disable browser/OS level notification prompts
+(function() {
+  if (typeof window !== 'undefined') {
+    if ('Notification' in window) {
+      try {
+        window.Notification.requestPermission = function() {
+          return Promise.resolve('denied');
+        };
+        Object.defineProperty(window.Notification, 'permission', {
+          get: function() { return 'denied'; },
+          configurable: true
+        });
+      } catch (e) {}
+    }
+  }
+})();
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
@@ -1440,27 +1458,26 @@ button{cursor:pointer}
   position: fixed;
   top: 64px;
   left: 50%;
-  transform: translateX(-50%) translateY(-10px);
-  background: #1e293b;
+  transform: translate(-50%, -20px);
+  background: linear-gradient(135deg, #1e293b, #0f172a);
   color: #ffffff;
-  padding: 10px 18px;
+  padding: 11px 18px;
   border-radius: 20px;
-  font-size: 0.75rem;
+  font-size: 0.76rem;
   font-weight: 600;
   opacity: 0;
   pointer-events: none;
-  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  z-index: 9999;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  transition: opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 99999;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35), 0 0 0 1.5px rgba(216, 143, 42, 0.35);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   max-width: min(420px, calc(100vw - 32px));
-  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .cust-toast.show {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translate(-50%, 0);
   pointer-events: auto;
 }
 @keyframes riderPulse {
@@ -2635,6 +2652,21 @@ button{cursor:pointer}
   </div>
 </div>
 
+<!-- Generic In-App Confirmation Modal (Food Dash Palette) -->
+<div class="fd-modal" id="customerConfirmModal" onclick="if(event.target===this)closeCustConfirm()">
+  <div class="fd-modal-box" style="max-width:340px; padding:24px 20px 20px; text-align:center; border-radius:20px; border:1px solid var(--sandstone);">
+    <div style="font-size:32px; color:var(--harvest-sun); margin-bottom:10px;">
+      <i class="fa-solid fa-circle-question"></i>
+    </div>
+    <h3 id="custConfirmTitle" style="color:var(--olive-dark); font-size:16px; font-weight:700; margin-bottom:8px;">Confirm Action</h3>
+    <p id="custConfirmMsg" style="font-size:11px; color:#4b5563; line-height:1.45; margin-bottom:18px;">Are you sure you want to proceed?</p>
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <button type="button" class="btn-fd-secondary" style="flex:1;" onclick="closeCustConfirm()">Cancel</button>
+      <button type="button" class="btn-fd-primary" id="btnCustConfirmAction" style="flex:1;">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <!-- 1. Order Cancellation Confirmation Modal -->
 <div class="fd-modal" id="cancelOrderModal" onclick="if(event.target===this)closeCancelOrderModal()">
   <div class="fd-modal-box" style="max-width:360px; padding:22px 20px;">
@@ -3060,10 +3092,43 @@ function showScreen(id){
 
 function toast(msg){
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(window._toast);
-  window._toast = setTimeout(()=>t.classList.remove('show'), 2200);
+  if (t) {
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(window._toast);
+    window._toast = setTimeout(()=>t.classList.remove('show'), 4000);
+  }
+  showToastCustomer(msg);
+}
+
+let _custConfirmCallback = null;
+function openCustConfirm(title, msg, onConfirm, confirmBtnText = 'Confirm', isDanger = false) {
+  const modal = document.getElementById('customerConfirmModal');
+  if (!modal) {
+    if (onConfirm) onConfirm();
+    return;
+  }
+  const titleEl = document.getElementById('custConfirmTitle');
+  const msgEl = document.getElementById('custConfirmMsg');
+  const btn = document.getElementById('btnCustConfirmAction');
+  if (titleEl) titleEl.textContent = title || 'Confirm Action';
+  if (msgEl) msgEl.textContent = msg || 'Are you sure you want to proceed?';
+  if (btn) {
+    btn.textContent = confirmBtnText;
+    btn.style.background = isDanger ? '#dc2626' : 'var(--olive)';
+    _custConfirmCallback = onConfirm;
+    btn.onclick = () => {
+      closeCustConfirm();
+      if (_custConfirmCallback) _custConfirmCallback();
+    };
+  }
+  modal.classList.add('show');
+}
+
+function closeCustConfirm() {
+  const modal = document.getElementById('customerConfirmModal');
+  if (modal) modal.classList.remove('show');
+  _custConfirmCallback = null;
 }
 
 function openNotifications() {
@@ -4173,7 +4238,7 @@ function promptCancelOrder(orderId, orderRef, orderStatus) {
   
   // Business Rule Guardrail: If an order is already "On Delivery" or "Delivered", disable cancellation
   if (blockedStatuses.includes(normStatus)) {
-    alert("Orders out for delivery cannot be cancelled. Please contact support or rider.");
+    showToastCustomer("Orders out for delivery cannot be cancelled. Please contact support or rider.");
     return;
   }
 
@@ -4275,7 +4340,7 @@ async function executeCancelOrder() {
         window.location.reload();
       }, 900);
     } else {
-      alert(data.message || 'Could not cancel order. Please contact support or rider.');
+      showToastCustomer(data.message || 'Could not cancel order. Please contact support or rider.');
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-ban"></i> Yes, Cancel Order';
@@ -4283,7 +4348,7 @@ async function executeCancelOrder() {
     }
   } catch (err) {
     console.error('Cancel order error:', err);
-    alert('A network error occurred. Please try again.');
+    showToastCustomer('A network error occurred. Please try again.');
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = '<i class="fa-solid fa-ban"></i> Yes, Cancel Order';
@@ -4383,25 +4448,25 @@ async function deleteSavedAddress(addrId, isDefault) {
     toast('Default address cannot be deleted. Set another address as default first.', 'info');
     return;
   }
-  if (!confirm('Are you sure you want to remove this saved address?')) return;
-
-  try {
-    const res = await fetch('address_api.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete_address', address_id: addrId })
-    });
-    const data = await res.json();
-    if (data.success) {
-      toast('Address removed.');
-      loadSavedAddresses();
-    } else {
-      toast(data.message || 'Failed to delete address.', 'error');
+  openCustConfirm('Remove Address', 'Are you sure you want to remove this saved address?', async () => {
+    try {
+      const res = await fetch('address_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_address', address_id: addrId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast('Address removed.');
+        loadSavedAddresses();
+      } else {
+        toast(data.message || 'Failed to delete address.', 'error');
+      }
+    } catch (err) {
+      console.error('Delete address error:', err);
+      toast('Network error deleting address.', 'error');
     }
-  } catch (err) {
-    console.error('Delete address error:', err);
-    toast('Network error deleting address.', 'error');
-  }
+  }, 'Remove', true);
 }
 
 function openAddAddressModal() {
@@ -4546,7 +4611,7 @@ async function submitNewAddress() {
   const streetInput = document.getElementById('newAddrStreet');
   const street = streetInput ? streetInput.value.trim() : '';
   if (!street) {
-    alert('Please enter your street address or house/building number.');
+    showToastCustomer('Please enter your street address or house/building number.');
     if (streetInput) streetInput.focus();
     return;
   }
@@ -4592,11 +4657,11 @@ async function submitNewAddress() {
         if (modalAddr) modalAddr.value = data.address.full_address;
       }
     } else {
-      alert(data.message || 'Failed to save address.');
+      showToastCustomer(data.message || 'Failed to save address.');
     }
   } catch (err) {
     console.error('Save address error:', err);
-    alert('Network error while saving address.');
+    showToastCustomer('Network error while saving address.');
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -5406,16 +5471,14 @@ let _custToastTimeout = null;
 function showToastCustomer(msg, uniqueId = null) {
   if (!msg) return;
 
-  // Root cause fix: Prevent double listeners or polling duplicates
-  // Assign each incoming message or alert a unique identifier
-  const notifId = uniqueId || ('toast_' + String(msg).replace(/\s+/g, '_').substring(0, 32));
-  if (window.displayedNotificationIds.has(notifId)) {
-    return;
+  // If uniqueId is passed, prevent duplicate display for 15s
+  if (uniqueId) {
+    if (window.displayedNotificationIds.has(uniqueId)) return;
+    window.displayedNotificationIds.add(uniqueId);
+    setTimeout(() => window.displayedNotificationIds.delete(uniqueId), 15000);
   }
-  window.displayedNotificationIds.add(notifId);
-  setTimeout(() => window.displayedNotificationIds.delete(notifId), 15000);
 
-  // Implement strict single-toast queue: dismiss or remove any existing banner
+  // Dismiss existing live toast banners cleanly
   document.querySelectorAll('.live-toast-banner, .cust-toast').forEach(el => el.remove());
   const riderBanner = document.getElementById('liveRiderMessageBanner');
   if (riderBanner) riderBanner.style.display = 'none';
@@ -5425,20 +5488,25 @@ function showToastCustomer(msg, uniqueId = null) {
   const toast = document.createElement('div');
   toast.id = 'customerLiveToast';
   toast.className = 'cust-toast live-toast-banner';
-  toast.innerHTML = `<i class="fa-solid fa-bell"></i> <span>${escapeCustHtml(msg)}</span>`;
+  toast.innerHTML = `<i class="fa-solid fa-bell" style="color:var(--harvest-sun, #D88F2A);"></i> <span>${escapeCustHtml(msg)}</span>`;
   document.body.appendChild(toast);
 
-  // Trigger reflow for smooth animation
+  // Trigger reflow for smooth slide-down animation
   void toast.offsetWidth;
   toast.classList.add('show');
 
   _custToastTimeout = setTimeout(() => {
     if (toast && toast.parentNode) {
       toast.classList.remove('show');
-      setTimeout(() => toast.remove(), 300);
+      setTimeout(() => toast.remove(), 350);
     }
-  }, 4500);
+  }, 4000); // Strictly auto-dismiss after 4 seconds
 }
+
+// Redirect all window.alert calls to the FoodDash in-app toast
+window.alert = function(msg) {
+  showToastCustomer(String(msg || ''));
+};
 
 function escapeCustHtml(str) {
   if (!str) return '';
@@ -5697,7 +5765,7 @@ function handleLiveRiderMessage(msg) {
     if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
     msgBannerTimeout = setTimeout(() => {
       banner.style.display = 'none';
-    }, 7000);
+    }, 4000);
   }
 
   // Play an alert notification sound

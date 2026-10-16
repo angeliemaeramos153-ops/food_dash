@@ -236,6 +236,24 @@ if ($active_tab === 'menu') {
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Chef & Manager Portal — Food Dash</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+<script>
+// Strictly enforce in-app notifications only; disable browser/OS level notification prompts
+(function() {
+  if (typeof window !== 'undefined') {
+    if ('Notification' in window) {
+      try {
+        window.Notification.requestPermission = function() {
+          return Promise.resolve('denied');
+        };
+        Object.defineProperty(window.Notification, 'permission', {
+          get: function() { return 'denied'; },
+          configurable: true
+        });
+      } catch (e) {}
+    }
+  }
+})();
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 :root {
@@ -868,12 +886,18 @@ var _pendingConfirm = null;
 
 function toastChef(msg, isError) {
   const t = document.getElementById('chefToast');
+  if (!t) return;
   t.textContent = msg;
   t.classList.toggle('error', !!isError);
   t.classList.add('show');
   clearTimeout(window._tcToast);
-  window._tcToast = setTimeout(() => t.classList.remove('show'), 3000);
+  window._tcToast = setTimeout(() => t.classList.remove('show'), 4000);
 }
+
+// Redirect all window.alert calls to the in-app toastChef
+window.alert = function(msg) {
+  toastChef(String(msg || ''), false);
+};
 
 function showConfirm(title, message, callback) {
   document.getElementById('confirmTitle').textContent = title;

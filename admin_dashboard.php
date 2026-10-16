@@ -775,6 +775,24 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+  // Strictly enforce in-app notifications only; disable browser/OS level notification prompts
+  (function() {
+    if (typeof window !== 'undefined') {
+      if ('Notification' in window) {
+        try {
+          window.Notification.requestPermission = function() {
+            return Promise.resolve('denied');
+          };
+          Object.defineProperty(window.Notification, 'permission', {
+            get: function() { return 'denied'; },
+            configurable: true
+          });
+        } catch (e) {}
+      }
+    }
+  })();
+  </script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
@@ -2813,8 +2831,13 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       }
       el.classList.add('show');
       clearTimeout(window._adminToast);
-      window._adminToast = setTimeout(() => el.classList.remove('show'), 3800);
+      window._adminToast = setTimeout(() => el.classList.remove('show'), 4000);
     }
+
+    // Redirect all window.alert calls to the in-app adminToast
+    window.alert = function(msg) {
+      adminToast(String(msg || ''), false);
+    };
 
     <?php if (!empty($action_msg)): ?>
       adminToast(<?php echo json_encode($action_msg); ?>, <?php echo (strpos($action_msg, 'Error') !== false || strpos($action_msg, 'Security') !== false) ? 'true' : 'false'; ?>);
@@ -3159,7 +3182,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
             pollMasterDispatchMap();
           }
         } else {
-          alert(data.message || 'Failed to update rider details.');
+          adminToast(data.message || 'Failed to update rider details.', true);
         }
       })
       .catch(function(err) {

@@ -532,6 +532,24 @@ $on_delivery = (int)($conn->query("SELECT COUNT(*) AS c FROM riders WHERE status
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Food Dash - Rider</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// Strictly enforce in-app notifications only; disable browser/OS level notification prompts
+(function() {
+  if (typeof window !== 'undefined') {
+    if ('Notification' in window) {
+      try {
+        window.Notification.requestPermission = function() {
+          return Promise.resolve('denied');
+        };
+        Object.defineProperty(window.Notification, 'permission', {
+          get: function() { return 'denied'; },
+          configurable: true
+        });
+      } catch (e) {}
+    }
+  }
+})();
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 :root{
@@ -777,17 +795,17 @@ main{padding:16px;flex:1;overflow-x:hidden}
 /* Floating Customer Message Toast Alert */
 .rider-customer-toast {
   position: fixed;
-  top: 16px;
+  top: 68px;
   left: 50%;
-  transform: translateX(-50%) translateY(-120px);
+  transform: translate(-50%, -20px);
   max-width: 420px;
   width: calc(100% - 28px);
   background: #ffffff;
-  border: 1.5px solid #22c55e;
-  border-left: 5px solid #16a34a;
+  border: 1.5px solid var(--harvest-sun);
+  border-left: 5px solid var(--olive-shadow);
   border-radius: 14px;
   padding: 11px 14px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.18), 0 3px 10px rgba(34,197,94,0.25);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.18), 0 3px 10px rgba(75,83,32,0.2);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -795,10 +813,10 @@ main{padding:16px;flex:1;overflow-x:hidden}
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .rider-customer-toast.show {
-  transform: translateX(-50%) translateY(0);
+  transform: translate(-50%, 0);
   opacity: 1;
   pointer-events: auto;
 }
@@ -1450,6 +1468,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
 <section class="section" id="live"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">📡 Live Location</h2><div id="gpsStatus" class="meta">Live location is off. Tap Share Live Location after starting a delivery.</div><button type="button" class="btn full" style="margin-top:10px" onclick="stopLiveLocation()">Stop Sharing</button></div></section><section class="section" id="guide"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">Customer Notification Flow</h2><div class="meta">When you accept an order, the customer is notified. When you start the trip, they receive an <b>On the Way</b> notification. When you tap <b>I'm Near Customer</b>, they receive the near-arrival notification. When delivered, the customer receives a final delivery notice.</div></div></section></main><nav class="bottom"><a class="active" href="#delivery"><i class="fa-solid fa-box"></i>Delivery</a><a href="#available"><i class="fa-solid fa-motorcycle"></i>Pickup</a><a href="#live"><i class="fa-solid fa-location-crosshairs"></i>Live</a><a href="#guide"><i class="fa-solid fa-circle-info"></i>Guide</a><a href="javascript:void(0)" onclick="openLogout()"><i class="fa-solid fa-right-from-bracket"></i>Logout</a></nav></div>
 <div class="modal" id="noteModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Notifications</h3><div id="notificationList" class="notification-list"><div class="empty">Loading...</div></div><div class="box-actions"><button class="close" onclick="markAllRead()">Mark all read</button><button class="close" onclick="closeNotifications()">Close</button></div></div></div>
 <div class="modal" id="logoutModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out.</p><div class="box-actions"><button class="close" onclick="closeLogout()">Cancel</button><a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
+<div class="modal" id="riderConfirmModal"><div class="box" style="text-align:center;"><img src="logo.jpg" alt="Food Dash"><h3 id="riderConfirmTitle">Confirm Action</h3><p id="riderConfirmMsg" style="font-size:12px; color:var(--muted); margin: 10px 0 16px;">Are you sure?</p><div class="box-actions"><button type="button" class="close" onclick="closeRiderConfirm()">Cancel</button><button type="button" class="btn" id="btnRiderConfirmAction" style="flex:1;">Confirm</button></div></div></div>
 <!-- Rider Chat / Quick Message Modal -->
 <div class="modal" id="riderChatModal"><div class="chat-modal-box"><div class="chat-modal-header"><div style="display:flex;align-items:center;gap:8px;"><div class="chat-header-avatar"><i class="fa-solid fa-user"></i></div><div><h4 id="chatCustomerName" style="margin:0;font-size:13px;color:var(--olive-shadow);">Customer</h4><small id="chatCustomerPhone" style="font-size:10px;color:var(--muted);">+63 ...</small></div></div><button class="chat-close-btn" onclick="closeOrderChat()"><i class="fa-solid fa-xmark"></i></button></div><div class="quick-status-section"><div class="quick-title"><i class="fa-solid fa-bolt"></i> Quick Delivery Updates:</div><div class="quick-pills"><button type="button" class="quick-pill" onclick="sendQuickUpdate('I\'ve arrived outside with your order! 🛵')">🛵 I've arrived outside</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Traffic delay, on my way! 🚦')">🚦 Traffic delay, on my way</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Food picked up! Heading to your address now 🍱')">🍱 Heading to your address</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Please be ready at the gate/lobby 🚪')">🚪 Please be ready at gate</button></div></div><div id="chatMessagesList" class="chat-messages-container"><div class="chat-empty-hint">Loading conversation...</div></div><div class="chat-input-bar"><input type="text" id="chatInputText" placeholder="Type delivery message..." oninput="updateChatSmsLink(this.value)" onkeydown="if(event.key==='Enter') sendChatMessage()"><button type="button" class="chat-send-btn" onclick="sendChatMessage()" title="Send in App"><i class="fa-solid fa-paper-plane"></i></button><a href="javascript:void(0)" id="chatSmsLink" class="chat-sms-btn" target="_blank" title="Send via native SMS"><i class="fa-solid fa-comment-dots"></i> SMS</a></div></div></div>
 <!-- Desktop / Simulator Outgoing Call Modal -->
@@ -1504,11 +1523,47 @@ if (window.FoodDashCall) {
 }
 function toastRider(msg, isError) {
   const el = document.getElementById('riderToast');
+  if (!el) return;
   el.textContent = msg;
   el.classList.toggle('err', !!isError);
   el.classList.add('show');
   clearTimeout(window._riderToast);
-  window._riderToast = setTimeout(() => el.classList.remove('show'), 3500);
+  window._riderToast = setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+// Redirect all window.alert calls to the FoodDash in-app toast
+window.alert = function(msg) {
+  toastRider(String(msg || ''));
+};
+
+let _riderConfirmCb = null;
+function openRiderConfirm(title, msg, onConfirm, actionText = 'Confirm', actionBg = '') {
+  const modal = document.getElementById('riderConfirmModal');
+  if (!modal) {
+    if (onConfirm) onConfirm();
+    return;
+  }
+  const titleEl = document.getElementById('riderConfirmTitle');
+  const msgEl = document.getElementById('riderConfirmMsg');
+  const btn = document.getElementById('btnRiderConfirmAction');
+  if (titleEl) titleEl.textContent = title || 'Confirm Action';
+  if (msgEl) msgEl.textContent = msg || 'Are you sure?';
+  if (btn) {
+    btn.textContent = actionText;
+    btn.style.background = actionBg || 'var(--olive-shadow)';
+    _riderConfirmCb = onConfirm;
+    btn.onclick = () => {
+      closeRiderConfirm();
+      if (_riderConfirmCb) _riderConfirmCb();
+    };
+  }
+  modal.classList.add('show');
+}
+
+function closeRiderConfirm() {
+  const modal = document.getElementById('riderConfirmModal');
+  if (modal) modal.classList.remove('show');
+  _riderConfirmCb = null;
 }
 
 async function doDeliveryAction(orderId, action) {
@@ -2661,17 +2716,23 @@ let highestSeenMessageId = 0;
 let isFirstCommPoll = true;
 
 function promptCompleteDelivery(orderId) {
-  if (!confirm('Confirm delivery handover with customer?')) {
-    return;
-  }
-  doDeliveryAction(orderId, 'delivered');
+  openRiderConfirm(
+    'Delivery Handover',
+    'Confirm delivery handover with customer?',
+    () => doDeliveryAction(orderId, 'delivered'),
+    'Confirm Handover',
+    '#16a34a'
+  );
 }
 
 function doFinishAndClearDelivery(orderId) {
-  if (!confirm('Clear this delivery and return to waiting for next orders?')) {
-    return;
-  }
-  doDeliveryAction(orderId, 'clear_order');
+  openRiderConfirm(
+    'Clear Delivery',
+    'Clear this delivery and return to waiting for next orders?',
+    () => doDeliveryAction(orderId, 'clear_order'),
+    'Finish & Clear',
+    'var(--olive-shadow)'
+  );
 }
 
 let _riderCustToastTimer = null;
@@ -2686,7 +2747,7 @@ function showRiderCustomerMessageToast(displayText, senderName) {
     clearTimeout(_riderCustToastTimer);
     _riderCustToastTimer = setTimeout(() => {
       toast.classList.remove('show');
-    }, 6500);
+    }, 4000);
   }
   toastRider(displayText);
 }

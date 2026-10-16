@@ -76,6 +76,24 @@ if ($isApi) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>My Orders - Food Dash</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+  // Strictly enforce in-app notifications only; disable browser/OS level notification prompts
+  (function() {
+    if (typeof window !== 'undefined') {
+      if ('Notification' in window) {
+        try {
+          window.Notification.requestPermission = function() {
+            return Promise.resolve('denied');
+          };
+          Object.defineProperty(window.Notification, 'permission', {
+            get: function() { return 'denied'; },
+            configurable: true
+          });
+        } catch (e) {}
+      }
+    }
+  })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
@@ -356,6 +374,138 @@ if ($isApi) {
     .confirm-btn:hover {
       opacity: 0.9;
     }
+
+    /* In-App Floating Toast Banner (Food Dash Palette) */
+    .orders-toast {
+      position: fixed;
+      top: 72px;
+      left: 50%;
+      transform: translate(-50%, -20px);
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      color: #ffffff;
+      padding: 11px 18px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 99999;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35), 0 0 0 1.5px rgba(216, 143, 42, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: min(440px, calc(100vw - 32px));
+    }
+    .orders-toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+      pointer-events: auto;
+    }
+    .orders-toast.err {
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35), 0 0 0 1.5px rgba(239, 68, 68, 0.6);
+    }
+
+    /* In-App Modal Dialogs */
+    .orders-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(4px);
+      z-index: 99990;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .orders-modal.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .orders-modal-box {
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 24px 22px;
+      max-width: 380px;
+      width: 100%;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+      border: 1px solid var(--border-color);
+      animation: ordersModalSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes ordersModalSlide {
+      from { transform: translateY(-16px) scale(0.96); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .orders-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .orders-modal-header h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--olive-dark);
+    }
+    .orders-modal-close {
+      background: transparent;
+      border: none;
+      font-size: 1.25rem;
+      line-height: 1;
+      color: #94a3b8;
+      cursor: pointer;
+    }
+    .orders-modal-body p {
+      font-size: 0.85rem;
+      color: #475569;
+      line-height: 1.45;
+      margin-bottom: 14px;
+    }
+    .orders-modal-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border: 1.5px solid var(--border-color);
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-family: inherit;
+      margin-bottom: 16px;
+      outline: none;
+    }
+    .orders-modal-input:focus {
+      border-color: var(--harvest-sun);
+    }
+    .orders-modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .btn-modal-cancel {
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .btn-modal-confirm {
+      background: var(--olive-dark);
+      color: #ffffff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -491,46 +641,164 @@ if ($isApi) {
     <?php endif; ?>
   </main>
 
+  <!-- Floating In-App Toast Alert -->
+  <div class="orders-toast" id="ordersToast"></div>
+
+  <!-- In-App Cancel Order Modal -->
+  <div class="orders-modal" id="ordersCancelModal" onclick="if(event.target===this)closeOrdersCancelModal()">
+    <div class="orders-modal-box">
+      <div class="orders-modal-header">
+        <h3 style="color:#b91c1c; display:flex; align-items:center; gap:8px;">
+          <i class="fa-solid fa-triangle-exclamation"></i> Cancel Order
+        </h3>
+        <button type="button" class="orders-modal-close" onclick="closeOrdersCancelModal()">&times;</button>
+      </div>
+      <div class="orders-modal-body">
+        <p id="cancelModalOrderRef">Are you sure you want to cancel this order?</p>
+        <label for="cancelReasonInput" style="display:block; font-size:0.75rem; font-weight:700; color:#64748b; margin-bottom:6px;">Cancellation Reason:</label>
+        <select id="cancelReasonInput" class="orders-modal-input" style="background:#fff;">
+          <option value="Changed mind">Changed mind</option>
+          <option value="Duplicate order">Duplicate order</option>
+          <option value="Wrong delivery address">Wrong delivery address</option>
+          <option value="Taking too long to prepare">Taking too long to prepare</option>
+          <option value="Other reason">Other reason</option>
+        </select>
+        <input type="text" id="cancelReasonCustom" class="orders-modal-input" placeholder="Additional details (optional)..." style="margin-top:-8px;">
+      </div>
+      <div class="orders-modal-actions">
+        <button type="button" class="btn-modal-cancel" onclick="closeOrdersCancelModal()">Keep Order</button>
+        <button type="button" class="btn-modal-confirm" id="btnConfirmSubmitCancel" style="background:#dc2626;" onclick="submitOrderCancellation()">Confirm Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- In-App Confirm Received Modal -->
+  <div class="orders-modal" id="ordersConfirmModal" onclick="if(event.target===this)closeOrdersConfirmModal()">
+    <div class="orders-modal-box" style="text-align:center;">
+      <div style="font-size:36px; color:#16a34a; margin-bottom:10px;">
+        <i class="fa-solid fa-circle-check"></i>
+      </div>
+      <h3 style="color:var(--olive-dark); font-size:1.1rem; font-weight:700; margin-bottom:8px;">Confirm Order Delivery</h3>
+      <p style="font-size:0.85rem; color:#475569; line-height:1.45; margin-bottom:20px;">
+        Have you received your order in good condition? This will finalize your delivery.
+      </p>
+      <div class="orders-modal-actions" style="justify-content:center;">
+        <button type="button" class="btn-modal-cancel" style="flex:1;" onclick="closeOrdersConfirmModal()">Not Yet</button>
+        <button type="button" class="btn-modal-confirm" id="btnConfirmSubmitReceived" style="flex:1; background:var(--olive-shadow);" onclick="submitConfirmReceived()">Yes, Received!</button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    let _ordersToastTimer = null;
+    function showOrdersToast(msg, isError = false) {
+      const el = document.getElementById('ordersToast');
+      if (!el) return;
+      el.innerHTML = `<i class="fa-solid fa-bell" style="color:var(--harvest-sun, #D88F2A);"></i> <span>${escapeHtml(msg)}</span>`;
+      el.classList.toggle('err', !!isError);
+      el.classList.add('show');
+      clearTimeout(_ordersToastTimer);
+      _ordersToastTimer = setTimeout(() => {
+        el.classList.remove('show');
+      }, 4000); // Auto-dismiss strictly after 4 seconds
+    }
+
+    // Redirect all window.alert calls to the FoodDash in-app toast
+    window.alert = function(msg) {
+      showOrdersToast(String(msg || ''));
+    };
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+    }
+
+    let _pendingCancelOrderId = null;
     function cancelOrderAction(orderId, ref) {
-      const reason = prompt(`Reason for cancelling order ${ref}:`, 'Changed mind / duplicate order');
-      if (!reason) return;
+      _pendingCancelOrderId = orderId;
+      const refEl = document.getElementById('cancelModalOrderRef');
+      if (refEl) refEl.textContent = `Are you sure you want to cancel order ${ref}?`;
+      const modal = document.getElementById('ordersCancelModal');
+      if (modal) modal.classList.add('show');
+    }
+
+    function closeOrdersCancelModal() {
+      const modal = document.getElementById('ordersCancelModal');
+      if (modal) modal.classList.remove('show');
+      _pendingCancelOrderId = null;
+    }
+
+    function submitOrderCancellation() {
+      if (!_pendingCancelOrderId) return;
+      const reasonSelect = document.getElementById('cancelReasonInput');
+      const reasonCustom = document.getElementById('cancelReasonCustom');
+      const reason = (reasonSelect ? reasonSelect.value : '') + (reasonCustom && reasonCustom.value.trim() ? ' - ' + reasonCustom.value.trim() : '');
+      const btn = document.getElementById('btnConfirmSubmitCancel');
+      if (btn) { btn.disabled = true; btn.textContent = 'Cancelling...'; }
 
       fetch('order_api.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'cancel_order', order_id: orderId, reason: reason })
+        body: JSON.stringify({ action: 'cancel_order', order_id: _pendingCancelOrderId, reason: reason || 'Changed mind' })
       })
       .then(res => res.json())
       .then(data => {
+        closeOrdersCancelModal();
         if (data.success) {
-          alert('Order cancelled successfully.');
-          location.reload();
+          showOrdersToast('Order cancelled successfully.');
+          setTimeout(() => location.reload(), 1200);
         } else {
-          alert(data.message || 'Cancellation failed.');
+          showOrdersToast(data.message || 'Cancellation failed.', true);
         }
       })
-      .catch(() => alert('Network error while cancelling order.'));
+      .catch(() => {
+        closeOrdersCancelModal();
+        showOrdersToast('Network error while cancelling order.', true);
+      })
+      .finally(() => {
+        if (btn) { btn.disabled = false; btn.textContent = 'Confirm Cancel'; }
+      });
     }
 
+    let _pendingReceivedOrderId = null;
     function confirmReceivedAction(orderId) {
-      if (!confirm('Have you received your order in good condition?')) return;
+      _pendingReceivedOrderId = orderId;
+      const modal = document.getElementById('ordersConfirmModal');
+      if (modal) modal.classList.add('show');
+    }
+
+    function closeOrdersConfirmModal() {
+      const modal = document.getElementById('ordersConfirmModal');
+      if (modal) modal.classList.remove('show');
+      _pendingReceivedOrderId = null;
+    }
+
+    function submitConfirmReceived() {
+      if (!_pendingReceivedOrderId) return;
+      const btn = document.getElementById('btnConfirmSubmitReceived');
+      if (btn) { btn.disabled = true; btn.textContent = 'Confirming...'; }
 
       fetch('customer_dashboard.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'confirm_received', order_id: orderId })
+        body: JSON.stringify({ action: 'confirm_received', order_id: _pendingReceivedOrderId })
       })
       .then(res => res.json())
       .then(data => {
+        closeOrdersConfirmModal();
         if (data.success) {
-          alert('Order delivery confirmed! Thank you.');
-          location.reload();
+          showOrdersToast('Order delivery confirmed! Thank you.');
+          setTimeout(() => location.reload(), 1200);
         } else {
-          alert(data.message || 'Error confirming receipt.');
+          showOrdersToast(data.message || 'Error confirming receipt.', true);
         }
       })
-      .catch(() => alert('Network error confirming order.'));
+      .catch(() => {
+        closeOrdersConfirmModal();
+        showOrdersToast('Network error confirming order.', true);
+      })
+      .finally(() => {
+        if (btn) { btn.disabled = false; btn.textContent = 'Yes, Received!'; }
+      });
     }
   </script>
 </body>

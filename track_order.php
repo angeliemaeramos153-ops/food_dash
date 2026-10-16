@@ -68,6 +68,24 @@ $rider_name = $order['rider_name'] ?? 'Alex Rider';
 <title>Live Delivery Tracking - <?= htmlspecialchars($order['order_ref'] ?? 'Food Dash') ?></title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script>
+// Strictly enforce in-app notifications only; disable browser/OS level notification prompts
+(function() {
+  if (typeof window !== 'undefined') {
+    if ('Notification' in window) {
+      try {
+        window.Notification.requestPermission = function() {
+          return Promise.resolve('denied');
+        };
+        Object.defineProperty(window.Notification, 'permission', {
+          get: function() { return 'denied'; },
+          configurable: true
+        });
+      } catch (e) {}
+    }
+  }
+})();
+</script>
 <style>
 :root {
   --olive-shadow: #4B5320;
@@ -1490,7 +1508,7 @@ function handleLiveRiderMessage(msg) {
     if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
     msgBannerTimeout = setTimeout(() => {
       banner.style.display = 'none';
-    }, 7000);
+    }, 4000);
   }
 
   // Play an alert notification sound
