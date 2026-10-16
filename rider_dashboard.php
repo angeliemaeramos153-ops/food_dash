@@ -1305,7 +1305,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   $is_ready_pickup = in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned']);
-?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div style="margin:5px 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><?=render_payment_badge($o['payment_method'] ?? 'Cash on Delivery (COD)')?><span style="font-weight:800;color:#0f172a;font-size:0.82rem;">₱<?=number_format((float)$o['total_amount'],2)?></span></div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><?php
+?><div class="order"><div class="order-ref"><?=htmlspecialchars($o['order_ref'])?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?><br>Status: <b><?=htmlspecialchars(ucwords(str_replace('_',' ',$ord_st)))?></b> (<?=htmlspecialchars(ucwords(str_replace('_',' ',$del_st)))?>)</div><div style="margin:5px 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><?=render_payment_badge($o['payment_method'] ?? 'Cash on Delivery (COD)')?><span style="font-weight:800;color:#0f172a;font-size:0.82rem;">₱<?=number_format((float)$o['total_amount'],2)?></span></div><div class="rider-ack-badge" id="riderAckBadge_<?=(int)$o['order_id']?>" style="<?=empty($o['arrival_acknowledged_at']) ? 'display:none;' : ''?>"><i class="fa-solid fa-circle-check"></i> Customer Acknowledged: <b>"<?=htmlspecialchars($o['arrival_ack_response'] ?? 'Coming outside!')?>"</b></div><div class="rider-address-card"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Customer Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No street address provided (using coordinates / default)')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><?php
   $c_phone_val = !empty($o['customer_phone']) ? trim($o['customer_phone']) : '+63 917 123 4567';
   $c_dial = preg_replace('/[^\+0-9]/', '', $c_phone_val);
   if (empty($c_dial)) $c_dial = '+639171234567';
@@ -1358,7 +1358,11 @@ main{padding:16px;flex:1;overflow-x:hidden}
   </div>
 </div>
 <div class="toast-rider" id="riderToast"></div>
+<script src="assets/js/order_call_engine.js"></script>
 <script>
+if (window.FoodDashCall) {
+  FoodDashCall.init('rider');
+}
 function toastRider(msg, isError) {
   const el = document.getElementById('riderToast');
   el.textContent = msg;
@@ -2503,117 +2507,49 @@ let currentRiderCallId = null;
 let riderCallTimer = null;
 let riderCallSeconds = 0;
 
-async function initiateCustomerCall(orderId, customerName, customerPhone) {
-  const cleanPhone = String(customerPhone || '+639171234567').replace(/[^\+0-9]/g, '') || '+639171234567';
+let activeRiderDeliveryOrderId = <?=(!empty($my_orders[0]['order_id']) ? (int)$my_orders[0]['order_id'] : 0)?>;
+let lastSeenCustomerAck = false;
 
-  // 1. Trigger active incoming call state in the database for that order_id
+function initiateCustomerCall(orderId, customerName, customerPhone) {
+  if (window.FoodDashCall) {
+    FoodDashCall.initiateCall(orderId, customerName || 'Customer', customerPhone || '+63 917 123 4567');
+  }
+}
+
+async function pollRiderOrderCommunication() {
+  if (!activeRiderDeliveryOrderId) return;
   try {
-    const res = await fetch('order_communication_api.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'trigger_call',
-        order_id: orderId
-      })
-    });
+    const res = await fetch(`order_communication_api.php?action=get_updates&order_id=${activeRiderDeliveryOrderId}&_t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
     const data = await res.json();
-    if (data.success && data.call_id) {
-      currentRiderCallId = data.call_id;
+    if (!data.success) return;
+
+    // 1. Synchronize Live In-App Voice Call
+    if (window.FoodDashCall) {
+      FoodDashCall.syncCallStatus(data.active_call);
     }
-  } catch (err) {
-    console.warn('Failed to trigger call in communication API:', err);
-  }
 
-  // 2. Mobile vs Desktop behavior
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  if (isMobile) {
-    // Native phone dialer on mobile
-    window.location.href = `tel:${cleanPhone}`;
-  } else {
-    // Desktop / PC preview: Show clean modal without browser raw prompt
-    openDesktopCallModal(orderId, customerName, customerPhone, cleanPhone);
-  }
+    // 2. Customer Arrival Acknowledgment Alert
+    if (data.arrival_acknowledged && !lastSeenCustomerAck) {
+      lastSeenCustomerAck = true;
+      const ackResp = data.arrival_ack_response || 'Coming outside!';
+      const badge = document.getElementById(`riderAckBadge_${activeRiderDeliveryOrderId}`);
+      if (badge) {
+        badge.innerHTML = `<i class="fa-solid fa-circle-check"></i> Customer Acknowledged: <b>"${ackResp}"</b>`;
+        badge.style.display = 'flex';
+      }
+      toastRider(`🔔 Customer Acknowledged Arrival: "${ackResp}"`);
+      try {
+        const chime = new Audio('assets/notification_chime.wav');
+        chime.volume = 0.8;
+        chime.play().catch(()=>{});
+      } catch(e){}
+    }
+  } catch(e) {}
 }
 
-function openDesktopCallModal(orderId, customerName, customerPhone, cleanPhone) {
-  const modal = document.getElementById('riderCallModal');
-  if (!modal) return;
-  
-  const nameEl = document.getElementById('modalCallCustName');
-  if (nameEl) nameEl.textContent = customerName || 'Customer';
-
-  const phoneEl = document.getElementById('modalCallCustPhone');
-  if (phoneEl) phoneEl.textContent = customerPhone || '+63 917 123 4567';
-
-  const statusEl = document.getElementById('modalCallStatusText');
-  if (statusEl) statusEl.textContent = 'Ringing customer in real-time... Customer screen is displaying an animated incoming call alert.';
-
-  const timerEl = document.getElementById('modalCallTimer');
-  if (timerEl) {
-    timerEl.style.display = 'none';
-    timerEl.textContent = '00:00';
-  }
-
-  const telLink = document.getElementById('modalCallNativeTelBtn');
-  if (telLink) telLink.href = `tel:${cleanPhone}`;
-
-  const connectBtn = document.getElementById('btnSimulateConnect');
-  if (connectBtn) {
-    connectBtn.style.display = 'inline-flex';
-    connectBtn.innerHTML = '<i class="fa-solid fa-headset"></i> Test Connected Call';
-  }
-
-  modal.classList.add('show');
-}
-
-function simulateCallConnect() {
-  const statusEl = document.getElementById('modalCallStatusText');
-  if (statusEl) statusEl.textContent = 'Call connected (Voice line simulation active).';
-
-  const timerEl = document.getElementById('modalCallTimer');
-  if (timerEl) timerEl.style.display = 'block';
-
-  const connectBtn = document.getElementById('btnSimulateConnect');
-  if (connectBtn) connectBtn.style.display = 'none';
-
-  riderCallSeconds = 0;
-  if (riderCallTimer) clearInterval(riderCallTimer);
-  riderCallTimer = setInterval(() => {
-    riderCallSeconds++;
-    const m = String(Math.floor(riderCallSeconds / 60)).padStart(2, '0');
-    const s = String(riderCallSeconds % 60).padStart(2, '0');
-    if (timerEl) timerEl.textContent = `${m}:${s}`;
-  }, 1000);
-
-  // Mark call accepted in backend
-  if (currentRiderCallId) {
-    fetch('order_communication_api.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'respond_call', call_id: currentRiderCallId, status: 'accepted' })
-    }).catch(() => {});
-  }
-}
-
-async function endRiderCall() {
-  if (riderCallTimer) {
-    clearInterval(riderCallTimer);
-    riderCallTimer = null;
-  }
-  if (currentRiderCallId) {
-    try {
-      await fetch('order_communication_api.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'end_call', call_id: currentRiderCallId })
-      });
-    } catch (e) {}
-    currentRiderCallId = null;
-  }
-  const modal = document.getElementById('riderCallModal');
-  if (modal) modal.classList.remove('show');
-  toastRider('Call ended.');
-}
+setInterval(pollRiderOrderCommunication, 2000);
+pollRiderOrderCommunication();
 
 function toastGps(msg){const el=document.getElementById('gpsStatus');if(el)el.textContent=msg;}
 </script></body></html>

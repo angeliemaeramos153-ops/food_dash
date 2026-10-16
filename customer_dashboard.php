@@ -2392,9 +2392,9 @@ button{cursor:pointer}
         </div>
       </div>
       <div class="cust-rider-actions">
-        <a id="custTrackCallLink" href="tel:+639175550192" class="cust-comm-btn call" title="Call Rider">
+        <button id="custTrackCallLink" type="button" class="cust-comm-btn call" onclick="initiateCustomerVoiceCall()" title="Call Rider via Synchronized In-App Voice">
           <i class="fa-solid fa-phone"></i> Call Rider
-        </a>
+        </button>
         <button id="custTrackMsgBtn" type="button" class="cust-comm-btn msg" onclick="openCustomerChat()" title="Message Rider (Chat)">
           <i class="fa-solid fa-comment-dots"></i> Message Rider <span class="cust-chat-unread-badge badge" style="display:none;margin-left:4px;">0</span>
         </button>
@@ -2502,8 +2502,8 @@ button{cursor:pointer}
 
 <!-- Prominent Rider Arrived Live Notification Modal -->
 <div class="fd-modal" id="riderArrivedModal" style="display:none; z-index:9999999;">
-  <div class="fd-modal-backdrop" onclick="closeRiderArrivedModal()"></div>
-  <div class="fd-modal-box" style="text-align:center; padding:28px 22px 24px; max-width:340px; border-radius:24px; border:2px solid #86efac; box-shadow:0 24px 60px rgba(0,0,0,0.35); background:#ffffff; position:relative; z-index:1; animation:scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+  <div class="fd-modal-backdrop" onclick="/* Persistent alarm: must click one of the explicit actions below */"></div>
+  <div class="fd-modal-box" style="text-align:center; padding:28px 22px 24px; max-width:350px; border-radius:24px; border:2px solid #86efac; box-shadow:0 24px 60px rgba(0,0,0,0.35); background:#ffffff; position:relative; z-index:1; animation:scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
     <div style="width:72px; height:72px; border-radius:50%; background:#dcfce7; color:#15803d; font-size:34px; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; box-shadow:0 0 0 10px rgba(22,163,74,0.18);">
       <i class="fa-solid fa-location-pin fa-bounce"></i>
     </div>
@@ -2511,16 +2511,19 @@ button{cursor:pointer}
       <i class="fa-solid fa-circle-dot fa-beat-fade"></i> RIDER AT DESTINATION
     </span>
     <h2 style="font-size:20px; font-weight:800; color:#14532d; margin-bottom:8px;">Your rider has arrived!</h2>
-    <p id="riderArrivedModalMsg" style="font-size:13px; color:#4b5563; line-height:1.5; margin-bottom:20px;">
-      📍 Your rider has arrived at your delivery address! Please meet Alex outside to receive your order.
+    <p id="riderArrivedModalMsg" style="font-size:13px; color:#4b5563; line-height:1.5; margin-bottom:18px;">
+      📍 Your rider has arrived at your delivery address! Please choose a quick response so your rider knows you are coming:
     </p>
-    <div style="display:flex; flex-direction:column; gap:9px;">
-      <button type="button" class="btn-fd-primary" onclick="openTrackingFromArrived()" style="background:#15803d; padding:12px; font-size:13px; font-weight:700; border-radius:12px; cursor:pointer;">
-        <i class="fa-solid fa-map-location-dot"></i> View Live Tracking Map
+    <div id="riderArrivedActionButtons" style="display:flex; flex-direction:column; gap:10px;">
+      <button type="button" class="btn-arrival-action minute" onclick="respondToRiderArrival('Be there in a minute!')">
+        <i class="fa-solid fa-person-running"></i> Be there in a minute!
       </button>
-      <button type="button" class="btn-fd-secondary" onclick="closeRiderArrivedModal()" style="padding:10px; font-size:12px; border-radius:12px; cursor:pointer;">
-        <i class="fa-solid fa-check"></i> Okay, Going Outside
+      <button type="button" class="btn-arrival-action outside" onclick="respondToRiderArrival('Okay, Going outside!')">
+        <i class="fa-solid fa-door-open"></i> Okay, Going outside!
       </button>
+      <a href="javascript:void(0)" onclick="openTrackingFromArrived()" style="display:inline-block; margin-top:4px; font-size:11px; color:#15803d; font-weight:700; text-decoration:underline;">
+        View Live Tracking Map
+      </a>
     </div>
   </div>
 </div>
@@ -2889,7 +2892,11 @@ button{cursor:pointer}
 <div class="toast" id="toast"></div>
 </div>
 
+<script src="assets/js/order_call_engine.js"></script>
 <script>
+if (window.FoodDashCall) {
+  FoodDashCall.init('customer');
+}
 let cart = JSON.parse(localStorage.getItem('foodDashCart') || '[]');
 let itemQty = 1;
 let currentItem = {name:'Big Mac', price:179, icon:'🍔', desc:'Two beef patties, special sauce, lettuce and cheese.', store:'McDonalds'};
@@ -5525,6 +5532,26 @@ function openChatFromBanner() {
 function closeRiderArrivedModal() {
   const modal = document.getElementById('riderArrivedModal');
   if (modal) modal.style.display = 'none';
+  if (window.FoodDashCall) {
+    FoodDashCall.stopAllTones();
+  }
+}
+
+function respondToRiderArrival(responseOption) {
+  const oId = activeCustomerTrackingOrderId || 0;
+  if (window.FoodDashCall) {
+    FoodDashCall.acknowledgeArrival(oId, responseOption);
+  }
+  closeRiderArrivedModal();
+}
+
+function initiateCustomerVoiceCall() {
+  const oId = activeCustomerTrackingOrderId || 0;
+  const rName = currentTrackingRiderName || 'Rider';
+  const rPhone = currentTrackingRiderPhone || '+63 917 555 0192';
+  if (window.FoodDashCall) {
+    FoodDashCall.initiateCall(oId, rName, rPhone);
+  }
 }
 
 function openTrackingFromArrived() {
@@ -5578,64 +5605,19 @@ function handleRiderArrivedEvent(data) {
   if (hasShownArrivedAlert) return;
   hasShownArrivedAlert = true;
 
-  // Play alert notification sound and trigger vibration
-  playMessageChime();
-  if ('vibrate' in navigator) {
-    try { navigator.vibrate([300, 150, 300, 150, 400]); } catch (e) {}
-  }
-
-  // Instantly pop up prominent modal/banner: "Your rider has arrived!"
-  const modal = document.getElementById('riderArrivedModal');
-  const msgEl = document.getElementById('riderArrivedModalMsg');
+  const oId = data.order_id || activeCustomerTrackingOrderId || 0;
   const rName = data.rider_name || currentTrackingRiderName || 'Alex';
-  const rFirst = rName.split(' ')[0];
-  if (msgEl) {
-    msgEl.textContent = `📍 Your rider has arrived at your delivery address! Please meet ${rFirst} outside to receive your order.`;
+
+  // Trigger persistent looping arrival alarm (MUST ring until action button is clicked)
+  if (window.FoodDashCall) {
+    FoodDashCall.triggerArrivalAlarm(oId, rName);
+  } else {
+    const modal = document.getElementById('riderArrivedModal');
+    if (modal) modal.style.display = 'flex';
   }
-  if (modal) {
-    modal.style.display = 'flex';
-  }
 
-  showToastCustomer(`📍 Your rider has arrived! Please meet ${rFirst} outside.`);
-
-  // Update status badge on active order card from "On Delivery" to "Arrived"
-  updateOrderStatusToArrived(data.order_id);
-}
-
-function playMessageChime() {
-  try {
-    const audio = new Audio('assets/notification_chime.wav');
-    audio.volume = 0.8;
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(() => playWebAudioFallbackChime());
-    }
-  } catch (e) {
-    playWebAudioFallbackChime();
-  }
-}
-
-function playWebAudioFallbackChime() {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AudioCtx();
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, now);
-    osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
-
-    gain.gain.setValueAtTime(0.12, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.35);
-  } catch (e) {}
+  showToastCustomer(`📍 Your rider has arrived! Please choose a response.`);
+  updateOrderStatusToArrived(oId);
 }
 
 // Global background poll every 2.5 seconds running continuously on ALL customer screens
@@ -5655,10 +5637,9 @@ async function pollCustomerCommunicationUpdates() {
       if (data.rider_phone) currentTrackingRiderPhone = data.rider_phone;
     }
 
-    if (data.active_call && data.active_call.status === 'ringing') {
-      handleIncomingCallAlert(data.active_call);
-    } else {
-      dismissIncomingCallIfRinging();
+    // Synchronize Real-Time Bidirectional In-App Calling
+    if (window.FoodDashCall) {
+      FoodDashCall.syncCallStatus(data.active_call);
     }
 
     if (Array.isArray(data.messages) && data.messages.length > 0) {
@@ -5675,7 +5656,11 @@ async function pollCustomerCommunicationUpdates() {
     const sNorm = String(data.status || '').toUpperCase();
     const dNorm = String(data.delivery_status || '').toLowerCase();
     if (data.is_arrived || dNorm === 'arrived' || sNorm === 'ARRIVED') {
-      handleRiderArrivedEvent(data);
+      if (data.arrival_acknowledged) {
+        if (window.FoodDashCall) FoodDashCall.stopAllTones();
+      } else {
+        handleRiderArrivedEvent(data);
+      }
     }
   } catch (e) {
     console.warn('Customer global poll error:', e);

@@ -236,10 +236,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     if (empty($o['customer_phone'])) $o['customer_phone'] = '+63 917 123 4567';
     if (empty($o['rider_phone'])) $o['rider_phone'] = '+63 917 555 0192';
 
-    // Check for active ringing call created within the last 45 seconds
+    // Check for active call within the last 45 seconds
     $active_call = null;
     try {
-        $call_stmt = $conn->prepare("SELECT call_id, order_id, caller_role, caller_id, caller_name, caller_phone, receiver_role, receiver_id, status, created_at, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS elapsed_seconds FROM order_calls WHERE order_id = :oid AND status = 'ringing' AND created_at >= (NOW() - INTERVAL 45 SECOND) ORDER BY call_id DESC LIMIT 1");
+        $call_stmt = $conn->prepare("SELECT call_id, order_id, caller_role, COALESCE(caller, caller_role) AS caller, caller_id, caller_name, caller_phone, receiver_role, receiver_id, COALESCE(call_status, status) AS call_status, status, created_at, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS elapsed_seconds FROM order_calls WHERE order_id = :oid AND (status IN ('ringing', 'calling', 'accepted', 'connected') OR call_status IN ('calling', 'ringing', 'connected', 'accepted')) AND updated_at >= (NOW() - INTERVAL 45 SECOND) ORDER BY call_id DESC LIMIT 1");
         $call_stmt->execute([':oid' => $order_id]);
         $c = $call_stmt->fetch(PDO::FETCH_ASSOC);
         if ($c) {

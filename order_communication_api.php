@@ -199,33 +199,94 @@ if ($action === 'send_message') {
 }
 
 // -------------------------------------------------------------
-// 3. RESPOND / UPDATE CALL STATUS
+// 3. ACKNOWLEDGE ARRIVAL (Customer response to rider arrived)
+// -------------------------------------------------------------
+if ($action === 'acknowledge_arrival') {
+    $order_id = (int)($payload['order_id'] ?? $_GET['order_id'] ?? 0);
+    if ($order_id <= 0) {
+        comm_out(false, 'Valid order_id is required.', [], 422);
+    }
+
+    $raw_resp = trim((string)($payload['response'] ?? 'Okay, Going outside!'));
+    if (stripos($raw_resp, 'minute') !== false) {
+        $short_ack = 'Be there in a minute!';
+    } else {
+        $short_ack = 'Okay, Going outside!';
+    }
+    $chat_text = 'Customer: ' . $short_ack;
+
+    // Update food_orders table
+    try {
+        $upd_ord = $conn->prepare("UPDATE food_orders SET arrival_acknowledged_at = NOW(), arrival_ack_response = :resp, updated_at = NOW() WHERE order_id = :oid");
+        $upd_ord->execute([':resp' => $short_ack, ':oid' => $order_id]);
+    } catch (Throwable $e) {}
+
+    // Post to order_messages
+    $ins = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'customer', :uid, :name, :txt, NOW())");
+    $ins->execute([
+        ':oid'  => $order_id,
+        ':uid'  => $user_id,
+        ':name' => $user_name,
+        ':txt'  => $chat_text
+    ]);
+    $msg_id = (int)$conn->lastInsertId();
+
+    // Notify Rider
+    try {
+        $rq = $conn->prepare("SELECT r.user_id, o.order_ref FROM food_orders o LEFT JOIN riders r ON (o.rider_id = r.rider_id) WHERE o.order_id = :oid LIMIT 1");
+        $rq->execute([':oid' => $order_id]);
+        $row_r = $rq->fetch(PDO::FETCH_ASSOC);
+        if (!empty($row_r['user_id'])) {
+            create_notification(
+                $conn,
+                (int)$row_r['user_id'],
+                'arrival_ack',
+                'Customer Acknowledged Arrival',
+                "Customer responded: \"{$short_ack}\" for order " . ($row_r['order_ref'] ?: '#' . $order_id),
+                $order_id
+            );
+        }
+    } catch (Throwable $e) {}
+
+    comm_out(true, 'Arrival acknowledged.', [
+        'order_id'         => $order_id,
+        'response'         => $short_ack,
+        'message_id'       => $msg_id,
+        'message_text'     => $chat_text,
+        'acknowledged_at'  => date('Y-m-d H:i:s')
+    ]);
+}
+
+// -------------------------------------------------------------
+// 4. RESPOND / UPDATE CALL STATUS
 // -------------------------------------------------------------
 if ($action === 'respond_call' || $action === 'end_call') {
     $call_id = (int)($payload['call_id'] ?? $_GET['call_id'] ?? 0);
     $status = trim((string)($payload['status'] ?? ($action === 'end_call' ? 'ended' : 'accepted')));
+    $call_status = ($status === 'accepted') ? 'connected' : $status;
 
-    if (!in_array($status, ['accepted', 'declined', 'ended', 'missed'], true)) {
+    if (!in_array($status, ['accepted', 'declined', 'ended', 'missed', 'connected'], true)) {
         $status = 'ended';
+        $call_status = 'ended';
     }
 
     if ($call_id <= 0) {
-        // If no call_id specified, check for active ringing call for order_id
         $order_id = (int)($payload['order_id'] ?? 0);
         if ($order_id > 0) {
-            $upd = $conn->prepare("UPDATE order_calls SET status = :st WHERE order_id = :oid AND status = 'ringing'");
-            $upd->execute([':st' => $status, ':oid' => $order_id]);
-            comm_out(true, 'Call status updated for order.', ['order_id' => $order_id, 'status' => $status]);
+            $upd = $conn->prepare("UPDATE order_calls SET status = :st, call_status = :cst, updated_at = NOW() WHERE order_id = :oid AND (status IN ('ringing', 'calling') OR call_status IN ('calling', 'ringing'))");
+            $upd->execute([':st' => $status, ':cst' => $call_status, ':oid' => $order_id]);
+            comm_out(true, 'Call status updated for order.', ['order_id' => $order_id, 'status' => $status, 'call_status' => $call_status]);
         }
         comm_out(false, 'Valid call_id or order_id is required.', [], 422);
     }
 
-    $upd = $conn->prepare("UPDATE order_calls SET status = :st WHERE call_id = :cid");
-    $upd->execute([':st' => $status, ':cid' => $call_id]);
+    $upd = $conn->prepare("UPDATE order_calls SET status = :st, call_status = :cst, updated_at = NOW() WHERE call_id = :cid");
+    $upd->execute([':st' => $status, ':cst' => $call_status, ':cid' => $call_id]);
 
     comm_out(true, 'Call status updated.', [
-        'call_id' => $call_id,
-        'status'  => $status,
+        'call_id'     => $call_id,
+        'status'      => $status,
+        'call_status' => $call_status
     ]);
 }
 
@@ -270,6 +331,7 @@ if ($action === 'get_updates' || $method === 'GET') {
         o.order_id, o.order_ref, o.customer_id, o.customer_name,
         COALESCE(o.customer_phone, cu.phone, '+63 917 123 4567') AS customer_phone,
         o.store_name, o.delivery_address, o.status, o.delivery_status,
+        o.arrival_acknowledged_at, o.arrival_ack_response,
         COALESCE(r.rider_name, ru.full_name, 'Alex Rider') AS rider_name,
         COALESCE(o.rider_phone, r.phone, ru.phone, '+63 917 555 0192') AS rider_phone
     FROM food_orders o
@@ -282,15 +344,17 @@ if ($action === 'get_updates' || $method === 'GET') {
 
     if (!$order) {
         comm_out(true, 'Order not found.', [
-            'order_id'           => 0,
-            'status'             => 'none',
-            'delivery_status'    => 'none',
-            'is_arrived'         => false,
-            'active_call'        => null,
-            'messages'           => [],
-            'new_messages_count' => 0,
-            'latest_message_id'  => $after_id,
-            'latest_banner'      => null
+            'order_id'              => 0,
+            'status'                => 'none',
+            'delivery_status'       => 'none',
+            'is_arrived'            => false,
+            'arrival_acknowledged'  => false,
+            'arrival_ack_response'  => null,
+            'active_call'           => null,
+            'messages'              => [],
+            'new_messages_count'    => 0,
+            'latest_message_id'     => $after_id,
+            'latest_banner'         => null
         ]);
     }
 
@@ -298,17 +362,45 @@ if ($action === 'get_updates' || $method === 'GET') {
     if (empty($order['customer_phone'])) $order['customer_phone'] = '+63 917 123 4567';
     if (empty($order['rider_phone'])) $order['rider_phone'] = '+63 917 555 0192';
 
-    // Check for active ringing call created within the last 45 seconds
-    $call_stmt = $conn->prepare("SELECT call_id, order_id, caller_role, caller_id, caller_name, caller_phone, receiver_role, receiver_id, status, created_at, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS elapsed_seconds FROM order_calls WHERE order_id = :oid AND status = 'ringing' AND created_at >= (NOW() - INTERVAL 45 SECOND) ORDER BY call_id DESC LIMIT 1");
+    // Check for active call within the last 60 seconds
+    $call_stmt = $conn->prepare("SELECT 
+        call_id, order_id, caller_role, COALESCE(caller, caller_role) AS caller,
+        caller_id, caller_name, caller_phone, receiver_role, receiver_id,
+        COALESCE(call_status, status) AS call_status, status,
+        webrtc_signal, created_at, updated_at,
+        TIMESTAMPDIFF(SECOND, created_at, NOW()) AS elapsed_seconds,
+        TIMESTAMPDIFF(SECOND, updated_at, NOW()) AS seconds_since_update
+    FROM order_calls 
+    WHERE order_id = :oid 
+    ORDER BY call_id DESC LIMIT 1");
     $call_stmt->execute([':oid' => $order_id]);
-    $active_call = $call_stmt->fetch(PDO::FETCH_ASSOC);
+    $call_row = $call_stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($active_call) {
-        $active_call['call_id'] = (int)$active_call['call_id'];
-        $active_call['order_id'] = (int)$active_call['order_id'];
-        $active_call['elapsed_seconds'] = (int)$active_call['elapsed_seconds'];
-    } else {
-        $active_call = null;
+    $active_call = null;
+    if ($call_row) {
+        $st = strtolower(trim((string)$call_row['call_status']));
+        if ($st === 'ringing') $st = 'calling';
+        if ($st === 'accepted') $st = 'connected';
+        $age = (int)$call_row['seconds_since_update'];
+
+        // Only treat as active if calling/connected, or recent decline/end (< 8 seconds)
+        if (($st === 'calling' && $age <= 45) || ($st === 'connected') || (in_array($st, ['declined', 'ended'], true) && $age <= 8)) {
+            $active_call = [
+                'call_id'        => (int)$call_row['call_id'],
+                'order_id'       => (int)$call_row['order_id'],
+                'caller'         => $call_row['caller'] ?? 'rider',
+                'caller_role'    => $call_row['caller_role'] ?? 'rider',
+                'caller_name'    => $call_row['caller_name'] ?? '',
+                'caller_phone'   => $call_row['caller_phone'] ?? '',
+                'receiver_role'  => $call_row['receiver_role'] ?? 'customer',
+                'receiver_id'    => (int)($call_row['receiver_id'] ?? 0),
+                'call_status'    => $st,
+                'status'         => $st,
+                'elapsed_seconds'=> (int)$call_row['elapsed_seconds'],
+                'created_at'     => $call_row['created_at'],
+                'timestamp'      => strtotime($call_row['created_at'])
+            ];
+        }
     }
 
     // Fetch new messages since after_id
@@ -353,22 +445,26 @@ if ($action === 'get_updates' || $method === 'GET') {
     }
 
     $is_arrived = (strtolower(trim((string)($order['delivery_status'] ?? ''))) === 'arrived' || strtolower(trim((string)($order['status'] ?? ''))) === 'arrived');
+    $arrival_acknowledged = !empty($order['arrival_acknowledged_at']);
+    $arrival_ack_response = $order['arrival_ack_response'] ?? null;
 
     comm_out(true, 'Updates retrieved.', [
-        'order_id'           => $order_id,
-        'order_ref'          => $order['order_ref'],
-        'status'             => $order['status'] ?? 'none',
-        'delivery_status'    => $order['delivery_status'] ?? 'none',
-        'is_arrived'         => $is_arrived,
-        'customer_name'      => $order['customer_name'] ?? 'Customer',
-        'customer_phone'     => $order['customer_phone'],
-        'rider_name'         => $order['rider_name'],
-        'rider_phone'        => $order['rider_phone'],
-        'active_call'        => $active_call,
-        'messages'           => $messages,
-        'new_messages_count' => count($messages),
-        'latest_message_id'  => $latest_msg_id,
-        'latest_banner'      => $latest_banner
+        'order_id'              => $order_id,
+        'order_ref'             => $order['order_ref'],
+        'status'                => $order['status'] ?? 'none',
+        'delivery_status'       => $order['delivery_status'] ?? 'none',
+        'is_arrived'            => $is_arrived,
+        'arrival_acknowledged'  => $arrival_acknowledged,
+        'arrival_ack_response'  => $arrival_ack_response,
+        'customer_name'         => $order['customer_name'] ?? 'Customer',
+        'customer_phone'        => $order['customer_phone'],
+        'rider_name'            => $order['rider_name'],
+        'rider_phone'           => $order['rider_phone'],
+        'active_call'           => $active_call,
+        'messages'              => $messages,
+        'new_messages_count'    => count($messages),
+        'latest_message_id'     => $latest_msg_id,
+        'latest_banner'         => $latest_banner
     ]);
 }
 
