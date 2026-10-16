@@ -83,17 +83,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmtR->execute([':lat' => $lat, ':lng' => $lng, ':rid' => $rider_id]);
         }
 
-        // Check proximity immediately
-        $stmt = $conn->prepare("SELECT customer_id, order_ref, customer_lat, customer_lng, delivery_status, near_notified_at FROM food_orders WHERE order_id = :oid LIMIT 1");
+        // Check proximity & arrival immediately
+        $stmt = $conn->prepare("SELECT customer_id, order_ref, customer_lat, customer_lng, delivery_status, status, near_notified_at, arrived_notified_at FROM food_orders WHERE order_id = :oid LIMIT 1");
         $stmt->execute([':oid' => $order_id]);
         $fresh = $stmt->fetch(PDO::FETCH_ASSOC);
 
         $distance = null;
         $near = false;
+        $arrived = false;
         if ($fresh && $fresh['customer_lat'] !== null && $fresh['customer_lng'] !== null) {
             $distance = distance_km((float)$fresh['customer_lat'], (float)$fresh['customer_lng'], $lat, $lng);
-            $near = $distance <= 0.5;
-            if ($near && empty($fresh['near_notified_at']) && in_array($fresh['delivery_status'], ['on_the_way', 'near_customer'], true)) {
+            $near = ($distance <= 0.5); // <= 500 meters
+            $arrived = ($distance <= 0.05); // <= 50 meters geofence!
+
+            // 1. Automated "Rider Arrived" Live Notification (<= 50 meters)
+            $curr_st = strtolower(trim((string)($fresh['status'] ?? '')));
+            $curr_del = strtolower(trim((string)($fresh['delivery_status'] ?? '')));
+            $is_delivering = in_array($curr_del, ['on_the_way', 'near_customer', 'arrived'], true)
+                          || in_array($curr_st, ['out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived'], true);
+            if ($arrived && empty($fresh['arrived_notified_at']) && $is_delivering) {
+                $conn->beginTransaction();
+                try {
+                    $u = $conn->prepare("UPDATE food_orders SET delivery_status = 'arrived', status = 'ARRIVED', arrived_notified_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND arrived_notified_at IS NULL");
+                    $u->execute([':oid' => $order_id]);
+                    $changed = $u->rowCount();
+                    if ($changed > 0) {
+                        try {
+                            $conn->prepare("UPDATE orders SET status = 'arrived', arrived_notified_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+                        } catch (Throwable $e) {}
+
+                        // Resolve rider first name
+                        $rname = trim((string)($_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Alex'));
+                        $r_first = explode(' ', $rname)[0];
+                        $arrived_msg = "📍 Your rider has arrived at your delivery address! Please meet {$r_first} outside to receive your order.";
+
+                        // Insert system message into order_messages
+                        $chk = $conn->prepare("SELECT message_id FROM order_messages WHERE order_id = :oid AND message_text LIKE '%has arrived at your delivery address%' LIMIT 1");
+                        $chk->execute([':oid' => $order_id]);
+                        if (!$chk->fetch()) {
+                            $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'rider', :uid, :rname, :txt, NOW())");
+                            $ins_m->execute([
+                                ':oid'   => $order_id,
+                                ':uid'   => $uid,
+                                ':rname' => $rname,
+                                ':txt'   => $arrived_msg
+                            ]);
+                        }
+
+                        create_notification($conn, (int)$fresh['customer_id'], 'rider_arrived', 'Your rider has arrived!', $arrived_msg, $order_id);
+                        notify_role($conn, 'admin', 'Rider Arrived at Destination', "Order {$fresh['order_ref']} reached delivery geofence (<= 50m).", $order_id);
+                    }
+                    $conn->commit();
+                } catch (Throwable $e) {
+                    if ($conn->inTransaction()) $conn->rollBack();
+                }
+            }
+            // 2. Proximity "Near Customer" Notification (<= 500 meters)
+            elseif ($near && empty($fresh['near_notified_at']) && in_array($fresh['delivery_status'], ['on_the_way'], true)) {
                 $conn->beginTransaction();
                 try {
                     $u = $conn->prepare("UPDATE food_orders SET delivery_status = 'near_customer', status = 'near_customer', near_notified_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND near_notified_at IS NULL");
@@ -108,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-        out(true, 'Location updated.', ['lat' => $lat, 'lng' => $lng, 'distance_km' => $distance, 'near' => $near]);
+        out(true, 'Location updated.', ['lat' => $lat, 'lng' => $lng, 'distance_km' => $distance, 'near' => $near, 'arrived' => $arrived]);
     }
 
     if ($action === 'update_customer_location') {

@@ -2037,6 +2037,31 @@ button{cursor:pointer}
   </div>
 </div>
 
+<!-- Prominent Rider Arrived Live Notification Modal -->
+<div class="fd-modal" id="riderArrivedModal" style="display:none; z-index:9999999;">
+  <div class="fd-modal-backdrop" onclick="closeRiderArrivedModal()"></div>
+  <div class="fd-modal-box" style="text-align:center; padding:28px 22px 24px; max-width:340px; border-radius:24px; border:2px solid #86efac; box-shadow:0 24px 60px rgba(0,0,0,0.35); background:#ffffff; position:relative; z-index:1; animation:scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+    <div style="width:72px; height:72px; border-radius:50%; background:#dcfce7; color:#15803d; font-size:34px; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; box-shadow:0 0 0 10px rgba(22,163,74,0.18);">
+      <i class="fa-solid fa-location-pin fa-bounce"></i>
+    </div>
+    <span style="display:inline-flex; align-items:center; gap:5px; background:#dcfce7; color:#15803d; font-size:10px; font-weight:800; padding:4px 12px; border-radius:14px; margin-bottom:8px; letter-spacing:0.6px; text-transform:uppercase;">
+      <i class="fa-solid fa-circle-dot fa-beat-fade"></i> RIDER AT DESTINATION
+    </span>
+    <h2 style="font-size:20px; font-weight:800; color:#14532d; margin-bottom:8px;">Your rider has arrived!</h2>
+    <p id="riderArrivedModalMsg" style="font-size:13px; color:#4b5563; line-height:1.5; margin-bottom:20px;">
+      📍 Your rider has arrived at your delivery address! Please meet Alex outside to receive your order.
+    </p>
+    <div style="display:flex; flex-direction:column; gap:9px;">
+      <button type="button" class="btn-fd-primary" onclick="openTrackingFromArrived()" style="background:#15803d; padding:12px; font-size:13px; font-weight:700; border-radius:12px; cursor:pointer;">
+        <i class="fa-solid fa-map-location-dot"></i> View Live Tracking Map
+      </button>
+      <button type="button" class="btn-fd-secondary" onclick="closeRiderArrivedModal()" style="padding:10px; font-size:12px; border-radius:12px; cursor:pointer;">
+        <i class="fa-solid fa-check"></i> Okay, Going Outside
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Live Rider Message Banner -->
 <div id="liveRiderMessageBanner" class="live-rider-msg-banner" style="display:none;" onclick="openChatFromBanner()">
   <div class="msg-banner-avatar"><i class="fa-solid fa-motorcycle"></i></div>
@@ -3999,8 +4024,11 @@ async function endConnectedCall() {
   currentIncomingCall = null;
 }
 
+
 let seenRiderMessageIds = new Set();
 let unreadChatCount = 0;
+let hasShownArrivedAlert = false;
+const currentCustomerId = <?= (int)$user_id ?>;
 
 function updateChatBadges() {
   const badges = document.querySelectorAll('.cust-chat-unread-badge');
@@ -4012,6 +4040,16 @@ function updateChatBadges() {
       b.style.display = 'none';
     }
   });
+
+  const ordersBadge = document.getElementById('ordersBadge');
+  if (ordersBadge) {
+    if (unreadChatCount > 0) {
+      ordersBadge.textContent = unreadChatCount;
+      ordersBadge.style.display = 'inline-flex';
+    } else {
+      ordersBadge.style.display = 'none';
+    }
+  }
 }
 
 function appendMessageToChatDrawer(msg) {
@@ -4046,28 +4084,28 @@ function handleLiveRiderMessage(msg) {
   }
 
   const senderName = msg.sender_name || currentTrackingRiderName || 'Alex';
-  const alertText = `Rider ${senderName}: ${msg.message_text}`;
+  const pushText = `New message from rider: ${msg.message_text}`;
 
-  // a. Instantly display floating toast/banner at top of viewport: "Rider Alex: [message text]"
+  // a. Instantly show a top floating push banner / toast: "New message from rider: [message text]" without requiring a page refresh.
   const banner = document.getElementById('liveRiderMessageBanner');
   const titleEl = document.getElementById('liveMsgBannerTitle');
   const textEl = document.getElementById('liveMsgBannerText');
   if (banner && textEl) {
-    if (titleEl) titleEl.textContent = `Rider ${senderName}`;
+    if (titleEl) titleEl.textContent = `New message from rider (${senderName})`;
     textEl.textContent = msg.message_text;
     banner.style.display = 'flex';
 
     if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
     msgBannerTimeout = setTimeout(() => {
       banner.style.display = 'none';
-    }, 8000);
+    }, 8500);
   }
-  showToastCustomer(alertText);
+  showToastCustomer(pushText);
 
-  // b. Play subtle audio chime/ping (new Audio(...))
+  // b. Play an alert notification sound.
   playMessageChime();
 
-  // c. Update chat message badge counter and append message into active chat drawer in real time
+  // c. Update the unread badge counter in real time.
   unreadChatCount++;
   updateChatBadges();
   appendMessageToChatDrawer(msg);
@@ -4077,6 +4115,86 @@ function openChatFromBanner() {
   const banner = document.getElementById('liveRiderMessageBanner');
   if (banner) banner.style.display = 'none';
   openCustomerChat();
+}
+
+function closeRiderArrivedModal() {
+  const modal = document.getElementById('riderArrivedModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function openTrackingFromArrived() {
+  closeRiderArrivedModal();
+  if (activeCustomerTrackingOrderId) {
+    openCustomerTrackingModal(activeCustomerTrackingOrderId);
+  } else {
+    showScreen('orders');
+  }
+}
+
+function updateOrderStatusToArrived(orderId) {
+  if (!orderId) return;
+  const tag = document.getElementById(`status-tag-${orderId}`);
+  if (tag) {
+    tag.className = 'status-badge status-arrived';
+    tag.style.background = '#dcfce7';
+    tag.style.color = '#15803d';
+    tag.style.borderColor = '#86efac';
+    tag.style.fontWeight = '800';
+    tag.innerHTML = '<i class="fa-solid fa-location-pin fa-bounce"></i> Arrived';
+  }
+
+  const card = document.getElementById(`order-card-${orderId}`);
+  if (card) {
+    card.setAttribute('data-status', 'arrived');
+    const rowIcon = card.querySelector('.row-icon');
+    if (rowIcon) rowIcon.textContent = '📍';
+    const subNotice = card.querySelector('.fa-circle-notch')?.parentElement;
+    if (subNotice) {
+      subNotice.style.color = '#15803d';
+      subNotice.innerHTML = '<i class="fa-solid fa-circle-check"></i> Rider has arrived outside with your order!';
+    }
+  }
+
+  const trackRef = document.getElementById('trackModalStoreSubtitle');
+  if (trackRef) {
+    trackRef.innerHTML = '<span style="color:#15803d; font-weight:700;"><i class="fa-solid fa-location-pin-lock fa-bounce"></i> Arrived at Destination</span>';
+  }
+  const etaText = document.getElementById('custTrackEtaBadgeText');
+  if (etaText) {
+    etaText.textContent = 'Your rider has arrived outside! 🛵';
+  }
+  const distText = document.getElementById('custTrackDistText');
+  if (distText) {
+    distText.textContent = '0m away (Arrived)';
+  }
+}
+
+function handleRiderArrivedEvent(data) {
+  if (hasShownArrivedAlert) return;
+  hasShownArrivedAlert = true;
+
+  // Play alert notification sound and trigger vibration
+  playMessageChime();
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate([300, 150, 300, 150, 400]); } catch (e) {}
+  }
+
+  // Instantly pop up prominent modal/banner: "Your rider has arrived!"
+  const modal = document.getElementById('riderArrivedModal');
+  const msgEl = document.getElementById('riderArrivedModalMsg');
+  const rName = data.rider_name || currentTrackingRiderName || 'Alex';
+  const rFirst = rName.split(' ')[0];
+  if (msgEl) {
+    msgEl.textContent = `📍 Your rider has arrived at your delivery address! Please meet ${rFirst} outside to receive your order.`;
+  }
+  if (modal) {
+    modal.style.display = 'flex';
+  }
+
+  showToastCustomer(`📍 Your rider has arrived! Please meet ${rFirst} outside.`);
+
+  // Update status badge on active order card from "On Delivery" to "Arrived"
+  updateOrderStatusToArrived(data.order_id);
 }
 
 function playMessageChime() {
@@ -4115,15 +4233,22 @@ function playWebAudioFallbackChime() {
   } catch (e) {}
 }
 
-// Ensure the polling loop checks order_communication_api.php?action=get_updates&order_id=... every 2 seconds
+// Global background poll every 2.5 seconds running continuously on ALL customer screens
 async function pollCustomerCommunicationUpdates() {
-  if (!activeCustomerTrackingOrderId) return;
+  if (!currentCustomerId) return;
   try {
-    const res = await fetch(`order_communication_api.php?action=get_updates&order_id=${activeCustomerTrackingOrderId}&after_message_id=${lastSeenRiderMsgId}&_t=${Date.now()}`, {
-      cache: 'no-store'
-    });
+    const targetOrderId = activeCustomerTrackingOrderId || 0;
+    const url = `order_communication_api.php?action=get_updates&customer_id=${currentCustomerId}&order_id=${targetOrderId}&after_message_id=${lastSeenRiderMsgId}&_t=${Date.now()}`;
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return;
     const data = await res.json();
     if (!data.success) return;
+
+    if (data.order_id && data.order_id > 0) {
+      activeCustomerTrackingOrderId = data.order_id;
+      if (data.rider_name) currentTrackingRiderName = data.rider_name;
+      if (data.rider_phone) currentTrackingRiderPhone = data.rider_phone;
+    }
 
     if (data.active_call && data.active_call.status === 'ringing') {
       handleIncomingCallAlert(data.active_call);
@@ -4140,14 +4265,21 @@ async function pollCustomerCommunicationUpdates() {
     } else if (data.latest_banner && data.latest_banner.sender_role === 'rider') {
       handleLiveRiderMessage(data.latest_banner);
     }
-  } catch (e) {}
+
+    // Automated "Rider Arrived" Live Notification
+    const sNorm = String(data.status || '').toUpperCase();
+    const dNorm = String(data.delivery_status || '').toLowerCase();
+    if (data.is_arrived || dNorm === 'arrived' || sNorm === 'ARRIVED') {
+      handleRiderArrivedEvent(data);
+    }
+  } catch (e) {
+    console.warn('Customer global poll error:', e);
+  }
 }
 
-if (activeCustomerTrackingOrderId) {
-  pollCustomerCommunicationUpdates();
-  // 2-second real-time polling loop
-  setInterval(pollCustomerCommunicationUpdates, 2000);
-}
+// Continuously execute every 2.5 seconds on ALL screens
+pollCustomerCommunicationUpdates();
+setInterval(pollCustomerCommunicationUpdates, 2500);
 
 // Check if navigating to a specific screen via hash (e.g. #orders, #cart)
 if (window.location.hash) {

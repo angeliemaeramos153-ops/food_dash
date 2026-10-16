@@ -43,7 +43,7 @@ try {
     // Ignore if table exists or migration ran
 }
 
-$method = $_SERVER['REQUEST_METHOD'];
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? '';
 
 $raw_input = file_get_contents('php://input');
@@ -235,9 +235,35 @@ if ($action === 'respond_call' || $action === 'end_call') {
 if ($action === 'get_updates' || $method === 'GET') {
     $order_id = (int)($_GET['order_id'] ?? $payload['order_id'] ?? 0);
     $after_id = (int)($_GET['after_message_id'] ?? $_GET['after_id'] ?? $payload['after_message_id'] ?? 0);
+    $customer_id = (int)($_GET['customer_id'] ?? $payload['customer_id'] ?? ($role === 'customer' ? $user_id : 0));
+
+    // If no order_id provided, automatically resolve the customer's latest active order
+    if ($order_id <= 0 && $customer_id > 0) {
+        $ostmt = $conn->prepare("SELECT order_id FROM food_orders 
+            WHERE customer_id = :cid 
+            ORDER BY CASE 
+                WHEN status IN ('out_for_delivery', 'on_the_way', 'on_delivery', 'near_customer', 'arrived') THEN 1 
+                WHEN status IN ('preparing', 'ready_for_pickup', 'accepted', 'claimed', 'pending') THEN 2 
+                ELSE 3 END ASC, order_id DESC LIMIT 1");
+        $ostmt->execute([':cid' => $customer_id]);
+        $orow = $ostmt->fetch(PDO::FETCH_ASSOC);
+        if ($orow) {
+            $order_id = (int)$orow['order_id'];
+        }
+    }
 
     if ($order_id <= 0) {
-        comm_out(false, 'Valid order_id is required.', [], 422);
+        comm_out(true, 'No active order for customer.', [
+            'order_id'           => 0,
+            'status'             => 'none',
+            'delivery_status'    => 'none',
+            'is_arrived'         => false,
+            'active_call'        => null,
+            'messages'           => [],
+            'new_messages_count' => 0,
+            'latest_message_id'  => $after_id,
+            'latest_banner'      => null
+        ]);
     }
 
     $stmt = $conn->prepare("SELECT 
@@ -255,7 +281,17 @@ if ($action === 'get_updates' || $method === 'GET') {
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$order) {
-        comm_out(false, 'Order not found.', [], 404);
+        comm_out(true, 'Order not found.', [
+            'order_id'           => 0,
+            'status'             => 'none',
+            'delivery_status'    => 'none',
+            'is_arrived'         => false,
+            'active_call'        => null,
+            'messages'           => [],
+            'new_messages_count' => 0,
+            'latest_message_id'  => $after_id,
+            'latest_banner'      => null
+        ]);
     }
 
     // Default valid fallback phone numbers
@@ -316,9 +352,14 @@ if ($action === 'get_updates' || $method === 'GET') {
         ];
     }
 
+    $is_arrived = (strtolower(trim((string)($order['delivery_status'] ?? ''))) === 'arrived' || strtolower(trim((string)($order['status'] ?? ''))) === 'arrived');
+
     comm_out(true, 'Updates retrieved.', [
         'order_id'           => $order_id,
         'order_ref'          => $order['order_ref'],
+        'status'             => $order['status'] ?? 'none',
+        'delivery_status'    => $order['delivery_status'] ?? 'none',
+        'is_arrived'         => $is_arrived,
         'customer_name'      => $order['customer_name'] ?? 'Customer',
         'customer_phone'     => $order['customer_phone'],
         'rider_name'         => $order['rider_name'],
