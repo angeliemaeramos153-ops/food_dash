@@ -87,9 +87,11 @@ if (!function_exists('get_payment_method_meta')) {
 }
 
 if (!function_exists('render_payment_badge')) {
-    function render_payment_badge(?string $method, string $extra_class = '', bool $show_name = true): string {
+    function render_payment_badge(?string $method, string $extra_class = '', bool $show_name = false): string {
         $meta = get_payment_method_meta($method);
-        $name_html = $show_name ? '<span class="pm-brand-name">' . htmlspecialchars($meta['name']) . '</span>' : '';
+        // The official vector SVG asset is already a complete branded badge containing the icon & wordmark.
+        // Suppress duplicate text to prevent glitches like 'GCash GCash'.
+        $name_html = ($show_name && empty($meta['logo'])) ? '<span class="pm-brand-name">' . htmlspecialchars($meta['name']) . '</span>' : '';
         return '<span class="pm-brand-badge ' . htmlspecialchars($meta['badge_class']) . ' ' . htmlspecialchars($extra_class) . '" title="' . htmlspecialchars($meta['name']) . '">'
              . '<img src="' . htmlspecialchars($meta['logo']) . '" alt="' . htmlspecialchars($meta['name']) . '" class="pm-logo" loading="lazy" />'
              . $name_html

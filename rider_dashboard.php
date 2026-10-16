@@ -62,21 +62,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
 
                 if ($action === 'claim' || $action === 'pickup') {
                     $assigned_rid = (int)($order['rider_id'] ?? 0);
-                    if (!in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned', 'out_for_delivery']) || (!empty($assigned_rid) && $assigned_rid !== $rid)) {
+                    if (!in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'pending', 'preparing', 'on_delivery', 'on_the_way']) || (!empty($assigned_rid) && $assigned_rid !== $rid)) {
                         throw new Exception('This order is not ready for pickup or has already been assigned.');
                     }
-                    $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'on_the_way', status = 'OUT_FOR_DELIVERY', updated_at = NOW() WHERE order_id = :oid");
+                    $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'on_the_way', status = 'on_delivery', updated_at = NOW() WHERE order_id = :oid");
                     $stmt->execute([':rid' => $rid, ':oid' => $order_id]);
 
                     $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
                     $stmt->execute([':ref' => $ref, ':rid' => $rid]);
 
-                    // Sync to orders table
+                    // Sync to orders table: Run exact required SQL query UPDATE orders SET status = 'on_delivery' WHERE id = ?
                     try {
-                        $conn->prepare("UPDATE orders SET status = 'out_for_delivery', rider_id = :rid WHERE order_id = :oid")->execute([':rid' => $rid, ':oid' => $order_id]);
+                        $conn->prepare("UPDATE orders SET status = 'on_delivery' WHERE id = :oid")->execute([':oid' => $order_id]);
+                    } catch (Throwable $e) {}
+                    try {
+                        $conn->prepare("UPDATE orders SET status = 'on_delivery', rider_id = :rid WHERE order_id = :oid")->execute([':rid' => $rid, ':oid' => $order_id]);
                     } catch (Throwable $e) {}
 
-                    record_order_audit_log($conn, $order_id, $old_st, 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
+                    record_order_audit_log($conn, $order_id, $old_st, 'on_delivery', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
                     create_notification($conn, $customer_id, 'rider_assigned', 'Order Out for Delivery', 'Rider ' . $user_name . ' has picked up your order ' . $ref . ' and is on the way!', $order_id);
                     notify_role($conn, 'admin', 'Rider Dispatched', 'Rider ' . $user_name . ' confirmed pickup and dispatched order ' . $ref, $order_id);
 
@@ -196,19 +199,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
 
                 if ($action === 'claim' || $action === 'pickup') {
                     $assigned_rid = (int)($order['rider_id'] ?? 0);
-                    if (in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned', 'out_for_delivery']) && (empty($assigned_rid) || $assigned_rid === $rid)) {
-                        $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'on_the_way', status = 'OUT_FOR_DELIVERY', updated_at = NOW() WHERE order_id = :oid");
+                    if (in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'pending', 'preparing', 'on_delivery', 'on_the_way']) && (empty($assigned_rid) || $assigned_rid === $rid)) {
+                        $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'on_the_way', status = 'on_delivery', updated_at = NOW() WHERE order_id = :oid");
                         $stmt->execute([':rid' => $rid, ':oid' => $order_id]);
 
                         $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
                         $stmt->execute([':ref' => $ref, ':rid' => $rid]);
 
-                        // Sync to orders table
+                        // Sync to orders table: Run exact required SQL query UPDATE orders SET status = 'on_delivery' WHERE id = ?
                         try {
-                            $conn->prepare("UPDATE orders SET status = 'out_for_delivery', rider_id = :rid WHERE order_id = :oid")->execute([':rid' => $rid, ':oid' => $order_id]);
+                            $conn->prepare("UPDATE orders SET status = 'on_delivery' WHERE id = :oid")->execute([':oid' => $order_id]);
+                        } catch (Throwable $e) {}
+                        try {
+                            $conn->prepare("UPDATE orders SET status = 'on_delivery', rider_id = :rid WHERE order_id = :oid")->execute([':rid' => $rid, ':oid' => $order_id]);
                         } catch (Throwable $e) {}
 
-                        record_order_audit_log($conn, $order_id, $old_st, 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
+                        record_order_audit_log($conn, $order_id, $old_st, 'on_delivery', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
                         create_notification($conn, $customer_id, 'rider_assigned', 'Order Out for Delivery', 'Rider ' . $user_name . ' has picked up your order ' . $ref . '.', $order_id);
 
                         // Automated departure & amount notification into chat

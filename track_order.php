@@ -393,10 +393,10 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
 /* Live Rider Message Banner */
 .live-rider-msg-banner {
   position: fixed;
-  top: 16px;
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 999998;
+  z-index: 9999;
   width: calc(100% - 32px);
   max-width: 440px;
   background: #1e293b;
@@ -870,9 +870,58 @@ function animateMarkerTo(marker, newLat, newLng, durationMs = 1400) {
     return;
   }
 
+  const totalDist = calculateHaversineKm(startLat, startLng, newLat, newLng);
+  if (totalDist < 0.00002) return;
+
   if (marker._animFrameId) {
     cancelAnimationFrame(marker._animFrameId);
     marker._animFrameId = null;
+  }
+
+  // Extract path waypoints from OSRM road geometry if available
+  let waypoints = [];
+  if (Array.isArray(currentTrackOsrmPath) && currentTrackOsrmPath.length > 2) {
+    let closestStartIdx = 0;
+    let minStartDist = Infinity;
+    let closestEndIdx = 0;
+    let minEndDist = Infinity;
+
+    for (let i = 0; i < currentTrackOsrmPath.length; i++) {
+      const pt = currentTrackOsrmPath[i];
+      const dS = calculateHaversineKm(startLat, startLng, pt[0], pt[1]);
+      if (dS < minStartDist) {
+        minStartDist = dS;
+        closestStartIdx = i;
+      }
+      const dE = calculateHaversineKm(newLat, newLng, pt[0], pt[1]);
+      if (dE < minEndDist) {
+        minEndDist = dE;
+        closestEndIdx = i;
+      }
+    }
+
+    if (minStartDist < 0.25 && minEndDist < 0.25 && closestStartIdx !== closestEndIdx) {
+      const step = closestStartIdx < closestEndIdx ? 1 : -1;
+      for (let i = closestStartIdx; i !== closestEndIdx; i += step) {
+        waypoints.push(currentTrackOsrmPath[i]);
+      }
+      waypoints.push(currentTrackOsrmPath[closestEndIdx]);
+    }
+  }
+
+  if (waypoints.length <= 1) {
+    waypoints = [[startLat, startLng], [newLat, newLng]];
+  } else {
+    waypoints.unshift([startLat, startLng]);
+    waypoints.push([newLat, newLng]);
+  }
+
+  const legDistances = [];
+  let totalPathDist = 0;
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const d = calculateHaversineKm(waypoints[i][0], waypoints[i][1], waypoints[i+1][0], waypoints[i+1][1]);
+    legDistances.push(d);
+    totalPathDist += d;
   }
 
   const startTime = performance.now();
@@ -882,8 +931,27 @@ function animateMarkerTo(marker, newLat, newLng, durationMs = 1400) {
     const progress = Math.min(elapsed / durationMs, 1);
     const ease = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
 
-    const curLat = startLat + deltaLat * ease;
-    const curLng = startLng + deltaLng * ease;
+    if (totalPathDist === 0) {
+      marker.setLatLng([newLat, newLng]);
+      return;
+    }
+
+    const targetCovered = ease * totalPathDist;
+    let accumulated = 0;
+    let curLat = newLat;
+    let curLng = newLng;
+
+    for (let i = 0; i < legDistances.length; i++) {
+      const segDist = legDistances[i];
+      if (accumulated + segDist >= targetCovered || i === legDistances.length - 1) {
+        const segProgress = segDist > 0 ? (targetCovered - accumulated) / segDist : 1;
+        curLat = waypoints[i][0] + (waypoints[i+1][0] - waypoints[i][0]) * Math.min(1, Math.max(0, segProgress));
+        curLng = waypoints[i][1] + (waypoints[i+1][1] - waypoints[i][1]) * Math.min(1, Math.max(0, segProgress));
+        break;
+      }
+      accumulated += segDist;
+    }
+
     marker.setLatLng([curLat, curLng]);
 
     if (progress < 1) {
@@ -895,6 +963,12 @@ function animateMarkerTo(marker, newLat, newLng, durationMs = 1400) {
   }
 
   marker._animFrameId = requestAnimationFrame(step);
+}
+
+let currentTrackOsrmPath = [];
+
+function animateMarkerAlongRoad(marker, newLat, newLng, durationMs = 1500) {
+  animateMarkerTo(marker, newLat, newLng, durationMs);
 }
 
 // Fallback street corridor generator if OSRM is unreachable
@@ -955,6 +1029,7 @@ async function fetchOsrmRoadPolyline(startLat, startLng, destLat, destLng) {
       const data = await res.json();
       if (data && data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates)) {
         const leafletCoords = data.routes[0].geometry.coordinates.map(pt => [pt[1], pt[0]]);
+        currentTrackOsrmPath = leafletCoords;
         if (routePolyline && leafletCoords.length > 0) {
           routePolyline.setLatLngs(leafletCoords);
         }
@@ -975,12 +1050,18 @@ async function fetchOsrmRoadPolyline(startLat, startLng, destLat, destLng) {
   }
 }
 
+let isTrackMapInitialized = false;
+
 function initMap() {
-  const defaultCenter = [initDestLat, initDestLng];
+  const startRiderLat = initRiderLat || initStoreLat;
+  const startRiderLng = initRiderLng || initStoreLng;
+
+  // Requirement 4: Center map on active rider coordinates if available
+  const defaultCenter = initRiderLat ? [initRiderLat, initRiderLng] : (initStoreLat ? [initStoreLat, initStoreLng] : [initDestLat, initDestLng]);
   trackingMap = L.map('map', {
     zoomControl: true,
     attributionControl: false
-  }).setView(defaultCenter, 15);
+  }).setView(defaultCenter, 16);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(trackingMap);
 
@@ -1015,9 +1096,6 @@ function initMap() {
     iconAnchor: [21, 21]
   });
 
-  const startRiderLat = initRiderLat || initStoreLat;
-  const startRiderLng = initRiderLng || initStoreLng;
-
   riderMarker = L.marker([startRiderLat, startRiderLng], { icon: riderIcon, zIndexOffset: 1000 }).addTo(trackingMap);
   riderMarker.bindPopup(`<b><?= htmlspecialchars(addslashes($rider_name)) ?></b><br><small>Live Motorcycle GPS</small>`);
 
@@ -1033,8 +1111,13 @@ function initMap() {
 
   fetchOsrmRoadPolyline(startRiderLat, startRiderLng, initDestLat, initDestLng);
 
-  const bounds = L.latLngBounds([ [startRiderLat, startRiderLng], [initDestLat, initDestLng] ]);
-  trackingMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+  if (initRiderLat) {
+    trackingMap.setView([initRiderLat, initRiderLng], 16);
+  } else {
+    const bounds = L.latLngBounds([ [startRiderLat, startRiderLng], [initDestLat, initDestLng] ]);
+    trackingMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+  }
+  isTrackMapInitialized = true;
 }
 
 // 2-second real-time polling loop
@@ -1054,7 +1137,7 @@ async function pollRiderLocation() {
     const dLat = parseFloat(data.destination_lat || ord.destination_lat || initDestLat);
     const dLng = parseFloat(data.destination_lng || ord.destination_lng || initDestLng);
 
-    // Updates riderMarker smoothly via cubic ease-out animation
+    // Updates riderMarker smoothly via OSRM road animation
     if (riderMarker && !isNaN(rLat) && !isNaN(rLng) && rLat !== 0) {
       animateMarkerTo(riderMarker, rLat, rLng, 1400);
       // Snap route polyline via OSRM roads
@@ -1378,10 +1461,13 @@ async function sendTrackChatMessage(e) {
   }
 }
 
+window.displayedNotificationIds = window.displayedNotificationIds || new Set();
+
 function handleLiveRiderMessage(msg) {
   if (!msg || !msg.message_id) return;
-  if (seenRiderMessageIds.has(msg.message_id)) return;
-  seenRiderMessageIds.add(msg.message_id);
+  const msgKey = 'msg_' + msg.message_id;
+  if (window.displayedNotificationIds.has(msgKey)) return;
+  window.displayedNotificationIds.add(msgKey);
 
   if (msg.message_id > lastSeenRiderMsgId) {
     lastSeenRiderMsgId = msg.message_id;
@@ -1389,7 +1475,10 @@ function handleLiveRiderMessage(msg) {
 
   const senderName = msg.sender_name || 'Alex';
 
-  // a. Instantly show a top floating push banner / toast: "New message from rider: [message text]" without requiring a page refresh.
+  // Dismiss any existing toast / banner (strict single-toast queue)
+  document.querySelectorAll('.live-toast-banner, .cust-toast').forEach(el => el.remove());
+
+  // Show top floating push banner below header
   const banner = document.getElementById('liveRiderMessageBanner');
   const titleEl = document.getElementById('liveMsgBannerTitle');
   const textEl = document.getElementById('liveMsgBannerText');
@@ -1401,13 +1490,13 @@ function handleLiveRiderMessage(msg) {
     if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
     msgBannerTimeout = setTimeout(() => {
       banner.style.display = 'none';
-    }, 8500);
+    }, 7000);
   }
 
-  // b. Play an alert notification sound.
+  // Play an alert notification sound
   playMessageChime();
 
-  // c. Update the unread badge counter in real time and append to chat drawer
+  // Update the unread badge counter in real time and append to chat drawer
   unreadChatCount++;
   updateTrackChatBadges();
   appendMessageToTrackChatDrawer(msg);

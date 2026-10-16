@@ -1060,22 +1060,25 @@ button{cursor:pointer}
 
 /* Customer Live Tracking & Chat Styles */
 .cust-track-btn {
-  background: var(--harvest-sun);
+  background: linear-gradient(135deg, #d97706, #b45309);
   color: #ffffff;
   border: none;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 8px;
+  border-radius: 9px;
+  padding: 6px 12px;
+  font-size: 8.5px;
   font-weight: 700;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 5px;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(216, 143, 42, 0.25);
-  transition: all 0.2s;
+  box-shadow: 0 2px 7px rgba(180, 83, 9, 0.35);
+  transition: all 0.2s ease;
+  letter-spacing: 0.2px;
 }
 .cust-track-btn:hover {
-  filter: brightness(1.08);
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(180, 83, 9, 0.45);
 }
 .cust-track-modal-box {
   width: min(440px, 100%);
@@ -1399,24 +1402,25 @@ button{cursor:pointer}
 }
 .cust-toast {
   position: fixed;
-  top: 20px;
+  top: 64px;
   left: 50%;
-  transform: translateX(-50%) translateY(-20px);
-  background: var(--olive-shadow);
+  transform: translateX(-50%) translateY(-10px);
+  background: #1e293b;
   color: #ffffff;
-  padding: 10px 16px;
+  padding: 10px 18px;
   border-radius: 20px;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 600;
   opacity: 0;
   pointer-events: none;
-  transition: all 0.25s ease;
-  z-index: 3000;
-  box-shadow: 0 4px 16px rgba(75, 83, 32, 0.35);
+  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 9999;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: 90vw;
+  max-width: min(420px, calc(100vw - 32px));
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .cust-toast.show {
   opacity: 1;
@@ -1557,10 +1561,10 @@ button{cursor:pointer}
 /* Live Rider Message Banner */
 .live-rider-msg-banner {
   position: fixed;
-  top: 16px;
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 999998;
+  z-index: 9999;
   width: calc(100% - 32px);
   max-width: 440px;
   background: #1e293b;
@@ -1962,14 +1966,19 @@ button{cursor:pointer}
 </header>
 
 <?php if ($ontheway_count > 0 && !empty($active_tracking_order)): ?>
-<div class="notice-bar" onclick="openCustomerTrackingModal(<?= (int)$active_tracking_order['order_id'] ?>)" style="cursor:pointer;" title="Tap to view real-time delivery GPS">
-  <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with <?= htmlspecialchars($active_tracking_order['order_ref']) ?>!</span>
+<div class="notice-bar" id="dynamicOnTheWayBanner" onclick="openCustomerTrackingModal(<?= (int)$active_tracking_order['order_id'] ?>)" style="cursor:pointer;" title="Tap to view real-time delivery GPS">
+  <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food! (<?= htmlspecialchars($active_tracking_order['order_ref']) ?>)</span>
   <button type="button" onclick="event.stopPropagation(); openCustomerTrackingModal(<?= (int)$active_tracking_order['order_id'] ?>)">View</button>
 </div>
 <?php elseif ($ontheway_count > 0): ?>
-<div class="notice-bar" onclick="showScreen('orders')" style="cursor:pointer;">
-  <span><i class="fa-solid fa-motorcycle"></i> Your rider is on the way with your food!</span>
+<div class="notice-bar" id="dynamicOnTheWayBanner" onclick="showScreen('orders')" style="cursor:pointer;">
+  <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!</span>
   <button type="button" onclick="showScreen('orders')">View</button>
+</div>
+<?php else: ?>
+<div class="notice-bar" id="dynamicOnTheWayBanner" style="display:none; cursor:pointer;" onclick="openCustomerTrackingModal(activeCustomerTrackingOrderId || 0)">
+  <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!</span>
+  <button type="button" onclick="event.stopPropagation(); openCustomerTrackingModal(activeCustomerTrackingOrderId || 0)">View</button>
 </div>
 <?php endif; ?>
 
@@ -2214,18 +2223,21 @@ button{cursor:pointer}
       <div class="row-card" id="noOrders"><div class="row-icon green">🛍️</div><div class="info"><strong>No database orders yet</strong><small>Your completed checkout will appear here and be sent to the Chef.</small></div></div>
     <?php else: foreach ($db_orders as $ord): 
       $raw_status = strtoupper(trim(str_replace([' ', '-'], '_', $ord['status'])));
+      $del_status = strtolower(trim((string)($ord['delivery_status'] ?? '')));
       $norm_status = strtolower($raw_status);
-      $is_ontheway = in_array($raw_status, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED']);
+      $is_ontheway = in_array($raw_status, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'])
+                  || in_array($del_status, ['on_the_way', 'on_delivery', 'picked_up', 'near_customer', 'arrived'])
+                  || (!empty($ord['rider_id']) && !in_array($raw_status, ['DELIVERED', 'COMPLETED', 'SETTLED', 'CANCELLED']));
       $is_delivered = ($raw_status === 'DELIVERED' || $raw_status === 'COMPLETED');
       $is_settled = ($raw_status === 'SETTLED');
       $is_prep = in_array($raw_status, ['PREPARING', 'ACCEPTED']);
       $is_pending = in_array($raw_status, ['PENDING', 'SUBMITTED']);
       $is_cancelled = ($raw_status === 'CANCELLED');
-      $can_cancel = ($is_pending || $is_prep);
+      $can_cancel = ($is_pending || $is_prep) && !$is_ontheway;
       
       $status_label = ucwords(strtolower(str_replace('_', ' ', $raw_status)));
       if ($raw_status === 'READY_FOR_PICKUP') $status_label = 'Ready for Pickup';
-      elseif ($raw_status === 'OUT_FOR_DELIVERY') $status_label = 'Out for Delivery';
+      elseif ($raw_status === 'OUT_FOR_DELIVERY' || $raw_status === 'ON_DELIVERY' || $raw_status === 'ON_THE_WAY') $status_label = 'On Delivery';
     ?>
       <div class="row-card order-row <?= $is_ontheway ? 'on-the-way-card' : '' ?>" data-status="<?= htmlspecialchars($norm_status) ?>" id="order-card-<?= $ord['order_id'] ?>" <?= $is_ontheway ? 'onclick="openCustomerTrackingModal(' . (int)$ord['order_id'] . ')" style="cursor:pointer;" title="Tap to view live delivery tracking map"' : '' ?>>
         <div class="row-icon <?= $is_cancelled ? 'grey' : ($is_ontheway ? 'jolli' : ($is_settled ? 'settled-icon' : 'green')) ?>">
@@ -2265,9 +2277,9 @@ button{cursor:pointer}
             <div style="font-size: 8px; color: var(--harvest-sun); font-weight:600; margin-top:4px;">
               <i class="fa-solid fa-circle-notch fa-spin"></i> Rider is on the way with your order!
             </div>
-            <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
-              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openCustomerTrackingModal(<?= (int)$ord['order_id'] ?>)">
-                <i class="fa-solid fa-location-crosshairs"></i> Live GPS Tracking
+            <div id="track-actions-<?= $ord['order_id'] ?>" style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openCustomerTrackingModal(<?= (int)$ord['order_id'] ?>)" title="Tap to view live delivery map">
+                <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
               </button>
               <button class="confirm-btn" id="confirm-btn-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); confirmOrderReceived(<?= $ord['order_id'] ?>)">
                 <i class="fa-solid fa-box-open"></i> Received
@@ -4783,27 +4795,67 @@ function generateFallbackStreetCorridor(startLat, startLng, destLat, destLng) {
   ];
 }
 
-// Smooth marker interpolation so motorcycle pin glides without abrupt snapping
-function animateMarkerTo(marker, newLat, newLng, durationMs = 1500) {
+// Smooth marker interpolation along OSRM road geometry
+let currentCustOsrmPath = [];
+
+function animateMarkerAlongRoad(marker, newLat, newLng, durationMs = 1500) {
   if (!marker) return;
   const startLatLng = marker.getLatLng();
   const startLat = startLatLng.lat;
   const startLng = startLatLng.lng;
 
-  const deltaLat = newLat - startLat;
-  const deltaLng = newLng - startLng;
-
-  if (Math.abs(deltaLat) < 0.0000001 && Math.abs(deltaLng) < 0.0000001) {
-    return;
-  }
-  if (Math.abs(deltaLat) > 0.05 || Math.abs(deltaLng) > 0.05) {
-    marker.setLatLng([newLat, newLng]);
-    return;
-  }
+  const totalDist = calculateHaversineKm(startLat, startLng, newLat, newLng);
+  if (totalDist < 0.00002) return; // under ~2 meters
 
   if (marker._animFrameId) {
     cancelAnimationFrame(marker._animFrameId);
     marker._animFrameId = null;
+  }
+
+  // Extract path waypoints from OSRM road geometry if available
+  let waypoints = [];
+  if (Array.isArray(currentCustOsrmPath) && currentCustOsrmPath.length > 2) {
+    let closestStartIdx = 0;
+    let minStartDist = Infinity;
+    let closestEndIdx = 0;
+    let minEndDist = Infinity;
+
+    for (let i = 0; i < currentCustOsrmPath.length; i++) {
+      const pt = currentCustOsrmPath[i];
+      const dS = calculateHaversineKm(startLat, startLng, pt[0], pt[1]);
+      if (dS < minStartDist) {
+        minStartDist = dS;
+        closestStartIdx = i;
+      }
+      const dE = calculateHaversineKm(newLat, newLng, pt[0], pt[1]);
+      if (dE < minEndDist) {
+        minEndDist = dE;
+        closestEndIdx = i;
+      }
+    }
+
+    if (minStartDist < 0.25 && minEndDist < 0.25 && closestStartIdx !== closestEndIdx) {
+      const step = closestStartIdx < closestEndIdx ? 1 : -1;
+      for (let i = closestStartIdx; i !== closestEndIdx; i += step) {
+        waypoints.push(currentCustOsrmPath[i]);
+      }
+      waypoints.push(currentCustOsrmPath[closestEndIdx]);
+    }
+  }
+
+  if (waypoints.length <= 1) {
+    waypoints = [[startLat, startLng], [newLat, newLng]];
+  } else {
+    waypoints.unshift([startLat, startLng]);
+    waypoints.push([newLat, newLng]);
+  }
+
+  const legDistances = [];
+  let totalPathDist = 0;
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const d = calculateHaversineKm(waypoints[i][0], waypoints[i][1], waypoints[i+1][0], waypoints[i+1][1]);
+    legDistances.push(d);
+    totalPathDist += d;
   }
 
   const startTime = performance.now();
@@ -4813,8 +4865,27 @@ function animateMarkerTo(marker, newLat, newLng, durationMs = 1500) {
     const progress = Math.min(elapsed / durationMs, 1);
     const ease = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
 
-    const curLat = startLat + deltaLat * ease;
-    const curLng = startLng + deltaLng * ease;
+    if (totalPathDist === 0) {
+      marker.setLatLng([newLat, newLng]);
+      return;
+    }
+
+    const targetCovered = ease * totalPathDist;
+    let accumulated = 0;
+    let curLat = newLat;
+    let curLng = newLng;
+
+    for (let i = 0; i < legDistances.length; i++) {
+      const segDist = legDistances[i];
+      if (accumulated + segDist >= targetCovered || i === legDistances.length - 1) {
+        const segProgress = segDist > 0 ? (targetCovered - accumulated) / segDist : 1;
+        curLat = waypoints[i][0] + (waypoints[i+1][0] - waypoints[i][0]) * Math.min(1, Math.max(0, segProgress));
+        curLng = waypoints[i][1] + (waypoints[i+1][1] - waypoints[i][1]) * Math.min(1, Math.max(0, segProgress));
+        break;
+      }
+      accumulated += segDist;
+    }
+
     marker.setLatLng([curLat, curLng]);
 
     if (progress < 1) {
@@ -4826,6 +4897,10 @@ function animateMarkerTo(marker, newLat, newLng, durationMs = 1500) {
   }
 
   marker._animFrameId = requestAnimationFrame(step);
+}
+
+function animateMarkerTo(marker, newLat, newLng, durationMs = 1500) {
+  animateMarkerAlongRoad(marker, newLat, newLng, durationMs);
 }
 
 // Display exact OSRM driving distance and road ETA matching the rider dashboard
@@ -4884,6 +4959,7 @@ async function fetchCustOsrmRoute(startLat, startLng, destLat, destLng) {
       if (data && data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates)) {
         // OSRM returns [longitude, latitude], convert to Leaflet [latitude, longitude]
         const leafletCoords = data.routes[0].geometry.coordinates.map(pt => [pt[1], pt[0]]);
+        currentCustOsrmPath = leafletCoords;
         if (custTrackingMap) {
           if (!custRoutePolyline) {
             custRoutePolyline = L.polyline(leafletCoords, {
@@ -5011,15 +5087,14 @@ function renderCustomerMap(opts) {
   const validDest = !isNaN(opts.destLat) && !isNaN(opts.destLng) && opts.destLat !== 0;
   const validRider = !isNaN(opts.riderLat) && !isNaN(opts.riderLng) && opts.riderLat !== 0;
 
-  // Fallback center: Ormoc City center
-  const defaultCenter = [11.0050, 124.6075];
+  // Requirement 4: Ensure map initializes and centers on rider's active coordinates
   const center = validRider ? [opts.riderLat, opts.riderLng] : (validDest ? [opts.destLat, opts.destLng] : (validStore ? [opts.storeLat, opts.storeLng] : defaultCenter));
 
   if (!custTrackingMap) {
     custTrackingMap = L.map('cust-tracking-map', {
       zoomControl: true,
       attributionControl: false
-    }).setView(center, 15);
+    }).setView(center, 16);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19
@@ -5074,14 +5149,13 @@ function renderCustomerMap(opts) {
     }
   }
 
-  // c. Rider Motorcycle Pin (smooth gliding interpolation)
+  // c. Rider Motorcycle Pin (smooth animation along OSRM road geometry)
   if (validRider) {
     if (!custRiderMarker) {
       custRiderMarker = L.marker([opts.riderLat, opts.riderLng], { icon: riderIcon, zIndexOffset: 1000 }).addTo(custTrackingMap);
       custRiderMarker.bindPopup(`<b>${escapeCustHtml(opts.riderName || 'Rider')}</b><br><small>Live Motorcycle GPS</small>`);
     } else {
-      // Smoothly animate marker without abrupt snapping
-      animateMarkerTo(custRiderMarker, opts.riderLat, opts.riderLng, 1400);
+      animateMarkerAlongRoad(custRiderMarker, opts.riderLat, opts.riderLng, 1400);
     }
   }
 
@@ -5090,21 +5164,23 @@ function renderCustomerMap(opts) {
   const polyEnd = validDest ? [opts.destLat, opts.destLng] : null;
 
   if (polyStart && polyEnd) {
-    // Snap route polyline strictly to OSRM real streets
     fetchCustOsrmRoute(polyStart[0], polyStart[1], polyEnd[0], polyEnd[1]);
   }
 
   if (opts.isInitial) {
     setTimeout(() => {
       custTrackingMap.invalidateSize();
-      const pointsToFit = [];
-      if (validStore) pointsToFit.push([opts.storeLat, opts.storeLng]);
-      if (validDest) pointsToFit.push([opts.destLat, opts.destLng]);
-      if (validRider) pointsToFit.push([opts.riderLat, opts.riderLng]);
-      if (pointsToFit.length >= 2) {
-        custTrackingMap.fitBounds(pointsToFit, { padding: [40, 40], maxZoom: 16 });
-      } else if (pointsToFit.length === 1) {
-        custTrackingMap.setView(pointsToFit[0], 15);
+      if (validRider) {
+        custTrackingMap.setView([opts.riderLat, opts.riderLng], 16);
+      } else {
+        const pointsToFit = [];
+        if (validStore) pointsToFit.push([opts.storeLat, opts.storeLng]);
+        if (validDest) pointsToFit.push([opts.destLat, opts.destLng]);
+        if (pointsToFit.length >= 2) {
+          custTrackingMap.fitBounds(pointsToFit, { padding: [40, 40], maxZoom: 16 });
+        } else if (pointsToFit.length === 1) {
+          custTrackingMap.setView(pointsToFit[0], 15);
+        }
       }
     }, 150);
   }
@@ -5243,17 +5319,45 @@ async function submitCustomerMessage(orderId, text) {
   }
 }
 
-function showToastCustomer(msg) {
-  let toast = document.getElementById('customerLiveToast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'customerLiveToast';
-    toast.className = 'cust-toast';
-    document.body.appendChild(toast);
+// Strict Single-Toast & Notification De-duplication Manager
+window.displayedNotificationIds = new Set();
+let _custToastTimeout = null;
+
+function showToastCustomer(msg, uniqueId = null) {
+  if (!msg) return;
+
+  // Root cause fix: Prevent double listeners or polling duplicates
+  // Assign each incoming message or alert a unique identifier
+  const notifId = uniqueId || ('toast_' + String(msg).replace(/\s+/g, '_').substring(0, 32));
+  if (window.displayedNotificationIds.has(notifId)) {
+    return;
   }
+  window.displayedNotificationIds.add(notifId);
+  setTimeout(() => window.displayedNotificationIds.delete(notifId), 15000);
+
+  // Implement strict single-toast queue: dismiss or remove any existing banner
+  document.querySelectorAll('.live-toast-banner, .cust-toast').forEach(el => el.remove());
+  const riderBanner = document.getElementById('liveRiderMessageBanner');
+  if (riderBanner) riderBanner.style.display = 'none';
+
+  if (_custToastTimeout) clearTimeout(_custToastTimeout);
+
+  const toast = document.createElement('div');
+  toast.id = 'customerLiveToast';
+  toast.className = 'cust-toast live-toast-banner';
   toast.innerHTML = `<i class="fa-solid fa-bell"></i> <span>${escapeCustHtml(msg)}</span>`;
+  document.body.appendChild(toast);
+
+  // Trigger reflow for smooth animation
+  void toast.offsetWidth;
   toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 4000);
+
+  _custToastTimeout = setTimeout(() => {
+    if (toast && toast.parentNode) {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, 4500);
 }
 
 function escapeCustHtml(str) {
@@ -5488,17 +5592,20 @@ function appendMessageToChatDrawer(msg) {
 
 function handleLiveRiderMessage(msg) {
   if (!msg || !msg.message_id) return;
-  if (seenRiderMessageIds.has(msg.message_id)) return;
-  seenRiderMessageIds.add(msg.message_id);
+  const msgKey = 'msg_' + msg.message_id;
+  if (window.displayedNotificationIds.has(msgKey)) return;
+  window.displayedNotificationIds.add(msgKey);
 
   if (msg.message_id > lastSeenRiderMsgId) {
     lastSeenRiderMsgId = msg.message_id;
   }
 
   const senderName = msg.sender_name || currentTrackingRiderName || 'Alex';
-  const pushText = `New message from rider: ${msg.message_text}`;
 
-  // a. Instantly show a top floating push banner / toast: "New message from rider: [message text]" without requiring a page refresh.
+  // Dismiss any existing toast / banner (strict single-toast queue)
+  document.querySelectorAll('.live-toast-banner, .cust-toast').forEach(el => el.remove());
+
+  // Show top floating push banner below header
   const banner = document.getElementById('liveRiderMessageBanner');
   const titleEl = document.getElementById('liveMsgBannerTitle');
   const textEl = document.getElementById('liveMsgBannerText');
@@ -5510,14 +5617,13 @@ function handleLiveRiderMessage(msg) {
     if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
     msgBannerTimeout = setTimeout(() => {
       banner.style.display = 'none';
-    }, 8500);
+    }, 7000);
   }
-  showToastCustomer(pushText);
 
-  // b. Play an alert notification sound.
+  // Play an alert notification sound
   playMessageChime();
 
-  // c. Update the unread badge counter in real time.
+  // Update the unread badge counter in real time
   unreadChatCount++;
   updateChatBadges();
   appendMessageToChatDrawer(msg);
@@ -5602,10 +5708,11 @@ function updateOrderStatusToArrived(orderId) {
 }
 
 function handleRiderArrivedEvent(data) {
-  if (hasShownArrivedAlert) return;
-  hasShownArrivedAlert = true;
-
   const oId = data.order_id || activeCustomerTrackingOrderId || 0;
+  const arrivedKey = 'arrived_' + oId;
+  if (window.displayedNotificationIds.has(arrivedKey)) return;
+  window.displayedNotificationIds.add(arrivedKey);
+
   const rName = data.rider_name || currentTrackingRiderName || 'Alex';
 
   // Trigger persistent looping arrival alarm (MUST ring until action button is clicked)
@@ -5616,7 +5723,7 @@ function handleRiderArrivedEvent(data) {
     if (modal) modal.style.display = 'flex';
   }
 
-  showToastCustomer(`📍 Your rider has arrived! Please choose a response.`);
+  showToastCustomer(`📍 Your rider has arrived! Please choose a response.`, arrivedKey);
   updateOrderStatusToArrived(oId);
 }
 
@@ -5661,6 +5768,81 @@ async function pollCustomerCommunicationUpdates() {
       } else {
         handleRiderArrivedEvent(data);
       }
+    }
+
+    // Real-Time Sync: Update Order Status & Card Badges on Status Transition
+    const isDelivering = (sNorm === 'ON_DELIVERY' || sNorm === 'OUT_FOR_DELIVERY' || sNorm === 'ON_THE_WAY' || dNorm === 'on_the_way' || dNorm === 'on_delivery' || dNorm === 'picked_up');
+    if (data.order_id && isDelivering) {
+      const oId = data.order_id;
+      const tag = document.getElementById(`status-tag-${oId}`);
+      if (tag && tag.textContent.trim().toLowerCase() !== 'on delivery' && tag.textContent.trim().toLowerCase() !== 'arrived') {
+        tag.className = 'status-badge status-out_for_delivery';
+        tag.textContent = 'On Delivery';
+      }
+
+      const card = document.getElementById(`order-card-${oId}`);
+      if (card) {
+        card.setAttribute('data-status', 'out_for_delivery');
+        card.classList.add('on-the-way-card');
+        card.style.cursor = 'pointer';
+        card.onclick = () => openCustomerTrackingModal(oId);
+        card.setAttribute('title', 'Tap to view live delivery tracking map');
+
+        const rowIcon = card.querySelector('.row-icon');
+        if (rowIcon && !rowIcon.textContent.includes('📍') && !rowIcon.textContent.includes('🛵')) {
+          rowIcon.className = 'row-icon jolli';
+          rowIcon.textContent = '🛵';
+        }
+
+        // Hide cancel button if order has transitioned to on_delivery
+        const cancelWrap = document.getElementById(`cancel-wrap-${oId}`);
+        if (cancelWrap) cancelWrap.style.display = 'none';
+
+        // Ensure the [ 📍 Live Track Rider ] button exists on the card
+        let trackActions = document.getElementById(`track-actions-${oId}`);
+        if (!trackActions) {
+          const infoDiv = card.querySelector('.info');
+          if (infoDiv) {
+            trackActions = document.createElement('div');
+            trackActions.id = `track-actions-${oId}`;
+            trackActions.style.cssText = 'display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;';
+            trackActions.innerHTML = `
+              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openCustomerTrackingModal(${oId})" title="Tap to view live delivery map">
+                <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
+              </button>
+              <button class="confirm-btn" id="confirm-btn-${oId}" onclick="event.stopPropagation(); confirmOrderReceived(${oId})">
+                <i class="fa-solid fa-box-open"></i> Received
+              </button>
+            `;
+            infoDiv.appendChild(trackActions);
+          }
+        } else {
+          trackActions.style.display = 'flex';
+        }
+      }
+
+      // Restore / display persistent top banner
+      const topBanner = document.getElementById('dynamicOnTheWayBanner');
+      if (topBanner) {
+        topBanner.style.display = 'flex';
+        topBanner.onclick = () => openCustomerTrackingModal(oId);
+        const span = topBanner.querySelector('span');
+        if (span) {
+          const refText = data.order_ref ? ` (${escapeCustHtml(data.order_ref)})` : '';
+          span.innerHTML = `<i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!${refText}`;
+        }
+      }
+    }
+
+    if (data.order_id && (sNorm === 'DELIVERED' || sNorm === 'COMPLETED' || dNorm === 'delivered')) {
+      const oId = data.order_id;
+      const tag = document.getElementById(`status-tag-${oId}`);
+      if (tag) {
+        tag.className = 'status-badge status-delivered';
+        tag.textContent = 'Delivered';
+      }
+      const topBanner = document.getElementById('dynamicOnTheWayBanner');
+      if (topBanner) topBanner.style.display = 'none';
     }
   } catch (e) {
     console.warn('Customer global poll error:', e);
