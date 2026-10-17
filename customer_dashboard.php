@@ -506,9 +506,9 @@ button{cursor:pointer}
   box-sizing: border-box !important;
 }
 
-#orders.screen {
+#orders.screen, .screen {
   padding-top: 14px !important;
-  padding-bottom: 30px !important;
+  padding-bottom: 90px !important;
 }
 
 @media(min-width:600px){
@@ -586,7 +586,7 @@ button{cursor:pointer}
 .notice-bar span { display: flex; align-items: center; gap: 6px; }
 .notice-bar button { background: var(--gold); border: 0; color: #fff; padding: 4px 10px; border-radius: 8px; font-weight:700; font-size: 9px; }
 
-.screen{display:none;padding:14px 16px 30px;flex:1}
+.screen{display:none;padding:14px 16px 90px;flex:1}
 .screen.active{display:block}
 .greeting{margin:4px 0 12px}
 .greeting small{color:var(--muted);font-size:11px}
@@ -632,15 +632,15 @@ button{cursor:pointer}
 .row-card .chev{color:#a4a78f;font-size:11px}
 
 /* Compact & Proportional Order Cards for Mobile */
-.row-card.order-row {
+.order-card, .row-card.order-row, .order-row, .card.order-card {
   display: flex !important;
-  gap: 12px !important;
+  gap: 10px !important;
   align-items: flex-start !important;
   background: #ffffff !important;
   border: 1px solid #EBE4D1 !important;
   border-radius: 16px !important;
-  padding: 12px 14px !important;
-  margin-bottom: 9px !important;
+  padding: 10px 14px !important;
+  margin-bottom: 10px !important;
   cursor: pointer;
   position: relative;
   transition: all .2s ease;
@@ -650,17 +650,18 @@ button{cursor:pointer}
   box-sizing: border-box !important;
 }
 
-.row-card.order-row:hover {
+.order-card:hover, .row-card.order-row:hover {
   border-color: var(--harvest-sun) !important;
   box-shadow: 0 6px 16px rgba(75,83,32,.08) !important;
 }
 
-.row-card.order-row .row-icon {
-  width: 42px !important;
-  height: 42px !important;
-  min-width: 42px !important;
-  min-height: 42px !important;
-  border-radius: 12px !important;
+/* Delivery vehicle icon container: compact to 36px x 36px with a 20px icon */
+.row-card.order-row .row-icon, .order-card .row-icon, .order-card .order-icon {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  border-radius: 10px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -675,27 +676,46 @@ button{cursor:pointer}
   margin-top: 2px;
 }
 
-.row-card.order-row .info {
+.row-card.order-row .row-icon img, .order-card .order-icon img {
+  width: 20px !important;
+  height: 20px !important;
+  object-fit: contain;
+}
+
+.row-card.order-row .info, .order-card .info {
   flex: 1 !important;
   min-width: 0 !important;
   width: 100% !important;
 }
 
-.row-card.order-row strong, .row-card.order-row .order-ref {
-  font-size: 16px !important;
-  font-size: 1.05rem !important;
+/* Order ID #FD-...: font size 15px, font-weight 700 */
+.row-card.order-row strong, .row-card.order-row .order-ref, .order-card .order-ref, .order-ref {
+  font-size: 15px !important;
   font-weight: 700 !important;
   color: var(--olive-dark) !important;
   display: block !important;
   line-height: 1.25 !important;
-  margin-bottom: 3px !important;
+  margin-bottom: 2px !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
 }
 
-.row-card.order-row small, .row-card.order-row .order-meta {
-  font-size: 12.5px !important;
+/* Store name & items: font size 13px, line-height 1.3 */
+.row-card.order-row .order-store-items, .row-card.order-row .order-store, .order-card .order-store, .order-store {
+  font-size: 13px !important;
+  line-height: 1.3 !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
+  display: block !important;
+  margin-top: 2px !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+}
+
+/* Date, price & address line: font size 12px, subtle text */
+.row-card.order-row small, .row-card.order-row .order-meta, .order-card .order-meta, .order-meta {
+  font-size: 12px !important;
   color: #64748b !important;
   display: block !important;
   margin-top: 2px !important;
@@ -709,10 +729,10 @@ button{cursor:pointer}
   display: inline-flex !important;
   align-items: center !important;
   gap: 4px !important;
-  padding: 6px 12px !important;
+  padding: 4px 10px !important;
   border-radius: 8px !important;
   font-size: 12px !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
   text-transform: capitalize;
 }
 
@@ -730,25 +750,26 @@ button{cursor:pointer}
 .settled-icon { background: var(--olive-shadow) !important; color: white !important; }
 
 /* Compact Action Buttons - Wrap in flex with gap: 6px */
-.order-actions-wrap, #orders [id^="track-actions-"] {
+.order-actions-wrap, #orders [id^="track-actions-"], .card-actions {
   display: flex !important;
   align-items: center !important;
   gap: 6px !important;
   flex-wrap: wrap !important;
-  margin-top: 8px !important;
+  margin-top: 6px !important;
 }
 
+/* Buttons ("Live Track Rider", "Received"): padding: 6px 12px; font-size: 12px; border-radius: 8px; font-weight: 600; */
 .confirm-btn, .cust-track-btn, .btn-cancel-order {
   padding: 6px 12px !important;
   font-size: 12px !important;
   border-radius: 8px !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
   display: inline-flex !important;
   align-items: center !important;
   gap: 5px !important;
   cursor: pointer;
   transition: all 0.2s ease;
-  line-height: 1.2;
+  line-height: 1.2 !important;
 }
 
 .confirm-btn {
@@ -1115,8 +1136,8 @@ button{cursor:pointer}
   cursor: pointer;
 }
 
-.chips{display:flex;gap:7px;overflow-x:auto;margin:10px 0 14px;padding-bottom:4px;-webkit-overflow-scrolling:touch}.chips::-webkit-scrollbar{display:none}
-.chip{border:1px solid var(--line);background:#fff;border-radius:18px;padding:7px 13px;font-size:8.5px;font-weight:600;color:var(--olive-shadow);white-space:nowrap;cursor:pointer;transition:all .2s ease;outline:none;user-select:none}
+.chips{display:flex;gap:6px;overflow-x:auto;margin:8px 0 12px;padding-bottom:4px;-webkit-overflow-scrolling:touch}.chips::-webkit-scrollbar{display:none}
+.chip{border:1px solid var(--line);background:#fff;border-radius:18px;padding:4px 10px !important;font-size:12px !important;font-weight:600;color:var(--olive-shadow);white-space:nowrap;cursor:pointer;transition:all .2s ease;outline:none;user-select:none;line-height:1.2 !important}
 .chip:hover{border-color:var(--harvest-sun);color:var(--harvest-sun)}
 .chip.active{background:#4B5320 !important;color:#fff !important;border-color:#4B5320 !important;box-shadow:0 3px 10px rgba(75,83,32,.22)}
 .no-dishes-state{grid-column:1 / -1;text-align:center;padding:36px 16px;background:#FAF6EE;border:1px dashed var(--line);border-radius:16px;color:var(--muted);font-size:10px;margin:10px 0 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;transition:opacity .2s ease}
@@ -1241,18 +1262,53 @@ button{cursor:pointer}
 .profile{background:white;border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;gap:11px;align-items:center}.profile-pic{width:52px;height:52px;border-radius:50%;background:#eee5c8;display:grid;place-items:center;font-size:22px}.profile strong{font-size:12px}.profile small{font-size:8px;color:var(--muted);display:block}
 .menu{margin-top:10px;border:1px solid var(--line);border-radius:15px;background:#fff;overflow:hidden}.menu a{display:flex;justify-content:space-between;align-items:center;padding:13px;border-bottom:1px solid #f0eadb;text-decoration:none;color:#303429;font-size:9px}.menu a:last-child{border:0}.menu i{color:var(--olive);margin-right:8px}
 
-.bottom{
-  position:sticky;
-  bottom:0;
-  width:100%;
-  height:65px;
-  background:rgba(255,255,255,.98);
-  border-top:1px solid var(--line);
-  display:grid;
-  grid-template-columns:repeat(5,1fr);
-  z-index:100;
-  margin-top:auto;
+/* Sticky / Fixed Bottom Navigation Bar - Never Disappear on Scroll */
+.bottom, .bottom-nav, .mobile-navbar, nav.fixed-bottom {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  height: 65px !important;
+  z-index: 9999 !important;
+  background: #ffffff !important;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.08) !important;
+  padding-bottom: env(safe-area-inset-bottom, 12px) !important;
+  display: grid !important;
+  grid-template-columns: repeat(5, 1fr) !important;
+  border-top: 1px solid var(--line) !important;
+  margin: 0 !important;
 }
+
+@media (min-width: 600px) {
+  .bottom, .bottom-nav, .mobile-navbar, nav.fixed-bottom {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    max-width: 440px !important;
+    border-bottom-left-radius: 26px !important;
+    border-bottom-right-radius: 26px !important;
+  }
+}
+
+@media (max-width: 599px) {
+  .bottom, .bottom-nav, .mobile-navbar, nav.fixed-bottom {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    transform: none !important;
+    border-radius: 0 !important;
+  }
+}
+
+/* Floating Gmail Inbox Widget - floats cleanly right above fixed navbar */
+.gmail-widget, #gmailInboxWidget, .fd-gmail-floating-btn, #fdGmailFloatingBtn {
+  bottom: calc(75px + env(safe-area-inset-bottom, 10px)) !important;
+  right: 16px !important;
+  z-index: 10000 !important;
+}
+
 .nav{border:0;background:transparent;color:#72776a;font-size:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;position:relative}.nav i{font-size:15px}.nav.active{color:var(--olive-dark);font-weight:700}.badge{position:absolute;background:#e7352d;color:white;font-size:7px;border-radius:10px;padding:2px 5px;top:4px;right:20px}
 
 .toast{position:fixed;left:50%;bottom:82px;transform:translateX(-50%) translateY(20px);background:var(--olive-dark);color:white;padding:9px 13px;border-radius:20px;font-size:9px;opacity:0;pointer-events:none;transition:.25s;z-index:200;white-space:nowrap}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -2482,10 +2538,10 @@ button{cursor:pointer}
         </div>
         <div class="info">
           <strong class="order-ref"><?= htmlspecialchars($clean_card_ref) ?></strong>
-          <small class="order-meta"><?= htmlspecialchars($ord['store_name']) ?> • <?= htmlspecialchars($ord['items_summary']) ?></small>
-          <small class="order-meta"><?= htmlspecialchars(date('M d, Y • g:i A', strtotime($ord['created_at']))) ?> • ₱<?= number_format((float)$ord['total_amount'], 2) ?></small>
+          <small class="order-store-items"><?= htmlspecialchars($ord['store_name']) ?> • <?= htmlspecialchars($ord['items_summary']) ?></small>
+          <small class="order-meta order-date-price"><?= htmlspecialchars(date('M d, Y • g:i A', strtotime($ord['created_at']))) ?> • ₱<?= number_format((float)$ord['total_amount'], 2) ?></small>
           <?php if (!empty($ord['delivery_address'])): ?>
-            <small class="order-meta order-address" style="color: #64748b; font-weight: 500; font-size: 12.5px; margin-top: 3px; white-space: normal; line-height: 1.35;"><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> <?= htmlspecialchars($ord['delivery_address']) ?></small>
+            <small class="order-meta order-address" style="color: #64748b; font-weight: 500; font-size: 12px; margin-top: 2px; white-space: normal; line-height: 1.35;"><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> <?= htmlspecialchars($ord['delivery_address']) ?></small>
           <?php endif; ?>
           
           <div style="margin-top: 8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -3158,7 +3214,7 @@ button{cursor:pointer}
   </div>
 </div>
 
-<nav class="bottom">
+<nav class="bottom bottom-nav mobile-navbar fixed-bottom">
   <button class="nav active" data-screen="home" onclick="showScreen('home')"><i class="fa-solid fa-house"></i><span>Home</span></button>
   <button class="nav" data-screen="stores" onclick="showScreen('stores')"><i class="fa-solid fa-store"></i><span>Stores</span></button>
   <button class="nav" data-screen="search" onclick="showScreen('search')"><i class="fa-solid fa-magnifying-glass"></i><span>Search</span></button>

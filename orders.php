@@ -284,7 +284,8 @@ if ($isApi) {
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 16px !important;
-      padding: 12px 14px !important;
+      padding: 10px 14px !important;
+      margin-bottom: 10px !important;
       box-shadow: 0 2px 8px rgba(0,0,0,0.03);
       transition: box-shadow 0.2s;
       width: 100% !important;
@@ -304,28 +305,26 @@ if ($isApi) {
     }
     .order-ref {
       font-weight: 700 !important;
-      font-size: 1.05rem !important;
-      font-size: 16px !important;
+      font-size: 15px !important;
       color: var(--olive-dark);
       line-height: 1.25 !important;
     }
     .order-store {
-      font-size: 12.5px !important;
+      font-size: 13px !important;
       font-weight: 600;
+      color: #334155 !important;
+      margin-top: 2px;
+      line-height: 1.3 !important;
+    }
+    .order-meta {
+      font-size: 12px !important;
       color: #64748b !important;
       margin-top: 2px;
       line-height: 1.35;
     }
-    .order-meta {
-      font-size: 12.5px !important;
-      color: #64748b !important;
-      margin-top: 3px;
-      line-height: 1.35;
-    }
     .order-amount {
       font-weight: 700 !important;
-      font-size: 1.05rem !important;
-      font-size: 16px !important;
+      font-size: 15px !important;
       color: var(--olive-dark);
       white-space: nowrap;
     }
@@ -334,17 +333,17 @@ if ($isApi) {
       align-items: center;
       gap: 6px;
       flex-wrap: wrap;
-      margin: 8px 0;
+      margin: 6px 0;
     }
     /* Status Badges - Compact & Clean */
     .status-badge {
       display: inline-flex !important;
       align-items: center !important;
       gap: 4px !important;
-      padding: 6px 12px !important;
+      padding: 4px 10px !important;
       border-radius: 8px !important;
       font-size: 12px !important;
-      font-weight: 700 !important;
+      font-weight: 600 !important;
       text-transform: capitalize;
     }
     .status-pending { background: #FEF3C7; color: #D97706; border: 1px solid #F59E0B; }
@@ -369,21 +368,26 @@ if ($isApi) {
       align-items: center !important;
       gap: 6px !important;
       flex-wrap: wrap !important;
-      margin-top: 8px !important;
-      padding-top: 8px !important;
+      margin-top: 6px !important;
+      padding-top: 6px !important;
       border-top: 1px solid #f1f5f9;
     }
     .btn-cancel-order, .cust-track-btn, .confirm-btn {
       padding: 6px 12px !important;
       font-size: 12px !important;
       border-radius: 8px !important;
-      font-weight: 700 !important;
+      font-weight: 600 !important;
       display: inline-flex !important;
       align-items: center !important;
       gap: 5px !important;
       cursor: pointer;
-      line-height: 1.2;
+      line-height: 1.2 !important;
       transition: all 0.2s;
+    }
+    .gmail-widget, #gmailInboxWidget, .fd-gmail-floating-btn, #fdGmailFloatingBtn {
+      bottom: calc(75px + env(safe-area-inset-bottom, 10px)) !important;
+      right: 16px !important;
+      z-index: 10000 !important;
     }
     .btn-cancel-order {
       background: #fee2e2;

@@ -344,6 +344,25 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     }
     .about-text-box p { font-size: 0.72rem; color: #69704c; line-height: 1.2; }
 
+    /* Sticky Bottom Navigation Bar (Never Disappear on Scroll) */
+    .bottom-nav, .mobile-navbar, nav.fixed-bottom {
+      position: fixed !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      width: 100% !important;
+      z-index: 9999 !important;
+      background: #ffffff !important;
+      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.08) !important;
+      padding-bottom: env(safe-area-inset-bottom, 12px) !important;
+    }
+
+    .gmail-widget, #gmailInboxWidget, .fd-gmail-floating-btn, #fdGmailFloatingBtn {
+      bottom: calc(75px + env(safe-area-inset-bottom, 10px)) !important;
+      right: 16px !important;
+      z-index: 10000 !important;
+    }
+
     .mobile-tab-nav {
       position: relative;
       display: flex;

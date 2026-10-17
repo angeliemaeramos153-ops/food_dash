@@ -164,11 +164,11 @@ if (isset($_SESSION['user']['email'])) {
 <!-- GMAIL SIMULATOR STYLES -->
 <style>
   /* FLOATING TRIGGER BUTTON */
-  .fd-gmail-floating-btn {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    z-index: 9990;
+  .fd-gmail-floating-btn, .gmail-widget, #gmailInboxWidget, #fdGmailFloatingBtn {
+    position: fixed !important;
+    bottom: calc(75px + env(safe-area-inset-bottom, 10px)) !important;
+    right: 16px !important;
+    z-index: 10000 !important;
     display: inline-flex;
     align-items: center;
     gap: 10px;
@@ -605,9 +605,14 @@ if (isset($_SESSION['user']['email'])) {
   .fd-gm-email-body-content {
     line-height: 1.5;
   }
-
   @media (max-width: 768px) {
-    .fd-gmail-floating-btn { bottom: 84px; right: 16px; padding: 8px 12px; font-size: 12px; }
+    .fd-gmail-floating-btn, .gmail-widget, #gmailInboxWidget, #fdGmailFloatingBtn {
+      bottom: calc(75px + env(safe-area-inset-bottom, 10px)) !important;
+      right: 16px !important;
+      z-index: 10000 !important;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
     .fd-gm-mini-sidebar { display: none; }
     .fd-gm-col-sender { width: 110px; }
     .fd-gmail-modal-window { height: 95vh; max-height: none; border-radius: 12px; }
