@@ -858,8 +858,9 @@ main{padding:16px;flex:1;overflow-x:hidden}
 .bottom a.active { color: var(--olive-shadow); font-weight: 700; }
 .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:18px;z-index:1000}
 .modal.show{display:flex}
-#clearDeliveryModal{z-index:99999 !important}
+#riderConfirmModal, #clearDeliveryModal{z-index:99999 !important}
 #riderCompletedOrdersModal{z-index:99998 !important}
+#gpsNoticeBanner, .gps-notice-banner, .gps-warning-box, .gps-floating-toast{display:none !important}
 .btn-hdr-history{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);color:#ffffff;padding:6px 12px;border-radius:20px;font-size:0.72rem;font-weight:700;cursor:pointer;backdrop-filter:blur(4px);transition:all 0.2s ease}
 .btn-hdr-history:hover{background:rgba(255,255,255,0.28);transform:translateY(-1px)}
 .btn-toolbar-completed:hover{background:#f8f5eb !important;border-color:var(--olive-shadow) !important;transform:translateY(-1px)}
@@ -1532,7 +1533,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
 .pm-badge-maya { background: #0f172a !important; border: 1px solid #05de82 !important; color: #05de82 !important; }
 .pm-badge-gotyme { background: #1e1b4b !important; border: 1px solid #818cf8 !important; color: #38bdf8 !important; }
 .pm-badge-apple { background: #000000 !important; border: 1px solid #374151 !important; color: #ffffff !important; }
-</style></head><body><div class="app"><header class="hero"><div class="topline"><div class="brand"><img src="logo.jpg" alt="Food Dash"><b>FOOD DASH</b></div><div style="display:flex;align-items:center;gap:8px;"><button type="button" class="btn-hdr-history" id="btnOpenCompletedOrders" data-action="open-completed" title="View Completed Deliveries"><i class="fa-solid fa-clipboard-check"></i> <span>Completed Orders</span></button><button class="bell" onclick="openNotifications()"><i class="fa-regular fa-bell"></i><span id="noteBadge" class="bell-badge">0</span></button></div></div><div class="hello"><small>Rider Portal</small><h1>Ready to dash, <?=htmlspecialchars($user_name)?>?</h1><small>Pick up orders and keep customers updated.</small><div class="status"><span class="dot <?=$r && $r['status']==='on_delivery'?'live':''?>"></span><?=$r && $r['status']==='on_delivery'?'On Delivery':'Waiting for Delivery'?></div></div></header><main><?php if($msg):?><div class="alert">✓ <?=htmlspecialchars($msg)?></div><?php endif;?><?php if($error):?><div class="alert err">⚠ <?=htmlspecialchars($error)?></div><?php endif;?><div class="stats"><div class="stat"><i class="fa-solid fa-motorcycle"></i><strong><?=$total_riders?></strong><span>Total Riders</span></div><div class="stat"><i class="fa-solid fa-clock"></i><strong><?=$waiting?></strong><span>Waiting</span></div><div class="stat"><i class="fa-solid fa-route"></i><strong><?=$on_delivery?></strong><span>On Delivery</span></div></div><div class="rider-quick-toolbar" style="margin: 0 0 12px; display: flex; gap: 8px;"><button type="button" class="btn-toolbar-completed" id="btnOpenCompletedOrdersToolbar" data-action="open-completed" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #ffffff; border: 1.5px solid var(--sandstone); color: var(--olive-shadow); padding: 9px 14px; border-radius: 12px; font-weight: 700; font-size: 0.78rem; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.04); transition: all 0.2s ease;"><i class="fa-solid fa-clipboard-check" style="color: #16a34a; font-size: 0.95rem;"></i><span>📋 Completed Orders (<?= count($completed_orders) ?>)</span></button></div>
+</style></head><body><div class="app"><header class="hero"><div class="topline"><div class="brand"><img src="logo.jpg" alt="Food Dash"><b>FOOD DASH</b></div><div style="display:flex;align-items:center;gap:8px;"><button type="button" class="btn-hdr-history" id="btnOpenCompletedOrders" data-action="open-completed" title="View Completed Deliveries"><i class="fa-solid fa-clipboard-check"></i> <span>📋 Completed Orders</span></button><button class="bell" onclick="openNotifications()"><i class="fa-regular fa-bell"></i><span id="noteBadge" class="bell-badge">0</span></button></div></div><div class="hello"><small>Rider Portal</small><h1>Ready to dash, <?=htmlspecialchars($user_name)?>?</h1><small>Pick up orders and keep customers updated.</small><div class="status"><span class="dot <?=$r && $r['status']==='on_delivery'?'live':''?>"></span><?=$r && $r['status']==='on_delivery'?'On Delivery':'Waiting for Delivery'?></div></div></header><main><?php if($msg):?><div class="alert">✓ <?=htmlspecialchars($msg)?></div><?php endif;?><?php if($error):?><div class="alert err">⚠ <?=htmlspecialchars($error)?></div><?php endif;?><div class="stats"><div class="stat"><i class="fa-solid fa-motorcycle"></i><strong><?=$total_riders?></strong><span>Total Riders</span></div><div class="stat"><i class="fa-solid fa-clock"></i><strong><?=$waiting?></strong><span>Waiting</span></div><div class="stat"><i class="fa-solid fa-route"></i><strong><?=$on_delivery?></strong><span>On Delivery</span></div></div><div class="rider-quick-toolbar" style="margin: 0 0 12px; display: flex; gap: 8px;"><button type="button" class="btn-toolbar-completed" id="btnOpenCompletedOrdersToolbar" data-action="open-completed" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #ffffff; border: 1.5px solid var(--sandstone); color: var(--olive-shadow); padding: 9px 14px; border-radius: 12px; font-weight: 700; font-size: 0.78rem; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.04); transition: all 0.2s ease;"><i class="fa-solid fa-clipboard-check" style="color: #16a34a; font-size: 0.95rem;"></i><span>📋 Completed Orders (<?= count($completed_orders) ?>)</span></button></div>
 <section class="section" id="delivery"><div class="section-title"><h2><i class="fa-solid fa-box"></i> My Delivery</h2></div><div class="card"><?php if($my_orders): foreach($my_orders as $o): 
   $ord_st = strtoupper($o['status'] ?? '');
   $norm_st = strtolower(trim($o['status'] ?? ''));
@@ -1549,7 +1550,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $c_dial = preg_replace('/[^\+0-9]/', '', $c_phone_val);
   if (empty($c_dial)) $c_dial = '+639171234567';
   $c_name_val = !empty($o['customer_name']) ? trim($o['customer_name']) : 'Customer';
-?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div id="delivery-map" style="height: 320px; width: 100%; border-radius: 12px; margin-top: 12px;"></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div class="actions" id="riderOrderActions_<?=(int)$o['order_id']?>" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_delivered_state): ?><div class="delivery-complete-summary" id="deliveryCompleteSummary_<?=(int)$o['order_id']?>" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;"><div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;"><i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i><span>Delivery Handover Completed!</span></div><div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">Delivery handover is confirmed. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:</div><button type="button" class="btn success full btn-finish-clear" data-action="finish-clear" data-order-id="<?=(int)$o['order_id']?>" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(<?=(int)$o['order_id']?>)"><i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order</button></div><?php else: ?><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'near_customer'): ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'arrived'): ?><div style="background:#ecfdf5; border:1.5px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:10px; font-size:0.82rem; font-weight:700; text-align:center;"><i class="fa-solid fa-circle-check"></i> Arrived at Destination • Customer notified outside</div><?php else: ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full" onclick="promptCompleteDelivery(<?=$o['order_id']?>)"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
+?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div id="delivery-map" style="height: 320px; width: 100%; border-radius: 12px; margin-top: 12px;"></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div class="actions" id="riderOrderActions_<?=(int)$o['order_id']?>" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_delivered_state): ?><div class="delivery-complete-summary" id="deliveryCompleteSummary_<?=(int)$o['order_id']?>" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;"><div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;"><i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i><span>Delivery Handover Completed!</span></div><div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">Delivery handover is confirmed. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:</div><button type="button" class="btn success full btn-open-clear" id="btnFinishClearTrigger_<?=(int)$o['order_id']?>" data-action="open-clear-modal" data-order-id="<?=(int)$o['order_id']?>" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(<?=(int)$o['order_id']?>)"><i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order</button></div><?php else: ?><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'near_customer'): ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'arrived'): ?><div style="background:#ecfdf5; border:1.5px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:10px; font-size:0.82rem; font-weight:700; text-align:center;"><i class="fa-solid fa-circle-check"></i> Arrived at Destination • Customer notified outside</div><?php else: ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full btn-open-handover" id="btnPromptHandover_<?=(int)$o['order_id']?>" data-action="prompt-handover" data-order-id="<?=(int)$o['order_id']?>" onclick="promptCompleteDelivery(<?=$o['order_id']?>)"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
   $addr = trim((string)($o['delivery_address'] ?? ''));
   $lat = (isset($o['delivery_lat']) && is_numeric($o['delivery_lat'])) ? $o['delivery_lat'] : ($o['customer_lat'] ?? null);
@@ -1560,9 +1561,9 @@ main{padding:16px;flex:1;overflow-x:hidden}
 <section class="section" id="live"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">📡 Live Location</h2><div id="gpsStatus" class="meta">Live location is off. Tap Share Live Location after starting a delivery.</div><button type="button" class="btn full" style="margin-top:10px" onclick="stopLiveLocation()">Stop Sharing</button></div></section><section class="section" id="guide"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">Customer Notification Flow</h2><div class="meta">When you accept an order, the customer is notified. When you start the trip, they receive an <b>On the Way</b> notification. When you tap <b>I'm Near Customer</b>, they receive the near-arrival notification. When delivered, the customer receives a final delivery notice.</div></div></section></main><nav class="bottom"><a class="active" href="#delivery"><i class="fa-solid fa-box"></i>Delivery</a><a href="#available"><i class="fa-solid fa-motorcycle"></i>Pickup</a><a href="#live"><i class="fa-solid fa-location-crosshairs"></i>Live</a><a href="#guide"><i class="fa-solid fa-circle-info"></i>Guide</a><a href="javascript:void(0)" onclick="openLogout()"><i class="fa-solid fa-right-from-bracket"></i>Logout</a></nav></div>
 <div class="modal" id="noteModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Notifications</h3><div id="notificationList" class="notification-list"><div class="empty">Loading...</div></div><div class="box-actions"><button class="close" onclick="markAllRead()">Mark all read</button><button class="close" onclick="closeNotifications()">Close</button></div></div></div>
 <div class="modal" id="logoutModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out.</p><div class="box-actions"><button class="close" onclick="closeLogout()">Cancel</button><a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
-<div class="modal" id="riderConfirmModal"><div class="box" style="text-align:center;"><img src="logo.jpg" alt="Food Dash"><h3 id="riderConfirmTitle">Confirm Action</h3><p id="riderConfirmMsg" style="font-size:12px; color:var(--muted); margin: 10px 0 16px;">Are you sure?</p><div class="box-actions"><button type="button" class="close" onclick="closeRiderConfirm()">Cancel</button><button type="button" class="btn" id="btnRiderConfirmAction" style="flex:1;">Confirm</button></div></div></div>
+<div class="modal" id="riderConfirmModal" style="z-index: 99999 !important;"><div class="box" style="text-align:center; max-width: 360px;"><div style="font-size: 2.2rem; margin-bottom: 6px;">🤝</div><h3 id="riderConfirmTitle" style="margin: 0 0 6px; color: var(--olive-shadow); font-size: 1.15rem;">Delivery Handover</h3><p id="riderConfirmMsg" style="font-size: 0.8rem; color: var(--muted); line-height: 1.45; margin: 0 0 16px;">Confirm delivery handover with customer?</p><div class="box-actions"><button type="button" class="close" id="cancelHandoverBtn" data-dismiss="modal" onclick="closeRiderConfirm()" style="margin-top:0;">Cancel</button><button type="button" class="btn success btn-confirm-handover" id="confirmHandoverBtn" style="background:#16a34a; font-weight:700; flex:1.2;"><i class="fa-solid fa-circle-check"></i> Confirm Handover</button></div></div></div>
 <!-- Dedicated Clear Delivery Modal -->
-<div class="modal" id="clearDeliveryModal" style="z-index: 99999;">
+<div class="modal" id="clearDeliveryModal" style="z-index: 99999 !important;">
   <div class="box" style="text-align:center; max-width: 360px;">
     <div style="font-size: 2.2rem; margin-bottom: 8px;">🏁</div>
     <h3 style="margin: 0 0 6px; color: var(--olive-shadow); font-size: 1.15rem;">Finish &amp; Clear Delivery?</h3>
@@ -1570,8 +1571,8 @@ main{padding:16px;flex:1;overflow-x:hidden}
       Finalize this delivery handover and return to <b>Waiting for Delivery</b> to accept new incoming orders.
     </p>
     <div class="box-actions">
-      <button type="button" class="close" id="btnCancelClearDelivery" data-action="cancel-clear" style="margin-top:0;">Cancel</button>
-      <button type="button" class="btn success" id="btnConfirmClearDelivery" data-action="confirm-clear" style="background: #16a34a; font-weight: 700; flex: 1.2;">
+      <button type="button" class="close" id="cancelClearBtn" data-dismiss="modal" data-action="cancel-clear" onclick="closeClearDeliveryModal()" style="margin-top:0;">Cancel</button>
+      <button type="button" class="btn success btn-finish-clear" id="confirmClearBtn" data-action="confirm-clear" style="background: #16a34a; font-weight: 700; flex: 1.2;">
         <i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear
       </button>
     </div>
@@ -1702,7 +1703,7 @@ window.alert = function(msg) {
 };
 
 let _riderConfirmCb = null;
-function openRiderConfirm(title, msg, onConfirm, actionText = 'Confirm', actionBg = '') {
+function openRiderConfirm(title, msg, onConfirm, actionText = 'Confirm Handover', actionBg = '#16a34a') {
   const modal = document.getElementById('riderConfirmModal');
   if (!modal) {
     if (onConfirm) onConfirm();
@@ -1710,24 +1711,29 @@ function openRiderConfirm(title, msg, onConfirm, actionText = 'Confirm', actionB
   }
   const titleEl = document.getElementById('riderConfirmTitle');
   const msgEl = document.getElementById('riderConfirmMsg');
-  const btn = document.getElementById('btnRiderConfirmAction');
-  if (titleEl) titleEl.textContent = title || 'Confirm Action';
-  if (msgEl) msgEl.textContent = msg || 'Are you sure?';
+  const btn = document.getElementById('confirmHandoverBtn') || document.getElementById('btnRiderConfirmAction');
+  if (titleEl) titleEl.textContent = title || 'Delivery Handover';
+  if (msgEl) msgEl.textContent = msg || 'Confirm delivery handover with customer?';
   if (btn) {
-    btn.textContent = actionText;
-    btn.style.background = actionBg || 'var(--olive-shadow)';
+    btn.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${actionText || 'Confirm Handover'}`;
+    btn.style.background = actionBg || '#16a34a';
     _riderConfirmCb = onConfirm;
-    btn.onclick = () => {
+    btn.onclick = (e) => {
+      if (e) e.preventDefault();
       closeRiderConfirm();
       if (_riderConfirmCb) _riderConfirmCb();
     };
   }
+  modal.style.display = 'flex';
   modal.classList.add('show');
 }
 
 function closeRiderConfirm() {
   const modal = document.getElementById('riderConfirmModal');
-  if (modal) modal.classList.remove('show');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('show');
+  }
   _riderConfirmCb = null;
 }
 
@@ -2863,13 +2869,62 @@ let highestSeenMessageId = 0;
 let isFirstCommPoll = true;
 
 function promptCompleteDelivery(orderId) {
+  if (orderId) activeRiderDeliveryOrderId = orderId;
   openRiderConfirm(
     'Delivery Handover',
     'Confirm delivery handover with customer?',
-    () => doDeliveryAction(orderId, 'delivered'),
+    () => handleConfirmHandover(orderId),
     'Confirm Handover',
     '#16a34a'
   );
+}
+
+async function handleConfirmHandover(orderIdParam) {
+  const orderId = orderIdParam || activeRiderDeliveryOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
+
+  // 1. Immediately dismiss any open modal
+  document.querySelectorAll('.modal, .custom-modal-backdrop').forEach(m => {
+    m.style.display = 'none';
+    m.classList.remove('show');
+  });
+
+  // 2. Immediately display the green "Delivery Handover Completed!" card with "Finish & Clear / Next Order" button
+  const actionsContainer = document.getElementById(`riderOrderActions_${orderId}`);
+  if (actionsContainer) {
+    actionsContainer.innerHTML = `
+      <div class="delivery-complete-summary" id="deliveryCompleteSummary_${orderId}" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;">
+        <div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;">
+          <i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i>
+          <span>Delivery Handover Completed!</span>
+        </div>
+        <div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">
+          Delivery handover is confirmed. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:
+        </div>
+        <button type="button" class="btn success full btn-open-clear" id="btnFinishClearTrigger_${orderId}" data-action="open-clear-modal" data-order-id="${orderId}" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(${orderId})">
+          <i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order
+        </button>
+      </div>
+    `;
+  }
+
+  toastRider('✓ Delivery Handover Completed!');
+  playRiderChime();
+
+  // 3. Send AJAX POST to update the active order status to 'delivered' / handover completed
+  try {
+    const fd = new FormData();
+    fd.append('delivery_action', 'delivered');
+    if (orderId) fd.append('order_id', orderId);
+    fd.append('ajax', 'true');
+
+    const res = await fetch(window.location.href, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data && data.success) {
+      if (activeDeliveryData) activeDeliveryData.status = 'delivered';
+    }
+  } catch (err) {
+    console.error('Error confirming handover:', err);
+  }
 }
 
 function doFinishAndClearDelivery(orderId) {
@@ -2882,6 +2937,7 @@ function openClearDeliveryModal(orderId) {
   pendingClearOrderId = orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
   const modal = document.getElementById('clearDeliveryModal');
   if (modal) {
+    modal.style.display = 'flex';
     modal.classList.add('show');
   }
 }
@@ -2889,50 +2945,63 @@ function openClearDeliveryModal(orderId) {
 function closeClearDeliveryModal() {
   const modal = document.getElementById('clearDeliveryModal');
   if (modal) {
+    modal.style.display = 'none';
     modal.classList.remove('show');
   }
   pendingClearOrderId = null;
 }
 
-async function executeFinishAndClearDelivery() {
+async function handleFinishAndClear() {
   const orderId = pendingClearOrderId || activeRiderDeliveryOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
-  const confirmBtn = document.getElementById('btnConfirmClearDelivery');
+
+  // 1. Immediately dismiss any open modal
+  document.querySelectorAll('.modal, .custom-modal-backdrop').forEach(m => {
+    m.style.display = 'none';
+    m.classList.remove('show');
+  });
+
+  const confirmBtn = document.getElementById('confirmClearBtn') || document.getElementById('btnConfirmClearDelivery');
   if (confirmBtn) {
     confirmBtn.disabled = true;
     confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Finalizing...';
   }
-  
+
+  toastRider('Finalizing delivery session…');
+
+  // 2. Send AJAX request to finalize session, reset active order state, close modal, and refresh UI
   try {
     const fd = new FormData();
     fd.append('delivery_action', 'clear_order');
     if (orderId) fd.append('order_id', orderId);
     fd.append('ajax', 'true');
-    
+
     const r = await fetch(window.location.href, { method: 'POST', body: fd });
     const data = await r.json();
-    
-    closeClearDeliveryModal();
-    
-    if (data.success) {
+
+    if (data && data.success) {
       toastRider('✓ ' + (data.message || 'Delivery cleared! Ready for next orders.'));
-      // Reset rider dashboard state to Waiting for next orders / Ready for delivery
+      // Reset rider dashboard state to Waiting for next orders
       setTimeout(() => {
         location.reload();
-      }, 700);
+      }, 500);
     } else {
-      toastRider(data.message || 'Failed to clear delivery.', true);
+      toastRider((data && data.message) ? data.message : 'Delivery cleared. Updating status...', false);
+      setTimeout(() => location.reload(), 600);
     }
   } catch (err) {
-    console.error('Error clearing delivery:', err);
-    closeClearDeliveryModal();
-    toastRider('Delivery cleared. Updating status...', false);
-    setTimeout(() => location.reload(), 600);
+    console.error('Error in handleFinishAndClear:', err);
+    toastRider('Delivery session ended. Refreshing...', false);
+    setTimeout(() => location.reload(), 500);
   } finally {
     if (confirmBtn) {
       confirmBtn.disabled = false;
       confirmBtn.innerHTML = '<i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear';
     }
   }
+}
+
+async function executeFinishAndClearDelivery() {
+  return handleFinishAndClear();
 }
 
 async function loadCompletedOrders() {
@@ -2994,6 +3063,7 @@ function renderCompletedOrdersUI(orders) {
 function openCompletedOrdersModal() {
   const modal = document.getElementById('riderCompletedOrdersModal');
   if (modal) {
+    modal.style.display = 'flex';
     modal.classList.add('show');
     loadCompletedOrders();
   }
@@ -3002,41 +3072,58 @@ function openCompletedOrdersModal() {
 function closeCompletedOrdersModal() {
   const modal = document.getElementById('riderCompletedOrdersModal');
   if (modal) {
+    modal.style.display = 'none';
     modal.classList.remove('show');
   }
 }
 
 // Global Event Delegation so DOM re-renders or background polling loops do not unbind click handlers
 document.addEventListener('click', function(e) {
-  // 1. Finish & Clear / Next Order button clicked
-  const finishBtn = e.target.closest('.btn-finish-clear, [data-action="finish-clear"], button[onclick*="doFinishAndClearDelivery"]');
-  if (finishBtn) {
+  // Cancel buttons on any modal
+  if (e.target.closest('#cancelHandoverBtn') || e.target.closest('#cancelClearBtn') || e.target.matches('[data-dismiss="modal"]') || e.target.closest('[data-dismiss="modal"]')) {
+    document.querySelectorAll('.modal, .custom-modal-backdrop').forEach(m => {
+      m.style.display = 'none';
+      m.classList.remove('show');
+    });
+    pendingClearOrderId = null;
+    return;
+  }
+
+  // Confirm Handover button
+  if (e.target.closest('#confirmHandoverBtn') || (e.target.matches('.btn-confirm-handover') && e.target.closest('#riderConfirmModal'))) {
+    e.preventDefault();
+    handleConfirmHandover();
+    return;
+  }
+
+  // Finish & Clear button
+  if (e.target.closest('#confirmClearBtn') || (e.target.matches('.btn-finish-clear') && e.target.closest('#clearDeliveryModal'))) {
+    e.preventDefault();
+    handleFinishAndClear();
+    return;
+  }
+
+  // Finish & Clear / Next Order button on active order summary card -> reliably displays confirmation modal (z-index: 99999)
+  const openClearTrigger = e.target.closest('#btnFinishAndClearOrder, .btn-open-clear, [data-action="open-clear-modal"], [data-action="finish-clear-trigger"], [data-action="finish-clear"], button[onclick*="doFinishAndClearDelivery"]');
+  if (openClearTrigger) {
     e.preventDefault();
     e.stopPropagation();
-    const orderId = finishBtn.dataset.orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
+    const orderId = openClearTrigger.dataset.orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
     openClearDeliveryModal(orderId);
     return;
   }
 
-  // 2. Clear delivery modal Cancel button
-  const cancelClearBtn = e.target.closest('#btnCancelClearDelivery, [data-action="cancel-clear"]');
-  if (cancelClearBtn) {
+  // Complete Delivery button on active order card -> opens handover confirmation modal
+  const openHandoverTrigger = e.target.closest('.btn-open-handover, [data-action="prompt-handover"], button[onclick*="promptCompleteDelivery"]');
+  if (openHandoverTrigger) {
     e.preventDefault();
     e.stopPropagation();
-    closeClearDeliveryModal();
+    const orderId = openHandoverTrigger.dataset.orderId || activeRiderDeliveryOrderId;
+    promptCompleteDelivery(orderId);
     return;
   }
 
-  // 3. Clear delivery modal Confirm Finish & Clear button
-  const confirmClearBtn = e.target.closest('#btnConfirmClearDelivery, [data-action="confirm-clear"]');
-  if (confirmClearBtn) {
-    e.preventDefault();
-    e.stopPropagation();
-    executeFinishAndClearDelivery();
-    return;
-  }
-
-  // 4. Completed Orders modal toggle
+  // Completed Orders modal toggle
   const openHistoryBtn = e.target.closest('#btnOpenCompletedOrders, #btnOpenCompletedOrdersToolbar, #btnOpenCompletedOrdersNav, [data-action="open-completed"]');
   if (openHistoryBtn) {
     e.preventDefault();
@@ -3045,7 +3132,7 @@ document.addEventListener('click', function(e) {
     return;
   }
 
-  // 5. Completed Orders modal close
+  // Completed Orders modal close
   const closeHistoryBtn = e.target.closest('#btnCloseCompletedOrders, #btnCloseCompletedOrdersBottom, [data-action="close-completed"]');
   if (closeHistoryBtn) {
     e.preventDefault();
@@ -3054,13 +3141,10 @@ document.addEventListener('click', function(e) {
     return;
   }
 
-  // 6. Backdrop click on clearDeliveryModal or riderCompletedOrdersModal
-  if (e.target && e.target.id === 'clearDeliveryModal') {
-    closeClearDeliveryModal();
-    return;
-  }
-  if (e.target && e.target.id === 'riderCompletedOrdersModal') {
-    closeCompletedOrdersModal();
+  // Backdrop click on clearDeliveryModal, riderConfirmModal, or riderCompletedOrdersModal
+  if (e.target && (e.target.id === 'clearDeliveryModal' || e.target.id === 'riderConfirmModal' || e.target.id === 'riderCompletedOrdersModal')) {
+    e.target.style.display = 'none';
+    e.target.classList.remove('show');
     return;
   }
 });
@@ -3252,7 +3336,7 @@ async function pollRiderOrderCommunication() {
             <div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">
               Delivery handover is confirmed by customer. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:
             </div>
-            <button type="button" class="btn success full btn-finish-clear" data-action="finish-clear" data-order-id="${activeRiderDeliveryOrderId}" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(${activeRiderDeliveryOrderId})">
+            <button type="button" class="btn success full btn-open-clear" id="btnFinishClearTrigger_${activeRiderDeliveryOrderId}" data-action="open-clear-modal" data-order-id="${activeRiderDeliveryOrderId}" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(${activeRiderDeliveryOrderId})">
               <i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order
             </button>
           </div>
