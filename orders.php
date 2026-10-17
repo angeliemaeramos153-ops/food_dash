@@ -117,8 +117,20 @@ if ($isApi) {
       --text-main: #1e293b;
       --text-muted: #64748b;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    html, body { width: 100%; min-height: 100%; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; }
+    *, *:before, *:after {
+      box-sizing: border-box !important;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      max-width: 100% !important;
+      overflow-x: hidden !important;
+      width: 100% !important;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      min-height: 100%;
+      -webkit-text-size-adjust: 100%;
+    }
     body {
       font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
       background: #fdfbf7;
@@ -131,11 +143,14 @@ if ($isApi) {
       z-index: 100;
       background: #ffffff;
       border-bottom: 1px solid #e5e7eb;
-      padding: 12px 18px;
+      padding: 10px 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       box-shadow: 0 1px 6px rgba(0,0,0,0.03);
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
     }
     .brand-wrap {
       display: flex;
@@ -179,18 +194,26 @@ if ($isApi) {
       background: #ebd8aa;
     }
     .container {
-      max-width: 680px;
-      margin: 20px auto;
-      padding: 0 16px;
+      width: 100% !important;
+      max-width: 100% !important;
+      padding: 0 12px !important;
+      margin: 14px auto 0 !important;
+      overflow-x: hidden !important;
+      box-sizing: border-box !important;
+    }
+    @media (min-width: 600px) {
+      .container {
+        max-width: 580px !important;
+      }
     }
     .page-title {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
     .page-title h2 {
-      font-size: 1.3rem;
+      font-size: 1.25rem;
       font-weight: 800;
       color: var(--olive-dark);
     }
@@ -199,27 +222,30 @@ if ($isApi) {
       background: #ffffff;
       border: 1.5px dashed #cbd5e1;
       border-radius: 16px;
-      padding: 44px 24px;
+      padding: 36px 18px;
       text-align: center;
       box-shadow: 0 4px 14px rgba(0,0,0,0.03);
       margin-top: 10px;
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
     }
     .empty-state-icon {
-      font-size: 52px;
-      margin-bottom: 14px;
+      font-size: 48px;
+      margin-bottom: 12px;
       line-height: 1;
     }
     .empty-state-title {
-      font-size: 1.25rem;
+      font-size: 1.15rem;
       font-weight: 800;
       color: var(--olive-dark);
       margin-bottom: 8px;
     }
     .empty-state-subtitle {
-      font-size: 0.88rem;
+      font-size: 0.85rem;
       color: var(--text-muted);
-      max-width: 360px;
-      margin: 0 auto 20px;
+      max-width: 340px;
+      margin: 0 auto 18px;
       line-height: 1.5;
     }
     .btn-browse-stores {
@@ -229,8 +255,8 @@ if ($isApi) {
       background: var(--harvest-sun);
       color: #ffffff;
       font-weight: 700;
-      font-size: 0.92rem;
-      padding: 12px 26px;
+      font-size: 0.88rem;
+      padding: 10px 22px;
       border-radius: 10px;
       text-decoration: none;
       border: none;
@@ -242,19 +268,29 @@ if ($isApi) {
       background: var(--harvest-sun-hover);
       transform: translateY(-1px);
     }
-    /* Orders List & Cards */
+    /* Orders List & Cards - Sleek & Compact */
     .orders-list {
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 10px;
+      width: 100% !important;
+      max-width: 100% !important;
+      padding: 0 !important;
+      margin: 0 auto !important;
+      overflow-x: hidden !important;
+      box-sizing: border-box !important;
     }
     .order-card {
       background: #ffffff;
       border: 1px solid #e2e8f0;
-      border-radius: 14px;
-      padding: 16px;
+      border-radius: 16px !important;
+      padding: 12px 14px !important;
       box-shadow: 0 2px 8px rgba(0,0,0,0.03);
       transition: box-shadow 0.2s;
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      overflow-x: hidden !important;
     }
     .order-card:hover {
       box-shadow: 0 6px 16px rgba(0,0,0,0.06);
@@ -263,46 +299,52 @@ if ($isApi) {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       gap: 8px;
     }
     .order-ref {
-      font-weight: 800;
-      font-size: 0.95rem;
+      font-weight: 700 !important;
+      font-size: 1.05rem !important;
+      font-size: 16px !important;
       color: var(--olive-dark);
+      line-height: 1.25 !important;
     }
     .order-store {
-      font-size: 0.82rem;
+      font-size: 12.5px !important;
       font-weight: 600;
-      color: var(--text-muted);
+      color: #64748b !important;
       margin-top: 2px;
+      line-height: 1.35;
     }
     .order-meta {
-      font-size: 0.76rem;
-      color: #94a3b8;
-      margin-top: 4px;
+      font-size: 12.5px !important;
+      color: #64748b !important;
+      margin-top: 3px;
+      line-height: 1.35;
     }
     .order-amount {
-      font-weight: 800;
-      font-size: 1.05rem;
+      font-weight: 700 !important;
+      font-size: 1.05rem !important;
+      font-size: 16px !important;
       color: var(--olive-dark);
+      white-space: nowrap;
     }
     .order-card-badges {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
-      margin: 10px 0;
+      margin: 8px 0;
     }
-    /* Status Badges */
+    /* Status Badges - Compact & Clean */
     .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 10px;
-      border-radius: 99px;
-      font-size: 0.72rem;
-      font-weight: 700;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 4px !important;
+      padding: 6px 12px !important;
+      border-radius: 8px !important;
+      font-size: 12px !important;
+      font-weight: 700 !important;
       text-transform: capitalize;
     }
     .status-pending { background: #FEF3C7; color: #D97706; border: 1px solid #F59E0B; }
@@ -321,64 +363,49 @@ if ($isApi) {
       0%, 100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.5); }
       50% { box-shadow: 0 0 0 6px rgba(76, 175, 80, 0); }
     }
-    /* Card Action Buttons */
+    /* Card Action Buttons - Compact & Flex-wrap */
     .card-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 10px;
-      padding-top: 10px;
+      display: flex !important;
+      align-items: center !important;
+      gap: 6px !important;
+      flex-wrap: wrap !important;
+      margin-top: 8px !important;
+      padding-top: 8px !important;
       border-top: 1px solid #f1f5f9;
     }
+    .btn-cancel-order, .cust-track-btn, .confirm-btn {
+      padding: 6px 12px !important;
+      font-size: 12px !important;
+      border-radius: 8px !important;
+      font-weight: 700 !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 5px !important;
+      cursor: pointer;
+      line-height: 1.2;
+      transition: all 0.2s;
+    }
     .btn-cancel-order {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
       background: #fee2e2;
       color: #dc2626;
       border: 1px solid #fca5a5;
-      padding: 6px 14px;
-      border-radius: 8px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s;
     }
     .btn-cancel-order:hover {
       background: #fecaca;
     }
     .cust-track-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
       background: var(--harvest-sun);
       color: #ffffff;
       border: none;
-      padding: 7px 14px;
-      border-radius: 8px;
-      font-size: 0.78rem;
-      font-weight: 700;
       text-decoration: none;
-      cursor: pointer;
-      transition: all 0.2s;
     }
     .cust-track-btn:hover {
       background: var(--harvest-sun-hover);
     }
     .confirm-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
       background: var(--olive-shadow);
       color: #ffffff;
       border: none;
-      padding: 7px 14px;
-      border-radius: 8px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s;
     }
     .confirm-btn:hover {
       opacity: 0.9;

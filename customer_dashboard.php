@@ -456,13 +456,18 @@ if ($menu_items_res) {
   --green: #4B5320;
   --shadow: 0 10px 30px rgba(75,83,32,.12);
 }
-*{box-sizing:border-box;margin:0;padding:0;font-family:Poppins,Arial,sans-serif}
+*, *:before, *:after {
+  box-sizing: border-box !important;
+}
 
 html, body {
-  width: 100%;
-  min-height: 100%;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+  width: 100% !important;
   margin: 0;
   padding: 0;
+  box-sizing: border-box;
+  min-height: 100%;
   -webkit-text-size-adjust: 100%;
   background:
     radial-gradient(circle at 15% 10%, rgba(216,143,42,.12), transparent 30%),
@@ -472,21 +477,38 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  font-family: 'Poppins', Arial, sans-serif;
 }
 
 button,input{font:inherit}
 button{cursor:pointer}
 
 .app{
-  width:100%;
-  max-width:440px;
-  min-height:100vh;
-  background:var(--paper);
-  position:relative;
-  box-shadow:var(--shadow);
-  display:flex;
-  flex-direction:column;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  min-height: 100vh;
+  background: var(--paper);
+  position: relative;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
   margin: 0 auto;
+}
+
+#orders, #orders.screen, #orderList, .orders-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 12px !important;
+  margin: 0 auto !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+
+#orders.screen {
+  padding-top: 14px !important;
+  padding-bottom: 30px !important;
 }
 
 @media(min-width:600px){
@@ -494,18 +516,36 @@ button{cursor:pointer}
     padding: 20px 0;
   }
   .app{
-    min-height:720px;
+    max-width: 440px !important;
+    min-height: 720px;
     height: auto;
-    border:1px solid #ddd3ad;
-    border-radius:26px;
-    box-shadow:0 22px 60px rgba(55,65,22,.15);
-    overflow: hidden;
+    border: 1px solid #ddd3ad;
+    border-radius: 26px;
+    box-shadow: 0 22px 60px rgba(55,65,22,.15);
+    overflow: hidden !important;
   }
 }
 
 @media(max-width:599px){
-  html, body { width: 100%; min-height: 100%; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; }
-  .app { border: none; border-radius: 0; box-shadow: none; min-height: 100vh; width: 100%; max-width: 100%; }
+  html, body {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    width: 100% !important;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-text-size-adjust: 100%;
+  }
+  .app {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    min-height: 100vh;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
 }
 
 .top{
@@ -531,7 +571,10 @@ button{cursor:pointer}
   color: #fff;
   padding: 10px 14px;
   border-radius: 12px;
-  margin: 10px 16px 0;
+  margin: 10px 12px 0;
+  width: calc(100% - 24px) !important;
+  max-width: calc(100% - 24px) !important;
+  box-sizing: border-box !important;
   font-size: 10px;
   display: flex;
   align-items: center;
@@ -588,8 +631,91 @@ button{cursor:pointer}
 .row-card small{font-size:8.5px;color:var(--muted);display:block;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row-card .chev{color:#a4a78f;font-size:11px}
 
-/* Status Badges - Food Dash Palette */
-.status-badge { display:inline-flex; align-items:center; gap:3px; padding: 2.5px 8px; border-radius: 99px; font-size: 8px; font-weight:700; text-transform: capitalize; }
+/* Compact & Proportional Order Cards for Mobile */
+.row-card.order-row {
+  display: flex !important;
+  gap: 12px !important;
+  align-items: flex-start !important;
+  background: #ffffff !important;
+  border: 1px solid #EBE4D1 !important;
+  border-radius: 16px !important;
+  padding: 12px 14px !important;
+  margin-bottom: 9px !important;
+  cursor: pointer;
+  position: relative;
+  transition: all .2s ease;
+  box-shadow: 0 3px 10px rgba(75,83,32,.04) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.row-card.order-row:hover {
+  border-color: var(--harvest-sun) !important;
+  box-shadow: 0 6px 16px rgba(75,83,32,.08) !important;
+}
+
+.row-card.order-row .row-icon {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  border-radius: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #fbf9f2 !important;
+  border: 1px solid #EBE4D1 !important;
+  box-shadow: 0 2px 6px rgba(75,83,32,.05) !important;
+  padding: 0 !important;
+  font-size: 20px !important;
+  flex: none !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  margin-top: 2px;
+}
+
+.row-card.order-row .info {
+  flex: 1 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+.row-card.order-row strong, .row-card.order-row .order-ref {
+  font-size: 16px !important;
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  color: var(--olive-dark) !important;
+  display: block !important;
+  line-height: 1.25 !important;
+  margin-bottom: 3px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.row-card.order-row small, .row-card.order-row .order-meta {
+  font-size: 12.5px !important;
+  color: #64748b !important;
+  display: block !important;
+  margin-top: 2px !important;
+  white-space: normal !important;
+  line-height: 1.35 !important;
+  word-break: break-word !important;
+}
+
+/* Status Badges - Compact & Clean */
+.status-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 6px 12px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  text-transform: capitalize;
+}
+
 .status-pending { background: #FEF3C7; color: #D97706; border: 1px solid #F59E0B; }
 .status-preparing { background: #E0E7FF; color: #4338CA; border: 1px solid #6366F1; }
 .status-ready_for_pickup, .status-ready { background: #ECFDF5; color: #047857; border: 1px solid #10B981; }
@@ -600,22 +726,35 @@ button{cursor:pointer}
 @keyframes cdPulseArrived { 0%, 100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.5); } 50% { box-shadow: 0 0 0 5px rgba(76, 175, 80, 0); } }
 .status-delivered { background: #FAF6EE; color: var(--sagebrush); border: 1px solid var(--sagebrush); }
 .status-settled, .status-completed { background: var(--olive-shadow); color: white; border: 1px solid var(--olive-shadow); }
-.settled-tag { font-size: 7.5px; background: #FAF6EE; color: var(--olive-shadow); border: 1px solid var(--olive-shadow); padding: 2px 6px; border-radius: 8px; font-weight: 600; display: inline-flex; align-items:center; gap: 3px; }
+.settled-tag { font-size: 11px !important; background: #FAF6EE; color: var(--olive-shadow); border: 1px solid var(--olive-shadow); padding: 4px 8px; border-radius: 8px; font-weight: 600; display: inline-flex; align-items:center; gap: 3px; }
 .settled-icon { background: var(--olive-shadow) !important; color: white !important; }
 
+/* Compact Action Buttons - Wrap in flex with gap: 6px */
+.order-actions-wrap, #orders [id^="track-actions-"] {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-wrap: wrap !important;
+  margin-top: 8px !important;
+}
+
+.confirm-btn, .cust-track-btn, .btn-cancel-order {
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1.2;
+}
+
 .confirm-btn {
-  margin-top: 8px;
   background: var(--olive-shadow);
   color: white;
   border: 0;
-  padding: 7px 12px;
-  border-radius: 8px;
-  font-size: 9px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  transition: opacity 0.2s;
 }
 .confirm-btn:hover { opacity: 0.9; }
 
@@ -2342,14 +2481,14 @@ button{cursor:pointer}
           <?= $is_cancelled ? '🚫' : ($is_ontheway ? '🛵' : ($is_settled ? '🛡️' : ($is_delivered ? '📦' : ($is_prep ? '🍳' : '🛍️')))) ?>
         </div>
         <div class="info">
-          <strong><?= htmlspecialchars($clean_card_ref) ?></strong>
-          <small><?= htmlspecialchars($ord['store_name']) ?> • <?= htmlspecialchars($ord['items_summary']) ?></small>
-          <small><?= htmlspecialchars(date('M d, Y • g:i A', strtotime($ord['created_at']))) ?> • ₱<?= number_format((float)$ord['total_amount'], 2) ?></small>
+          <strong class="order-ref"><?= htmlspecialchars($clean_card_ref) ?></strong>
+          <small class="order-meta"><?= htmlspecialchars($ord['store_name']) ?> • <?= htmlspecialchars($ord['items_summary']) ?></small>
+          <small class="order-meta"><?= htmlspecialchars(date('M d, Y • g:i A', strtotime($ord['created_at']))) ?> • ₱<?= number_format((float)$ord['total_amount'], 2) ?></small>
           <?php if (!empty($ord['delivery_address'])): ?>
-            <small style="color: var(--olive-dark); font-weight: 500; margin-top: 3px; white-space: normal; line-height: 1.35;"><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> <?= htmlspecialchars($ord['delivery_address']) ?></small>
+            <small class="order-meta order-address" style="color: #64748b; font-weight: 500; font-size: 12.5px; margin-top: 3px; white-space: normal; line-height: 1.35;"><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> <?= htmlspecialchars($ord['delivery_address']) ?></small>
           <?php endif; ?>
           
-          <div style="margin-top: 5px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+          <div style="margin-top: 8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span class="status-badge status-<?= htmlspecialchars($norm_status) ?>" id="status-tag-<?= $ord['order_id'] ?>">
               <?php if ($is_arrived): ?>
                 <i class="fa-solid fa-bell fa-shake"></i>
@@ -2366,20 +2505,20 @@ button{cursor:pointer}
 
           <?php if ($can_cancel): ?>
             <!-- a. Status 'pending' / 'preparing': Show Cancel Order button -->
-            <div style="margin-top:6px;" id="cancel-wrap-<?= $ord['order_id'] ?>">
+            <div style="margin-top:8px;" id="cancel-wrap-<?= $ord['order_id'] ?>" class="order-actions-wrap">
               <button type="button" class="btn-cancel-order" id="btn-cancel-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); promptCancelOrder(<?= (int)$ord['order_id'] ?>, '<?= htmlspecialchars(addslashes($clean_card_ref)) ?>', '<?= htmlspecialchars(addslashes($status_label)) ?>')">
                 <i class="fa-solid fa-ban"></i> Cancel Order
               </button>
             </div>
           <?php elseif ($is_cancelled): ?>
-            <div style="font-size: 8.5px; color: #dc2626; font-weight:700; margin-top:4px;">
+            <div style="font-size: 12px; color: #dc2626; font-weight:700; margin-top:6px;">
               <i class="fa-solid fa-circle-xmark"></i> Cancelled by Customer
             </div>
           <?php endif; ?>
 
           <?php if ($is_ontheway || $is_near || $is_arrived): ?>
             <!-- b. Status 'on_delivery' / 'near_customer' / 'arrived': Show Live Track Rider and Received buttons -->
-            <div style="font-size: 8px; color: var(--harvest-sun); font-weight:600; margin-top:4px;">
+            <div style="font-size: 12px; color: var(--harvest-sun); font-weight:600; margin-top:6px;">
               <?php if ($is_arrived): ?>
                 <i class="fa-solid fa-bell fa-shake"></i> Rider has arrived at your location!
               <?php elseif ($is_near): ?>
@@ -2388,7 +2527,7 @@ button{cursor:pointer}
                 <i class="fa-solid fa-circle-notch fa-spin"></i> Rider is on the way with your order!
               <?php endif; ?>
             </div>
-            <div id="track-actions-<?= $ord['order_id'] ?>" style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+            <div id="track-actions-<?= $ord['order_id'] ?>" class="order-actions-wrap" style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
               <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openCustomerTrackingModal(<?= (int)$ord['order_id'] ?>)" title="Tap to view live delivery map">
                 <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
               </button>
@@ -2397,7 +2536,7 @@ button{cursor:pointer}
               </button>
             </div>
           <?php elseif ($is_delivered && !$is_settled): ?>
-            <div style="font-size: 8px; color: var(--sagebrush); font-weight:600; margin-top:4px;">
+            <div style="font-size: 12px; color: var(--sagebrush); font-weight:600; margin-top:6px;">
               <i class="fa-solid fa-circle-check"></i> Order Delivered. Awaiting admin settlement.
             </div>
           <?php endif; ?>
@@ -6021,7 +6160,8 @@ async function pollCustomerCommunicationUpdates() {
           if (infoDiv) {
             trackActions = document.createElement('div');
             trackActions.id = `track-actions-${oId}`;
-            trackActions.style.cssText = 'display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;';
+            trackActions.className = 'order-actions-wrap';
+            trackActions.style.cssText = 'display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;';
             trackActions.innerHTML = `
               <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openCustomerTrackingModal(${oId})" title="Tap to view live delivery map">
                 <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
