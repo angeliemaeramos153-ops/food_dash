@@ -90,7 +90,7 @@ if ($action === 'start_call' || $action === 'trigger_call' || $action === 'call'
         receiver_role, receiver_id, status, call_status, created_at, updated_at
     ) VALUES (
         :oid, :crole, :caller, :cid, :cname, :cphone,
-        :rrole, :rid, 'calling', 'calling', NOW(), NOW()
+        :rrole, :rid, 'ringing', 'ringing', NOW(), NOW()
     )");
     $ins->execute([
         ':oid'    => $order_id,
@@ -121,8 +121,8 @@ if ($action === 'start_call' || $action === 'trigger_call' || $action === 'call'
     call_api_json(true, 'Call started.', [
         'call_id'       => $call_id,
         'order_id'      => $order_id,
-        'call_status'   => 'calling',
-        'status'        => 'calling',
+        'call_status'   => 'ringing',
+        'status'        => 'ringing',
         'caller'        => $caller_role,
         'caller_role'   => $caller_role,
         'caller_name'   => $user_name,
@@ -183,13 +183,13 @@ if ($action === 'get_status' || $action === 'poll') {
     $normalized_status = 'idle';
     if ($call) {
         $raw_st = strtolower(trim((string)$call['call_status']));
-        if ($raw_st === 'ringing') $raw_st = 'calling';
+        // Keep ringing as ringing; map accepted to connected
         if ($raw_st === 'accepted') $raw_st = 'connected';
 
         $age = (int)$call['seconds_since_update'];
 
-        // Auto-expire unanswered calling after 45s, or ended calls older than 5s
-        if ($raw_st === 'calling' && $age > 45) {
+        // Auto-expire unanswered calling/ringing after 45s, or ended calls older than 10s
+        if (in_array($raw_st, ['ringing', 'calling'], true) && $age > 45) {
             $conn->prepare("UPDATE order_calls SET call_status = 'missed', status = 'missed' WHERE call_id = :cid")->execute([':cid' => $call['call_id']]);
             $raw_st = 'idle';
         } elseif (in_array($raw_st, ['ended', 'declined', 'missed'], true) && $age > 10) {

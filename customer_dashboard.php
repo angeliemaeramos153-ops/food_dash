@@ -345,21 +345,30 @@ $ontheway_count = 0;
 $active_tracking_order = null;
 
 $is_demo_cust = ($user_id === 15 || $user_id === 26 || strtolower($username) === 'customer');
-$scope_sql = $is_demo_cust 
-    ? "(customer_id = :cid OR user_id = :uid OR customer_id IN (15, 26, 0) OR user_id IN (15, 26, 0))" 
-    : "(customer_id = :cid OR user_id = :uid)";
 
-$stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE {$scope_sql} ORDER BY order_id DESC LIMIT 50");
+// Primary query: User's own orders (excluding finished & cleared deliveries)
+$stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE (customer_id = :cid OR user_id = :uid) AND COALESCE(rider_cleared, 0) = 0 ORDER BY order_id DESC LIMIT 50");
 if ($stmt) {
     $stmt->execute([':cid' => $user_id, ':uid' => $user_id]);
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) { 
-        $db_orders[] = $row; 
-        $st = strtoupper(trim(str_replace([' ', '-'], '_', $row['status'])));
-        if (in_array($st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'])) {
-            $ontheway_count++;
-            if (!$active_tracking_order) {
-                $active_tracking_order = $row;
-            }
+    $db_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Fallback: If user has zero orders and is a demo account, load demo orders
+if (empty($db_orders) && $is_demo_cust) {
+    $d_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE (customer_id IN (15, 26, 0) OR user_id IN (15, 26, 0)) AND COALESCE(rider_cleared, 0) = 0 ORDER BY order_id DESC LIMIT 50");
+    if ($d_stmt) {
+        $d_stmt->execute();
+        $db_orders = $d_stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+}
+
+// Find active tracking order (prioritizing active deliveries over historical orders)
+foreach ($db_orders as $row) {
+    $st = strtoupper(trim(str_replace([' ', '-'], '_', $row['status'])));
+    if (in_array($st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'])) {
+        $ontheway_count++;
+        if (!$active_tracking_order) {
+            $active_tracking_order = $row;
         }
     }
 }
@@ -2532,7 +2541,7 @@ button{cursor:pointer}
       }
       $clean_card_ref = '#' . ltrim($ord['order_ref'] ?? ('FD-' . $ord['order_id']), '#');
     ?>
-      <div class="row-card order-row <?= $is_ontheway ? 'on-the-way-card' : '' ?>" data-status="<?= htmlspecialchars($norm_status) ?>" id="order-card-<?= $ord['order_id'] ?>" <?= $is_ontheway ? 'onclick="openCustomerTrackingModal(' . (int)$ord['order_id'] . ')" style="cursor:pointer;" title="Tap to view live delivery tracking map"' : '' ?>>
+      <div class="row-card order-row <?= $is_ontheway ? 'on-the-way-card' : '' ?>" data-status="<?= htmlspecialchars($norm_status) ?>" id="order-card-<?= $ord['order_id'] ?>" <?= $is_ontheway ? 'onclick="openTrackingModal(' . (int)$ord['order_id'] . ')" style="cursor:pointer;" title="Tap to view live delivery tracking map"' : '' ?>>
         <div class="row-icon <?= $is_cancelled ? 'grey' : ($is_ontheway ? 'jolli' : ($is_settled ? 'settled-icon' : 'green')) ?>">
           <?= $is_cancelled ? '🚫' : ($is_ontheway ? '🛵' : ($is_settled ? '🛡️' : ($is_delivered ? '📦' : ($is_prep ? '🍳' : '🛍️')))) ?>
         </div>
@@ -2579,12 +2588,11 @@ button{cursor:pointer}
                 <i class="fa-solid fa-bell fa-shake"></i> Rider has arrived at your location!
               <?php elseif ($is_near): ?>
                 <i class="fa-solid fa-person-biking fa-beat"></i> Rider is near your location (&lt; 200m)!
-              <?php else: ?>
-                <i class="fa-solid fa-circle-notch fa-spin"></i> Rider is on the way with your order!
               <?php endif; ?>
-            </div>
+              <?= htmlspecialchars($status_label) ?>
+            </span>
             <div id="track-actions-<?= $ord['order_id'] ?>" class="order-actions-wrap" style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
-              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openCustomerTrackingModal(<?= (int)$ord['order_id'] ?>)" title="Tap to view live delivery map">
+              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(<?= (int)$ord['order_id'] ?>)" title="Tap to view live delivery map">
                 <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
               </button>
               <button class="confirm-btn" id="confirm-btn-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); confirmOrderReceived(<?= $ord['order_id'] ?>)">
@@ -2805,7 +2813,7 @@ button{cursor:pointer}
         <i class="fa-solid fa-phone-slash"></i> Decline
       </button>
       <button type="button" class="btn-accept-call" onclick="acceptIncomingCall()">
-        <i class="fa-solid fa-phone"></i> Accept
+        <i class="fa-solid fa-phone"></i> Answer
       </button>
     </div>
     <div class="incoming-connected-actions" id="incomingConnectedActions" style="display:none;">
@@ -5105,8 +5113,14 @@ let activeCustChatOrderId = null;
 let custChatPollTimer = null;
 let custLastMessageId = 0;
 
+function openTrackingModal(orderId) {
+  openCustomerTrackingModal(orderId);
+}
+window.openTrackingModal = openTrackingModal;
+
 function openCustomerTrackingModal(orderId) {
-  const targetId = orderId || activeCustomerTrackingOrderId;
+  const parsedId = parseInt(orderId, 10);
+  const targetId = (!isNaN(parsedId) && parsedId > 0) ? parsedId : activeCustomerTrackingOrderId;
   if (!targetId) {
     showScreen('orders');
     return;
@@ -5363,25 +5377,25 @@ async function fetchCustOsrmRoute(startLat, startLng, destLat, destLng) {
 
 async function fetchCustomerLiveTracking(orderId, isInitial) {
   try {
-    // Append timestamp and no-cache to prevent browser / proxy caching
-    const res = await fetch(`tracking_api.php?action=get_location&order_id=${orderId}&_t=${Date.now()}`, {
+    // Append timestamp and no-cache to fetch fresh live GPS from order_api.php
+    const res = await fetch(`order_api.php?action=get_rider_location&order_id=${orderId}&_t=${Date.now()}`, {
       cache: 'no-store'
     });
     const data = await res.json();
-    if (!data.success || !data.order) {
+    if (!data.success) {
       console.warn('Tracking API response:', data.message);
       return;
     }
 
-    const ord = data.order;
+    const ord = data.order || {};
     const storeLat = parseFloat(data.store_lat || ord.store_lat);
     const storeLng = parseFloat(data.store_lng || ord.store_lng);
-    const destLat = parseFloat(data.destination_lat || ord.destination_lat || ord.customer_lat);
-    const destLng = parseFloat(data.destination_lng || ord.destination_lng || ord.customer_lng);
+    const destLat = parseFloat(data.destination_lat || data.dest_lat || ord.destination_lat || ord.customer_lat);
+    const destLng = parseFloat(data.destination_lng || data.dest_lng || ord.destination_lng || ord.customer_lng);
 
     // Read high-precision coordinates with fallback aliases
-    const riderLat = parseFloat(data.latitude ?? data.lat ?? data.rider_lat ?? ord.rider_lat);
-    const riderLng = parseFloat(data.longitude ?? data.lng ?? data.rider_lng ?? ord.rider_lng);
+    const riderLat = parseFloat(data.rider_lat ?? data.lat ?? data.latitude ?? ord.rider_lat);
+    const riderLng = parseFloat(data.rider_lng ?? data.lng ?? data.longitude ?? ord.rider_lng);
 
     // Update Rider info with non-null fallbacks
     currentTrackingRiderName = data.rider_name || ord.rider_name || 'Alex Rider';
@@ -5401,17 +5415,17 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     if (smsLink) smsLink.href = `sms:${riderDial}`;
 
     const chatSmsLink = document.getElementById('custChatSmsLink');
-    if (chatSmsLink) chatSmsLink.href = `sms:${riderDial}?body=Hi%20${encodeURIComponent(currentTrackingRiderName)},%20regarding%20my%20order%20${encodeURIComponent(ord.order_ref || '')}`;
+    if (chatSmsLink) chatSmsLink.href = `sms:${riderDial}?body=Hi%20${encodeURIComponent(currentTrackingRiderName)},%20regarding%20my%20order%20${encodeURIComponent(data.order_ref || ord.order_ref || '')}`;
 
     const refEl = document.getElementById('trackModalOrderRef');
     if (refEl) {
-      const rawRef = ord.order_ref || ('#' + orderId);
+      const rawRef = data.order_ref || ord.order_ref || ('#' + orderId);
       const cleanRef = '#' + String(rawRef).replace(/^#+/, '');
       refEl.textContent = `${cleanRef} Tracking`;
     }
 
     const subEl = document.getElementById('trackModalStoreSubtitle');
-    if (subEl) subEl.textContent = `${ord.store_name || 'Store'} • ${ord.status || 'On Delivery'}`;
+    if (subEl) subEl.textContent = `${ord.store_name || data.store_name || 'Store'} • ${data.status || ord.status || 'On Delivery'}`;
 
     // Update Distance / ETA text & badge (e.g. "500m away • ~3 mins")
     let dKm = (data.distance_km !== null && !isNaN(data.distance_km)) ? parseFloat(data.distance_km) : null;
@@ -5421,7 +5435,7 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     updateCustomerEtaBadge(dKm);
 
     // Check for active incoming call from rider
-    if (data.active_call && data.active_call.status === 'ringing') {
+    if (data.active_call && (data.active_call.status === 'ringing' || data.active_call.call_status === 'ringing')) {
       handleIncomingCallAlert(data.active_call);
     } else {
       dismissIncomingCallIfRinging();
@@ -5433,7 +5447,7 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     }
 
     renderCustomerMap({
-      storeLat, storeLng, storeName: ord.store_name,
+      storeLat, storeLng, storeName: ord.store_name || data.store_name,
       destLat, destLng, deliveryAddress: ord.delivery_address,
       riderLat, riderLng, riderName: currentTrackingRiderName,
       isInitial
@@ -5514,12 +5528,13 @@ function renderCustomerMap(opts) {
     }
   }
 
-  // c. Rider Motorcycle Pin (smooth animation along OSRM road geometry)
+  // c. Rider Motorcycle Pin (dynamically update position for live PC simulator movements & smooth road animation)
   if (validRider) {
     if (!custRiderMarker) {
       custRiderMarker = L.marker([opts.riderLat, opts.riderLng], { icon: riderIcon, zIndexOffset: 1000 }).addTo(custTrackingMap);
       custRiderMarker.bindPopup(`<b>${escapeCustHtml(opts.riderName || 'Rider')}</b><br><small>Live Motorcycle GPS</small>`);
     } else {
+      custRiderMarker.setLatLng([opts.riderLat, opts.riderLng]);
       animateMarkerAlongRoad(custRiderMarker, opts.riderLat, opts.riderLng, 1400);
     }
   }
@@ -5603,49 +5618,67 @@ function updateCustChatSmsLink(text) {
   smsBtn.href = `sms:${currentTrackingRiderPhone}?body=${body}`;
 }
 
-async function fetchCustomerMessages(orderId, scrollToBottom) {
+function renderChatMessages(messages, scrollToBottom = true) {
+  const container = document.getElementById('custChatMessagesList');
+  if (!container) return;
+
+  // Clear "Loading messages with your rider..." placeholder if present or on initial load
+  if (custLastMessageId === 0) {
+    container.innerHTML = '';
+  }
+  const hint = container.querySelector('.chat-empty-hint');
+  if (hint && Array.isArray(messages) && messages.length > 0) {
+    hint.remove();
+  }
+
+  if (Array.isArray(messages) && messages.length > 0) {
+    messages.forEach(msg => {
+      if (msg.message_id > custLastMessageId) {
+        custLastMessageId = msg.message_id;
+        const isMe = (msg.sender_role === 'customer');
+        const bubble = document.createElement('div');
+        bubble.className = `msg-bubble ${isMe ? 'me' : 'them'}`;
+        bubble.setAttribute('data-msg-id', msg.message_id);
+        bubble.innerHTML = `
+          <div>${escapeCustHtml(msg.message_text)}</div>
+          <div class="msg-meta">${escapeCustHtml(msg.sender_name || 'Rider')} • ${escapeCustHtml(msg.time_formatted || '')}</div>
+        `;
+        container.appendChild(bubble);
+
+        if (!isMe && !scrollToBottom) {
+          showToastCustomer(`Rider: ${msg.message_text}`);
+        }
+      }
+    });
+
+    if (scrollToBottom || messages.length > 0) {
+      container.scrollTop = container.scrollHeight;
+    }
+  } else if (custLastMessageId === 0) {
+    container.innerHTML = '<div class="chat-empty-hint">Start a conversation with your rider!</div>';
+  }
+}
+
+async function fetchCustomerMessages(orderId, scrollToBottom = true) {
   try {
-    const res = await fetch(`order_messages_api.php?order_id=${orderId}&after_id=${custLastMessageId}`);
+    const res = await fetch(`chat_api.php?order_id=${orderId}&after_id=${custLastMessageId}&_t=${Date.now()}`);
+    if (!res.ok) {
+      if (custLastMessageId === 0) {
+        renderChatMessages([]);
+      }
+      return;
+    }
     const data = await res.json();
     if (data.success && Array.isArray(data.messages)) {
-      const container = document.getElementById('custChatMessagesList');
-      if (!container) return;
-
-      if (custLastMessageId === 0) {
-        container.innerHTML = '';
-      }
-
-      if (data.messages.length > 0) {
-        const hint = container.querySelector('.chat-empty-hint');
-        if (hint) hint.remove();
-
-        data.messages.forEach(msg => {
-          if (msg.message_id > custLastMessageId) {
-            custLastMessageId = msg.message_id;
-            const isMe = msg.sender_role === 'customer';
-            const bubble = document.createElement('div');
-            bubble.className = `msg-bubble ${isMe ? 'me' : 'them'}`;
-            bubble.innerHTML = `
-              <div>${escapeCustHtml(msg.message_text)}</div>
-              <div class="msg-meta">${escapeCustHtml(msg.sender_name)} • ${escapeCustHtml(msg.time_formatted || '')}</div>
-            `;
-            container.appendChild(bubble);
-
-            if (!isMe && !scrollToBottom) {
-              showToastCustomer(`Rider: ${msg.message_text}`);
-            }
-          }
-        });
-
-        if (scrollToBottom || data.messages.length > 0) {
-          container.scrollTop = container.scrollHeight;
-        }
-      } else if (custLastMessageId === 0) {
-        container.innerHTML = '<div class="chat-empty-hint">No messages yet. Send a quick message to your rider!</div>';
-      }
+      renderChatMessages(data.messages, scrollToBottom);
+    } else if (custLastMessageId === 0) {
+      renderChatMessages([]);
     }
   } catch (err) {
     console.warn('Failed to load customer messages:', err);
+    if (custLastMessageId === 0) {
+      renderChatMessages([]);
+    }
   }
 }
 
@@ -5667,7 +5700,7 @@ function sendCustomerQuickReply(text) {
 
 async function submitCustomerMessage(orderId, text) {
   try {
-    const res = await fetch('order_messages_api.php', {
+    const res = await fetch('chat_api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ order_id: orderId, message_text: text })
@@ -5844,10 +5877,15 @@ async function acceptIncomingCall() {
   if (currentIncomingCall) {
     currentIncomingCall.connected = true;
     try {
+      await fetch('order_call_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'accept_call', call_id: currentIncomingCall.call_id, order_id: currentIncomingCall.order_id })
+      });
       await fetch('order_communication_api.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'respond_call', call_id: currentIncomingCall.call_id, status: 'accepted' })
+        body: JSON.stringify({ action: 'respond_call', call_id: currentIncomingCall.call_id, order_id: currentIncomingCall.order_id, status: 'accepted' })
       });
     } catch (e) {}
   }
@@ -5876,10 +5914,15 @@ async function declineIncomingCall() {
   stopRingtone();
   if (currentIncomingCall) {
     try {
+      await fetch('order_call_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'decline_call', call_id: currentIncomingCall.call_id, order_id: currentIncomingCall.order_id })
+      });
       await fetch('order_communication_api.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'respond_call', call_id: currentIncomingCall.call_id, status: 'declined' })
+        body: JSON.stringify({ action: 'respond_call', call_id: currentIncomingCall.call_id, order_id: currentIncomingCall.order_id, status: 'declined' })
       });
     } catch (e) {}
   }
@@ -5960,6 +6003,12 @@ function appendMessageToChatDrawer(msg) {
 
 function handleLiveRiderMessage(msg) {
   if (!msg || !msg.message_id) return;
+  // Prevent un-scoped messages from unrelated orders from popping up in toasts
+  const activeOId = activeCustomerTrackingOrderId || 0;
+  if (msg.order_id && activeOId && parseInt(msg.order_id, 10) !== parseInt(activeOId, 10)) {
+    return;
+  }
+
   const msgKey = 'msg_' + msg.message_id;
   if (window.displayedNotificationIds.has(msgKey)) return;
   window.displayedNotificationIds.add(msgKey);
@@ -6117,14 +6166,23 @@ async function pollCustomerCommunicationUpdates() {
       FoodDashCall.syncCallStatus(data.active_call);
     }
 
+    // Detect active incoming call where status is ringing
+    if (data.active_call && (data.active_call.status === 'ringing' || data.active_call.call_status === 'ringing') && (data.active_call.caller === 'rider' || data.active_call.caller_role === 'rider')) {
+      handleIncomingCallAlert(data.active_call);
+    } else if (!data.active_call || ['idle', 'ended', 'declined', 'missed'].includes(data.active_call.status || data.active_call.call_status)) {
+      dismissIncomingCallIfRinging();
+    }
+
     if (Array.isArray(data.messages) && data.messages.length > 0) {
       data.messages.forEach(msg => {
-        if (msg.sender_role === 'rider') {
+        if (msg.sender_role === 'rider' && (!msg.order_id || !targetOrderId || parseInt(msg.order_id, 10) === parseInt(targetOrderId, 10))) {
           handleLiveRiderMessage(msg);
         }
       });
     } else if (data.latest_banner && data.latest_banner.sender_role === 'rider') {
-      handleLiveRiderMessage(data.latest_banner);
+      if (!data.latest_banner.order_id || !targetOrderId || parseInt(data.latest_banner.order_id, 10) === parseInt(targetOrderId, 10)) {
+        handleLiveRiderMessage(data.latest_banner);
+      }
     }
 
     // Automated "Rider Arrived" Live Notification
@@ -6196,7 +6254,7 @@ async function pollCustomerCommunicationUpdates() {
         card.setAttribute('data-status', (dNorm === 'arrived' || sNorm === 'ARRIVED') ? 'arrived' : ((dNorm === 'near_customer' || sNorm === 'NEAR_CUSTOMER') ? 'near_customer' : 'out_for_delivery'));
         card.classList.add('on-the-way-card');
         card.style.cursor = 'pointer';
-        card.onclick = () => openCustomerTrackingModal(oId);
+        card.onclick = () => openTrackingModal(oId);
         card.setAttribute('title', 'Tap to view live delivery tracking map');
 
         const rowIcon = card.querySelector('.row-icon');
@@ -6219,7 +6277,7 @@ async function pollCustomerCommunicationUpdates() {
             trackActions.className = 'order-actions-wrap';
             trackActions.style.cssText = 'display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;';
             trackActions.innerHTML = `
-              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openCustomerTrackingModal(${oId})" title="Tap to view live delivery map">
+              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(${oId})" title="Tap to view live delivery map">
                 <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
               </button>
               <button class="confirm-btn" id="confirm-btn-${oId}" onclick="event.stopPropagation(); confirmOrderReceived(${oId})">

@@ -332,12 +332,8 @@ if ($action === 'get_updates' || $method === 'GET') {
 
     // If no order_id provided, automatically resolve the customer's latest active order
     if ($order_id <= 0 && $customer_id > 0) {
-        $is_demo = ($customer_id === 15 || $customer_id === 26);
-        $cust_cond = $is_demo 
-            ? "(customer_id = :cid OR user_id = :uid OR customer_id IN (15, 26, 0) OR user_id IN (15, 26, 0))" 
-            : "(customer_id = :cid OR user_id = :uid)";
         $ostmt = $conn->prepare("SELECT order_id FROM food_orders 
-            WHERE {$cust_cond} 
+            WHERE (customer_id = :cid OR user_id = :uid) AND COALESCE(rider_cleared, 0) = 0
             ORDER BY CASE 
                 WHEN LOWER(TRIM(status)) IN ('out_for_delivery', 'on_the_way', 'on_delivery', 'near_customer', 'arrived') THEN 1 
                 WHEN LOWER(TRIM(status)) IN ('preparing', 'cooking', 'in_kitchen', 'ready_for_pickup', 'ready', 'accepted', 'claimed', 'pending') THEN 2 
@@ -417,12 +413,12 @@ if ($action === 'get_updates' || $method === 'GET') {
     $active_call = null;
     if ($call_row) {
         $st = strtolower(trim((string)$call_row['call_status']));
-        if ($st === 'ringing') $st = 'calling';
+        // Keep ringing as ringing; map accepted to connected
         if ($st === 'accepted') $st = 'connected';
         $age = (int)$call_row['seconds_since_update'];
 
-        // Only treat as active if calling/connected, or recent decline/end (< 8 seconds)
-        if (($st === 'calling' && $age <= 45) || ($st === 'connected') || (in_array($st, ['declined', 'ended'], true) && $age <= 8)) {
+        // Only treat as active if calling/ringing/connected, or recent decline/end (< 8 seconds)
+        if ((in_array($st, ['calling', 'ringing'], true) && $age <= 45) || ($st === 'connected') || (in_array($st, ['declined', 'ended'], true) && $age <= 8)) {
             $active_call = [
                 'call_id'        => (int)$call_row['call_id'],
                 'order_id'       => (int)$call_row['order_id'],
@@ -441,11 +437,20 @@ if ($action === 'get_updates' || $method === 'GET') {
         }
     }
 
-    // Fetch new messages since after_id
-    $m_sql = "SELECT message_id, order_id, sender_role, sender_id, sender_name, message_text, created_at 
+    // Fetch new messages since after_id strictly scoped to this order & user
+    $is_demo = ($user_id === 15 || $user_id === 26 || strtolower($user_name) === 'customer');
+    $customer_id = (int)($order['customer_id'] ?? 0);
+    $scope_condition = $is_demo 
+        ? "(sender_id = :uid OR receiver_id = :uid OR sender_id = :cid OR receiver_id = :cid)"
+        : "(sender_id = :uid OR receiver_id = :uid)";
+
+    $m_sql = "SELECT message_id, order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at 
               FROM order_messages 
-              WHERE order_id = :oid ";
-    $m_params = [':oid' => $order_id];
+              WHERE order_id = :oid AND {$scope_condition} ";
+    $m_params = [':oid' => $order_id, ':uid' => $user_id];
+    if ($is_demo) {
+        $m_params[':cid'] = $customer_id ?: $user_id;
+    }
 
     if ($after_id > 0) {
         $m_sql .= " AND message_id > :aid ";
@@ -462,24 +467,28 @@ if ($action === 'get_updates' || $method === 'GET') {
         $msg['message_id'] = (int)$msg['message_id'];
         $msg['order_id'] = (int)$msg['order_id'];
         $msg['time_formatted'] = date('g:i A', strtotime($msg['created_at']));
-        $msg['is_me'] = ($msg['sender_role'] === $role && (int)$msg['sender_id'] === $user_id);
+        $msg['is_me'] = ($msg['sender_role'] === $role && ($msg['sender_id'] === $user_id || ($is_demo && in_array($msg['sender_id'], [15, 26], true))));
         if ($msg['message_id'] > $latest_msg_id) {
             $latest_msg_id = $msg['message_id'];
         }
     }
     unset($msg);
 
-    // Latest message overall for banner notifications
+    // Latest message overall for banner notifications - only for fresh messages (< 60s) or new incoming messages
     $latest_banner = null;
     if (!empty($messages)) {
         $last_one = end($messages);
-        $latest_banner = [
-            'message_id'   => (int)$last_one['message_id'],
-            'sender_role'  => $last_one['sender_role'],
-            'sender_name'  => $last_one['sender_name'],
-            'message_text' => $last_one['message_text'],
-            'created_at'   => $last_one['created_at']
-        ];
+        $msg_age = time() - strtotime($last_one['created_at']);
+        if ($after_id > 0 || $msg_age <= 60) {
+            $latest_banner = [
+                'message_id'   => (int)$last_one['message_id'],
+                'order_id'     => (int)$last_one['order_id'],
+                'sender_role'  => $last_one['sender_role'],
+                'sender_name'  => $last_one['sender_name'],
+                'message_text' => $last_one['message_text'],
+                'created_at'   => $last_one['created_at']
+            ];
+        }
     }
 
     $is_arrived = (strtolower(trim((string)($order['delivery_status'] ?? ''))) === 'arrived' || strtolower(trim((string)($order['status'] ?? ''))) === 'arrived');

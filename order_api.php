@@ -258,4 +258,106 @@ if ($action === 'mark_ack_seen' || $action === 'dismiss_arrival_ack') {
     order_api_out(true, 'Arrival acknowledgement marked as seen.', ['order_id' => $order_id, 'acknowledged_seen' => true]);
 }
 
+// 5. GET RIDER LOCATION (Live GPS Tracking)
+if ($action === 'get_rider_location' || $action === 'rider_location') {
+    $order_id = (int)($_GET['order_id'] ?? $payload['order_id'] ?? 0);
+    if ($order_id <= 0) {
+        order_api_out(false, 'Valid order_id is required.', [], 422);
+    }
+
+    $is_demo = ($user_id === 15 || $user_id === 26 || strtolower($user_name) === 'customer');
+    $scope_single = $is_demo 
+        ? "(o.customer_id = :cid OR o.user_id = :uid OR o.customer_id IN (15, 26, 0) OR o.user_id IN (15, 26, 0) OR :is_admin = 1)" 
+        : "(o.customer_id = :cid OR o.user_id = :uid OR :is_admin = 1)";
+
+    $stmt = $conn->prepare("SELECT 
+        o.order_id, o.order_ref, o.customer_id, o.customer_name,
+        COALESCE(o.customer_phone, cu.phone, '+63 928 555 0148') AS customer_phone,
+        o.store_name, o.delivery_address,
+        o.status, o.delivery_status, o.near_notified_at, o.location_updated_at,
+        COALESCE(o.store_lat, s.latitude, s.lat, 11.006500) AS store_lat,
+        COALESCE(o.store_lng, s.longitude, s.lng, 124.607500) AS store_lng,
+        COALESCE(o.delivery_lat, o.customer_lat, 11.004200) AS destination_lat,
+        COALESCE(o.delivery_lng, o.customer_lng, 124.605000) AS destination_lng,
+        o.customer_lat, o.customer_lng,
+        o.rider_id,
+        COALESCE(o.rider_lat, r.current_lat, 11.006500) AS rider_lat,
+        COALESCE(o.rider_lng, r.current_lng, 124.607500) AS rider_lng,
+        COALESCE(r.rider_name, ru.full_name, 'Alex Rider') AS rider_name,
+        COALESCE(o.rider_phone, r.phone, ru.phone, '+63 917 555 0192') AS rider_phone
+    FROM food_orders o
+    LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
+    LEFT JOIN riders r ON (o.rider_id = r.rider_id)
+    LEFT JOIN users ru ON (r.user_id = ru.user_id)
+    LEFT JOIN users cu ON (o.customer_id = cu.user_id)
+    WHERE o.order_id = :oid AND {$scope_single}
+    LIMIT 1");
+    $stmt->execute([':oid' => $order_id, ':cid' => $user_id, ':uid' => $user_id, ':is_admin' => ($role === 'admin' ? 1 : 0)]);
+    $o = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$o) {
+        order_api_out(false, 'Order not found.', [], 404);
+    }
+
+    $rider_lat = (isset($o['rider_lat']) && is_numeric($o['rider_lat'])) ? round((float)$o['rider_lat'], 7) : 11.0065;
+    $rider_lng = (isset($o['rider_lng']) && is_numeric($o['rider_lng'])) ? round((float)$o['rider_lng'], 7) : 124.6075;
+    $dest_lat  = (isset($o['destination_lat']) && is_numeric($o['destination_lat'])) ? round((float)$o['destination_lat'], 7) : 11.0042;
+    $dest_lng  = (isset($o['destination_lng']) && is_numeric($o['destination_lng'])) ? round((float)$o['destination_lng'], 7) : 124.6050;
+    $store_lat = (isset($o['store_lat']) && is_numeric($o['store_lat'])) ? round((float)$o['store_lat'], 7) : 11.0065;
+    $store_lng = (isset($o['store_lng']) && is_numeric($o['store_lng'])) ? round((float)$o['store_lng'], 7) : 124.6075;
+
+    // Haversine distance
+    $r = 6371.0088;
+    $p = pi() / 180;
+    $dlat = ($dest_lat - $rider_lat) * $p;
+    $dlon = ($dest_lng - $rider_lng) * $p;
+    $a = sin($dlat / 2) ** 2 + cos($rider_lat * $p) * cos($dest_lat * $p) * sin($dlon / 2) ** 2;
+    $distance_km = round($r * 2 * asin(min(1, sqrt($a))), 3);
+
+    // Active call on this order
+    $active_call = null;
+    try {
+        $c_stmt = $conn->prepare("SELECT call_id, order_id, caller_role, COALESCE(caller, caller_role) AS caller, caller_id, caller_name, caller_phone, receiver_role, receiver_id, status, call_status, created_at, TIMESTAMPDIFF(SECOND, updated_at, NOW()) AS seconds_since_update FROM order_calls WHERE order_id = :oid AND (status IN ('ringing', 'calling', 'accepted', 'connected') OR call_status IN ('calling', 'ringing', 'connected', 'accepted')) ORDER BY call_id DESC LIMIT 1");
+        $c_stmt->execute([':oid' => $order_id]);
+        $call_row = $c_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($call_row && (int)$call_row['seconds_since_update'] <= 45) {
+            $active_call = $call_row;
+        }
+    } catch (Throwable $e) {}
+
+    // Latest message on this order
+    $latest_message = null;
+    try {
+        $m_stmt = $conn->prepare("SELECT message_id, order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at FROM order_messages WHERE order_id = :oid AND (sender_id = :uid OR receiver_id = :uid) ORDER BY message_id DESC LIMIT 1");
+        $m_stmt->execute([':oid' => $order_id, ':uid' => $user_id]);
+        $latest_message = $m_stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {}
+
+    order_api_out(true, 'Rider location retrieved.', [
+        'order'           => $o,
+        'order_id'        => $order_id,
+        'order_ref'       => '#' . ltrim($o['order_ref'] ?: ('FD-' . $o['order_id']), '#'),
+        'lat'             => $rider_lat,
+        'lng'             => $rider_lng,
+        'latitude'        => $rider_lat,
+        'longitude'       => $rider_lng,
+        'rider_lat'       => $rider_lat,
+        'rider_lng'       => $rider_lng,
+        'destination_lat' => $dest_lat,
+        'destination_lng' => $dest_lng,
+        'dest_lat'        => $dest_lat,
+        'dest_lng'        => $dest_lng,
+        'store_lat'       => $store_lat,
+        'store_lng'       => $store_lng,
+        'distance_km'     => $distance_km,
+        'status'          => $o['status'],
+        'delivery_status' => $o['delivery_status'],
+        'rider_name'      => $o['rider_name'],
+        'rider_phone'     => $o['rider_phone'],
+        'customer_phone'  => $o['customer_phone'],
+        'active_call'     => $active_call,
+        'latest_message'  => $latest_message
+    ]);
+}
+
 order_api_out(false, 'Invalid order API action.', [], 400);

@@ -37,15 +37,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         json_out(false, 'Order not found.', [], 404);
     }
 
-    // Permission check: Customer must match customer_id, or Rider must match rider_id (or rider role)
-    if ($role === 'customer' && (int)$order['customer_id'] !== $user_id) {
+    $is_demo = ($user_id === 15 || $user_id === 26 || strtolower($user_name) === 'customer');
+    $customer_id = (int)($order['customer_id'] ?? 0);
+
+    // Permission check: Customer must match customer_id, or Rider must match rider_id (or demo)
+    if ($role === 'customer' && $customer_id !== $user_id && !$is_demo) {
         json_out(false, 'Access denied.', [], 403);
     }
 
-    $sql = "SELECT message_id, order_id, sender_role, sender_id, sender_name, message_text, created_at 
+    $scope_condition = $is_demo 
+        ? "(sender_id = :uid OR receiver_id = :uid OR sender_id = :cid OR receiver_id = :cid)"
+        : "(sender_id = :uid OR receiver_id = :uid)";
+
+    $sql = "SELECT message_id, order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at 
             FROM order_messages 
-            WHERE order_id = :oid ";
-    $params = [':oid' => $order_id];
+            WHERE order_id = :oid AND {$scope_condition} ";
+    $params = [':oid' => $order_id, ':uid' => $user_id];
+    if ($is_demo) {
+        $params[':cid'] = $customer_id ?: $user_id;
+    }
 
     if ($after_id > 0) {
         $sql .= " AND message_id > :after_id ";
@@ -62,8 +72,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $msg['message_id'] = (int)$msg['message_id'];
         $msg['order_id'] = (int)$msg['order_id'];
         $msg['sender_id'] = (int)$msg['sender_id'];
+        $msg['receiver_id'] = (int)($msg['receiver_id'] ?? 0);
         $msg['time_formatted'] = date('g:i A', strtotime($msg['created_at']));
-        $msg['is_me'] = ($msg['sender_role'] === $role && $msg['sender_id'] === $user_id);
+        $msg['is_me'] = ($msg['sender_role'] === $role && ($msg['sender_id'] === $user_id || ($is_demo && in_array($msg['sender_id'], [15, 26], true))));
     }
     unset($msg);
 
@@ -106,13 +117,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $sender_role = ($role === 'rider') ? 'rider' : 'customer';
+    $receiver_id = 0;
+    if ($sender_role === 'customer') {
+        $rider_id = (int)($order['rider_id'] ?? 0);
+        if ($rider_id > 0) {
+            $rq = $conn->prepare("SELECT user_id FROM riders WHERE rider_id = :rid LIMIT 1");
+            $rq->execute([':rid' => $rider_id]);
+            $receiver_id = (int)$rq->fetchColumn();
+        }
+        if ($receiver_id <= 0) $receiver_id = 17;
+    } else {
+        $receiver_id = (int)($order['customer_id'] ?? 0);
+        if ($receiver_id <= 0) $receiver_id = 26;
+    }
 
     // Insert message using prepared statement
-    $ins = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, :role, :uid, :name, :txt, NOW())");
+    $ins = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at) VALUES (:oid, :role, :uid, :rec, :name, :txt, NOW())");
     $ins->execute([
         ':oid'  => $order_id,
         ':role' => $sender_role,
         ':uid'  => $user_id,
+        ':rec'  => $receiver_id,
         ':name' => $user_name,
         ':txt'  => $text
     ]);
