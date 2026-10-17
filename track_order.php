@@ -75,7 +75,7 @@ $rider_name = $order['rider_name'] ?? 'Alex Rider';
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Live Delivery Tracking - <?= htmlspecialchars($order['order_ref'] ?? 'Food Dash') ?></title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -110,8 +110,13 @@ $rider_name = $order['rider_name'] ?? 'Alex Rider';
   --line: #E5E7EB;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+html, body { width: 100%; min-height: 100%; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; }
 body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex; justify-content: center; }
 .app-container { width: 100%; max-width: 480px; background: #ffffff; min-height: 100vh; display: flex; flex-direction: column; box-shadow: 0 0 24px rgba(75, 83, 32, 0.12); position: relative; }
+@media (max-width: 599px) {
+  html, body { width: 100%; min-height: 100%; margin: 0; padding: 0; }
+  .app-container { max-width: 100%; box-shadow: none; }
+}
 
 /* Header */
 .track-header {

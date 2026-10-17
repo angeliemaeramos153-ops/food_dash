@@ -612,7 +612,7 @@ $total_riders = (int)($conn->query("SELECT COUNT(*) AS c FROM riders")->fetchCol
 $waiting = (int)($conn->query("SELECT COUNT(*) AS c FROM riders WHERE status='waiting'")->fetchColumn() ?: 0);
 $on_delivery = (int)($conn->query("SELECT COUNT(*) AS c FROM riders WHERE status='on_delivery'")->fetchColumn() ?: 0);
 ?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Food Dash - Rider</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><title>Food Dash - Rider</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -652,8 +652,11 @@ $on_delivery = (int)($conn->query("SELECT COUNT(*) AS c FROM riders WHERE status
 }
 *{box-sizing:border-box}
 html, body {
-  min-height: 100vh;
   width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  -webkit-text-size-adjust: 100%;
   background:
     radial-gradient(circle at 15% 10%, rgba(216,143,42,.12), transparent 30%),
     radial-gradient(circle at 85% 90%, rgba(75,83,32,.13), transparent 35%),
@@ -663,8 +666,6 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  margin: 0;
-  padding: 20px 0;
 }
 .app {
   width: 100%;
@@ -678,6 +679,9 @@ html, body {
   box-shadow: 0 10px 30px rgba(75,83,32,.12);
 }
 @media(min-width: 600px){
+  body {
+    padding: 20px 0;
+  }
   .app {
     min-height: 720px;
     height: auto;
@@ -688,8 +692,8 @@ html, body {
   }
 }
 @media(max-width: 599px){
-  html, body { padding: 0; }
-  .app { border: none; border-radius: 0; box-shadow: none; min-height: 100vh; }
+  html, body { width: 100%; min-height: 100%; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; }
+  .app { border: none; border-radius: 0; box-shadow: none; min-height: 100vh; width: 100%; max-width: 100%; }
 }
 .hero{background:var(--olive-shadow);color:white;padding:20px 18px 23px;border-radius:0 0 25px 25px}
 .brand{display:flex;align-items:center;gap:10px}

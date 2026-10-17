@@ -411,7 +411,7 @@ if ($menu_items_res) {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Food Dash — Customer</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -459,8 +459,11 @@ if ($menu_items_res) {
 *{box-sizing:border-box;margin:0;padding:0;font-family:Poppins,Arial,sans-serif}
 
 html, body {
-  min-height: 100vh;
   width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  -webkit-text-size-adjust: 100%;
   background:
     radial-gradient(circle at 15% 10%, rgba(216,143,42,.12), transparent 30%),
     radial-gradient(circle at 85% 90%, rgba(75,83,32,.13), transparent 35%),
@@ -469,8 +472,6 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  margin: 0;
-  padding: 20px 0;
 }
 
 button,input{font:inherit}
@@ -489,6 +490,9 @@ button{cursor:pointer}
 }
 
 @media(min-width:600px){
+  body {
+    padding: 20px 0;
+  }
   .app{
     min-height:720px;
     height: auto;
@@ -500,8 +504,8 @@ button{cursor:pointer}
 }
 
 @media(max-width:599px){
-  html, body { padding: 0; }
-  .app { border: none; border-radius: 0; box-shadow: none; min-height: 100vh; }
+  html, body { width: 100%; min-height: 100%; margin: 0; padding: 0; -webkit-text-size-adjust: 100%; }
+  .app { border: none; border-radius: 0; box-shadow: none; min-height: 100vh; width: 100%; max-width: 100%; }
 }
 
 .top{

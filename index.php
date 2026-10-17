@@ -233,7 +233,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Food Dash - Mobile App</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
   <style>
@@ -251,6 +251,14 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+
+    html, body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      padding: 0;
+      -webkit-text-size-adjust: 100%;
+    }
 
     body {
       background: #F4F1EA !important;
@@ -1046,14 +1054,27 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     }
 
     @media (max-width: 599px) {
-      body { padding: 16px 12px; }
+      html, body {
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
+        padding: 0;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        padding: 0;
+        min-height: 100vh;
+        align-items: flex-start;
+      }
       .app,
       .mobile-card {
-        padding: 28px 18px;
-        border-radius: 24px;
+        padding: 24px 18px;
+        border-radius: 0;
+        border: none;
         width: 100%;
-        max-width: 440px;
-        box-shadow: 0 12px 40px rgba(54, 43, 20, 0.08) !important;
+        max-width: 100%;
+        min-height: 100vh;
+        box-shadow: none !important;
         background: #FFFFFF !important;
       }
       .brand-logo-img { width: 72px; height: 72px; }
