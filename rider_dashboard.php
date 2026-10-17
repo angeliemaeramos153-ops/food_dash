@@ -96,18 +96,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
 
     // Explicit Finish & Clear action by rider (handled immediately, with or without order_id)
     if ($action === 'clear_order' || $action === 'finish_delivery') {
-        $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid");
-        $stmt->execute([':rid' => $rid]);
+        if ($order_id <= 0) {
+            $order_id = (int)($_SESSION['active_order_id'] ?? 0);
+            if ($order_id <= 0 && $r) {
+                if (!empty($r['active_order_id'])) {
+                    $order_id = (int)$r['active_order_id'];
+                } elseif (!empty($r['current_order']) && $r['current_order'] !== 'None') {
+                    $clean_ref = ltrim($r['current_order'], '#');
+                    $chk_fo = $conn->prepare("SELECT order_id FROM food_orders WHERE order_ref = :ref OR order_ref = :raw_ref OR order_id = :num_id LIMIT 1");
+                    $chk_fo->execute([':ref' => '#' . $clean_ref, ':raw_ref' => $clean_ref, ':num_id' => (int)$clean_ref]);
+                    $order_id = (int)($chk_fo->fetchColumn() ?: 0);
+                }
+            }
+        }
+
+        // 1. Update order status to 'delivered' and mark rider_cleared = 1, cleared_at = NOW()
         if ($order_id > 0) {
             try {
-                $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', updated_at = NOW() WHERE order_id = :oid AND rider_id = :rid")->execute([':oid' => $order_id, ':rid' => $rid]);
-                $conn->prepare("UPDATE orders SET status = 'delivered', updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+                $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', rider_cleared = 1, cleared_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND (rider_id = :rid OR :rid = 0)")->execute([':oid' => $order_id, ':rid' => $rid]);
+                $conn->prepare("UPDATE orders SET status = 'delivered', rider_cleared = 1, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+                record_order_audit_log($conn, $order_id, 'DELIVERED', 'DELIVERED', $user_id, 'rider', 'Delivery finished & cleared by rider ' . $user_name);
             } catch (Throwable $e) {}
         }
+
+        // Always archive / mark any delivered orders for this rider as rider_cleared = 1
+        try {
+            $conn->prepare("UPDATE food_orders SET rider_cleared = 1, cleared_at = NOW() WHERE rider_id = :rid AND LOWER(TRIM(status)) = 'delivered' AND COALESCE(rider_cleared, 0) = 0")->execute([':rid' => $rid]);
+        } catch (Throwable $e) {}
+
+        // 2. Unlink rider from active delivery slot, clear current_order and active_order_id so queries for active orders return NULL
+        try {
+            $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None', active_order_id = NULL WHERE rider_id = :rid OR user_id = :uid");
+            $stmt->execute([':rid' => $rid, ':uid' => $user_id]);
+        } catch (Throwable $e) {}
+
+        // 3. Clear session cache for the rider
+        unset($_SESSION['active_order_id'], $_SESSION['rider_current_order'], $_SESSION['rider_active_delivery']);
+
         if ($is_ajax) {
             if (ob_get_level()) ob_clean();
             header('Content-Type: application/json');
-            echo json_encode(['success' => true, 'message' => 'Active delivery cleared! Ready for your next order.']);
+            echo json_encode([
+                'success' => true, 
+                'message' => 'Active delivery cleared! Ready for your next order.',
+                'cleared_order_id' => $order_id
+            ]);
             exit();
         } else {
             $msg = 'Active delivery cleared! Ready for your next order.';
@@ -241,8 +274,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     // Two-Way Delivery Handshake: Keep rider on_delivery with active current_order reference
                     // so the active summary card is retained until rider taps "Finish & Clear / Next Order"
                     $order_ref_val = '#' . ltrim(!empty($order['order_ref']) ? $order['order_ref'] : ('FD-' . $order_id), '#');
-                    $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
-                    $stmt->execute([':ref' => $order_ref_val, ':rid' => $rid]);
+                    $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref, active_order_id = :oid WHERE rider_id = :rid");
+                    $stmt->execute([':ref' => $order_ref_val, ':oid' => $order_id, ':rid' => $rid]);
+                    $_SESSION['active_order_id'] = $order_id;
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'DELIVERED', $user_id, 'rider', 'Order successfully delivered to customer by ' . $user_name);
                     create_notification($conn, $customer_id, 'delivered', 'Order Delivered!', 'Your order ' . $ref . ' has been marked delivered. Enjoy your meal!', $order_id);
@@ -269,12 +303,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     exit();
                 } elseif ($action === 'clear_order' || $action === 'finish_delivery') {
                     // Explicit Finish & Clear action by rider
-                    $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid");
-                    $stmt->execute([':rid' => $rid]);
+                    if ($order_id > 0) {
+                        try {
+                            $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', rider_cleared = 1, cleared_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND (rider_id = :rid OR :rid = 0)")->execute([':oid' => $order_id, ':rid' => $rid]);
+                            $conn->prepare("UPDATE orders SET status = 'delivered', rider_cleared = 1, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+                        } catch (Throwable $e) {}
+                    }
+                    try {
+                        $conn->prepare("UPDATE food_orders SET rider_cleared = 1, cleared_at = NOW() WHERE rider_id = :rid AND LOWER(TRIM(status)) = 'delivered' AND COALESCE(rider_cleared, 0) = 0")->execute([':rid' => $rid]);
+                    } catch (Throwable $e) {}
+
+                    $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None', active_order_id = NULL WHERE rider_id = :rid OR user_id = :uid");
+                    $stmt->execute([':rid' => $rid, ':uid' => $user_id]);
+                    unset($_SESSION['active_order_id'], $_SESSION['rider_current_order'], $_SESSION['rider_active_delivery']);
 
                     if (ob_get_level()) ob_clean();
                     header('Content-Type: application/json');
-                    echo json_encode(['success' => true, 'message' => 'Active delivery cleared! Ready for your next order.']);
+                    echo json_encode(['success' => true, 'message' => 'Active delivery cleared! Ready for your next order.', 'cleared_order_id' => $order_id]);
                     exit();
                 } else {
                     throw new Exception('Unknown delivery action.');
@@ -452,6 +497,8 @@ if ($rid > 0) {
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, 
             o.rider_lat, o.rider_lng, o.created_at, o.shop_id,
+            COALESCE(o.acknowledged_seen, 0) AS acknowledged_seen,
+            o.arrival_acknowledged_at, o.arrival_ack_response,
             COALESCE(o.store_lat, s.latitude, s.lat) AS store_lat, 
             COALESCE(o.store_lng, s.longitude, s.lng) AS store_lng,
             s.address AS store_address,
@@ -463,14 +510,21 @@ if ($rid > 0) {
         LEFT JOIN riders r ON (o.rider_id = r.rider_id)
         LEFT JOIN users cu ON (o.customer_id = cu.user_id)
         WHERE o.rider_id = :rid 
+          AND COALESCE(o.rider_cleared, 0) = 0
+          AND r.status = 'on_delivery'
           AND (
-            LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived')
+            (r.active_order_id IS NOT NULL AND r.active_order_id = o.order_id)
+            OR (r.current_order IS NOT NULL AND r.current_order != 'None' AND r.current_order != '' AND (
+                o.order_ref = r.current_order 
+                OR CONCAT('#', TRIM(LEADING '#' FROM o.order_ref)) = CONCAT('#', TRIM(LEADING '#' FROM r.current_order))
+            ))
             OR (
-              LOWER(TRIM(o.status)) = 'delivered'
-              AND (r.status = 'on_delivery' OR (r.current_order IS NOT NULL AND r.current_order != 'None' AND r.current_order != ''))
+              (r.active_order_id IS NULL OR r.active_order_id = 0)
+              AND (r.current_order IS NULL OR r.current_order = 'None' OR r.current_order = '')
+              AND LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived')
             )
           )
-        ORDER BY o.order_id DESC LIMIT 30");
+        ORDER BY o.order_id DESC LIMIT 1");
     $stmt_my->execute([':rid' => $rid]);
     $my_orders = $stmt_my->fetchAll(PDO::FETCH_ASSOC);
 
@@ -491,7 +545,7 @@ if ($rid > 0) {
 }
 
 $active_order_for_map = null;
-$first_order = !empty($my_orders) ? $my_orders[0] : (!empty($ready_orders) ? $ready_orders[0] : null);
+$first_order = !empty($my_orders) ? $my_orders[0] : null;
 if ($first_order) {
 
     // 1. Customer Destination: strictly from order delivery coordinates without arbitrary offsets
@@ -1537,7 +1591,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
 .pm-badge-maya { background: #0f172a !important; border: 1px solid #05de82 !important; color: #05de82 !important; }
 .pm-badge-gotyme { background: #1e1b4b !important; border: 1px solid #818cf8 !important; color: #38bdf8 !important; }
 .pm-badge-apple { background: #000000 !important; border: 1px solid #374151 !important; color: #ffffff !important; }
-</style></head><body><div class="app"><header class="hero"><div class="topline"><div class="brand"><img src="logo.jpg" alt="Food Dash"><b>FOOD DASH</b></div><div style="display:flex;align-items:center;gap:8px;"><button type="button" class="btn-hdr-history" id="btnOpenCompletedOrders" data-action="open-completed" title="View Completed Deliveries"><i class="fa-solid fa-clipboard-check"></i> <span>📋 Completed Orders</span></button><button class="bell" onclick="openNotifications()"><i class="fa-regular fa-bell"></i><span id="noteBadge" class="bell-badge">0</span></button></div></div><div class="hello"><small>Rider Portal</small><h1>Ready to dash, <?=htmlspecialchars($user_name)?>?</h1><small>Pick up orders and keep customers updated.</small><div class="status"><span class="dot <?=$r && $r['status']==='on_delivery'?'live':''?>"></span><?=$r && $r['status']==='on_delivery'?'On Delivery':'Waiting for Delivery'?></div></div></header><main><?php if($msg):?><div class="alert">✓ <?=htmlspecialchars($msg)?></div><?php endif;?><?php if($error):?><div class="alert err">⚠ <?=htmlspecialchars($error)?></div><?php endif;?><div class="stats"><div class="stat"><i class="fa-solid fa-motorcycle"></i><strong><?=$total_riders?></strong><span>Total Riders</span></div><div class="stat"><i class="fa-solid fa-clock"></i><strong><?=$waiting?></strong><span>Waiting</span></div><div class="stat"><i class="fa-solid fa-route"></i><strong><?=$on_delivery?></strong><span>On Delivery</span></div></div><div class="rider-quick-toolbar" style="margin: 0 0 12px; display: flex; gap: 8px;"><button type="button" class="btn-toolbar-completed" id="btnOpenCompletedOrdersToolbar" data-action="open-completed" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #ffffff; border: 1.5px solid var(--sandstone); color: var(--olive-shadow); padding: 9px 14px; border-radius: 12px; font-weight: 700; font-size: 0.78rem; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.04); transition: all 0.2s ease;"><i class="fa-solid fa-clipboard-check" style="color: #16a34a; font-size: 0.95rem;"></i><span>📋 Completed Orders (<?= count($completed_orders) ?>)</span></button></div>
+</style></head><body><div class="app"><header class="hero"><div class="topline"><div class="brand"><img src="logo.jpg" alt="Food Dash"><b>FOOD DASH</b></div><div style="display:flex;align-items:center;gap:8px;"><button type="button" class="btn-hdr-history" id="btnOpenCompletedOrders" data-action="open-completed" title="View Completed Deliveries"><i class="fa-solid fa-clipboard-check"></i> <span>📋 Completed Orders</span></button><button class="bell" onclick="openNotifications()"><i class="fa-regular fa-bell"></i><span id="noteBadge" class="bell-badge">0</span></button></div></div><div class="hello"><small>Rider Portal</small><h1>Ready to dash, <?=htmlspecialchars($user_name)?>?</h1><small>Pick up orders and keep customers updated.</small><div class="status"><span class="dot <?=$r && $r['status']==='on_delivery' && !empty($my_orders)?'live':''?>"></span><?=$r && $r['status']==='on_delivery' && !empty($my_orders)?'On Delivery':'Waiting for Delivery'?></div></div></header><main><?php if($msg):?><div class="alert">✓ <?=htmlspecialchars($msg)?></div><?php endif;?><?php if($error):?><div class="alert err">⚠ <?=htmlspecialchars($error)?></div><?php endif;?><div class="stats"><div class="stat"><i class="fa-solid fa-motorcycle"></i><strong><?=$total_riders?></strong><span>Total Riders</span></div><div class="stat"><i class="fa-solid fa-clock"></i><strong><?=$waiting?></strong><span>Waiting</span></div><div class="stat"><i class="fa-solid fa-route"></i><strong><?=$on_delivery?></strong><span>On Delivery</span></div></div><div class="rider-quick-toolbar" style="margin: 0 0 12px; display: flex; gap: 8px;"><button type="button" class="btn-toolbar-completed" id="btnOpenCompletedOrdersToolbar" data-action="open-completed" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #ffffff; border: 1.5px solid var(--sandstone); color: var(--olive-shadow); padding: 9px 14px; border-radius: 12px; font-weight: 700; font-size: 0.78rem; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.04); transition: all 0.2s ease;"><i class="fa-solid fa-clipboard-check" style="color: #16a34a; font-size: 0.95rem;"></i><span>📋 Completed Orders (<?= count($completed_orders) ?>)</span></button></div>
 <section class="section" id="delivery"><div class="section-title"><h2><i class="fa-solid fa-box"></i> My Delivery</h2></div><div class="card"><?php if($my_orders): foreach($my_orders as $o): 
   $ord_st = strtoupper($o['status'] ?? '');
   $norm_st = strtolower(trim($o['status'] ?? ''));
@@ -1565,9 +1619,9 @@ main{padding:16px;flex:1;overflow-x:hidden}
 <section class="section" id="live"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">📡 Live Location</h2><div id="gpsStatus" class="meta">Live location is off. Tap Share Live Location after starting a delivery.</div><button type="button" class="btn full" style="margin-top:10px" onclick="stopLiveLocation()">Stop Sharing</button></div></section><section class="section" id="guide"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">Customer Notification Flow</h2><div class="meta">When you accept an order, the customer is notified. When you start the trip, they receive an <b>On the Way</b> notification. When you tap <b>I'm Near Customer</b>, they receive the near-arrival notification. When delivered, the customer receives a final delivery notice.</div></div></section></main><nav class="bottom"><a class="active" href="#delivery"><i class="fa-solid fa-box"></i>Delivery</a><a href="#available"><i class="fa-solid fa-motorcycle"></i>Pickup</a><a href="#live"><i class="fa-solid fa-location-crosshairs"></i>Live</a><a href="#guide"><i class="fa-solid fa-circle-info"></i>Guide</a><a href="javascript:void(0)" onclick="openLogout()"><i class="fa-solid fa-right-from-bracket"></i>Logout</a></nav></div>
 <div class="modal" id="noteModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Notifications</h3><div id="notificationList" class="notification-list"><div class="empty">Loading...</div></div><div class="box-actions"><button class="close" onclick="markAllRead()">Mark all read</button><button class="close" onclick="closeNotifications()">Close</button></div></div></div>
 <div class="modal" id="logoutModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out.</p><div class="box-actions"><button class="close" onclick="closeLogout()">Cancel</button><a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
-<div class="modal" id="riderConfirmModal" style="z-index: 99999 !important;"><div class="box" style="text-align:center; max-width: 360px;"><div style="font-size: 2.2rem; margin-bottom: 6px;">🤝</div><h3 id="riderConfirmTitle" style="margin: 0 0 6px; color: var(--olive-shadow); font-size: 1.15rem;">Delivery Handover</h3><p id="riderConfirmMsg" style="font-size: 0.8rem; color: var(--muted); line-height: 1.45; margin: 0 0 16px;">Confirm delivery handover with customer?</p><div class="box-actions"><button type="button" class="close" id="cancelHandoverBtn" data-dismiss="modal" onclick="closeRiderConfirm()" style="margin-top:0;">Cancel</button><button type="button" class="btn success btn-confirm-handover" id="confirmHandoverBtn" style="background:#16a34a; font-weight:700; flex:1.2;"><i class="fa-solid fa-circle-check"></i> Confirm Handover</button></div></div></div>
+<div class="modal" id="riderConfirmModal" style="display: none; z-index: 99999 !important;"><div class="box" style="text-align:center; max-width: 360px;"><div style="font-size: 2.2rem; margin-bottom: 6px;">🤝</div><h3 id="riderConfirmTitle" style="margin: 0 0 6px; color: var(--olive-shadow); font-size: 1.15rem;">Delivery Handover</h3><p id="riderConfirmMsg" style="font-size: 0.8rem; color: var(--muted); line-height: 1.45; margin: 0 0 16px;">Confirm delivery handover with customer?</p><div class="box-actions"><button type="button" class="close" id="cancelHandoverBtn" data-dismiss="modal" onclick="closeRiderConfirm()" style="margin-top:0;">Cancel</button><button type="button" class="btn success btn-confirm-handover" id="confirmHandoverBtn" style="background:#16a34a; font-weight:700; flex:1.2;"><i class="fa-solid fa-circle-check"></i> Confirm Handover</button></div></div></div>
 <!-- Dedicated Clear Delivery Modal -->
-<div class="modal" id="clearDeliveryModal" style="z-index: 99999 !important;">
+<div class="modal" id="clearDeliveryModal" style="display: none; z-index: 99999 !important;">
   <div class="box" style="text-align:center; max-width: 360px;">
     <div style="font-size: 2.2rem; margin-bottom: 8px;">🏁</div>
     <h3 style="margin: 0 0 6px; color: var(--olive-shadow); font-size: 1.15rem;">Finish &amp; Clear Delivery?</h3>
@@ -2867,7 +2921,30 @@ let riderCallSeconds = 0;
 let activeRiderDeliveryOrderId = <?=(!empty($my_orders[0]['order_id']) ? (int)$my_orders[0]['order_id'] : 0)?>;
 let currentActiveCustomerName = '<?=htmlspecialchars(addslashes($my_orders[0]['customer_name'] ?? 'Customer'))?>';
 let currentActiveCustomerPhone = '<?=htmlspecialchars(addslashes($my_orders[0]['customer_phone'] ?? '+63 917 123 4567'))?>';
-let lastSeenCustomerAck = false;
+let initialAckSeen = <?=!empty($my_orders[0]['acknowledged_seen']) ? 'true' : 'false'?>;
+
+function hasSeenArrivalAck(orderId) {
+  if (!orderId) return true;
+  try {
+    return sessionStorage.getItem('fd_ack_seen_order_' + orderId) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function markSeenArrivalAck(orderId) {
+  if (!orderId) return;
+  try {
+    sessionStorage.setItem('fd_ack_seen_order_' + orderId, '1');
+  } catch (e) {}
+  fetch('order_communication_api.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'mark_ack_seen', order_id: orderId })
+  }).catch(() => {});
+}
+
+let lastSeenCustomerAck = initialAckSeen || (activeRiderDeliveryOrderId > 0 && hasSeenArrivalAck(activeRiderDeliveryOrderId));
 let seenRiderMessageIds = new Set();
 let highestSeenMessageId = 0;
 let isFirstCommPoll = true;
@@ -2955,10 +3032,47 @@ function closeClearDeliveryModal() {
   pendingClearOrderId = null;
 }
 
+function resetDashboardToWaiting() {
+  const clearModal = document.getElementById('clearDeliveryModal');
+  if (clearModal) {
+    clearModal.style.display = 'none';
+    clearModal.classList.remove('show');
+  }
+
+  const confirmModal = document.getElementById('riderConfirmModal');
+  if (confirmModal) {
+    confirmModal.style.display = 'none';
+    confirmModal.classList.remove('show');
+  }
+
+  const statusEl = document.querySelector('.hello .status');
+  if (statusEl) {
+    statusEl.innerHTML = '<span class="dot"></span>Waiting for Delivery';
+  }
+
+  const deliverySectionCard = document.querySelector('#delivery .card');
+  if (deliverySectionCard) {
+    deliverySectionCard.innerHTML = '<div class="empty">No active delivery yet. Accept a ready order below.</div>';
+  }
+
+  if (typeof stopLiveLocation === 'function') {
+    stopLiveLocation();
+  }
+  if (deliveryMap) {
+    try { deliveryMap.remove(); } catch (e) {}
+    deliveryMap = null;
+  }
+}
+
 async function handleFinishAndClear() {
   const orderId = pendingClearOrderId || activeRiderDeliveryOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
 
-  // 1. Immediately dismiss any open modal
+  // 1. Immediately hide #clearDeliveryModal completely
+  const clearModal = document.getElementById('clearDeliveryModal');
+  if (clearModal) {
+    clearModal.style.display = 'none';
+    clearModal.classList.remove('show');
+  }
   document.querySelectorAll('.modal, .custom-modal-backdrop').forEach(m => {
     m.style.display = 'none';
     m.classList.remove('show');
@@ -2972,7 +3086,16 @@ async function handleFinishAndClear() {
 
   toastRider('Finalizing delivery session…');
 
-  // 2. Send AJAX request to finalize session, reset active order state, close modal, and refresh UI
+  if (orderId) {
+    try {
+      sessionStorage.removeItem('fd_ack_seen_order_' + orderId);
+    } catch (e) {}
+  }
+  pendingClearOrderId = null;
+  activeRiderDeliveryOrderId = null;
+  lastSeenCustomerAck = false;
+
+  // 2. Send AJAX request to finalize session, archive/unlink active delivery slot, and reset state
   try {
     const fd = new FormData();
     fd.append('delivery_action', 'clear_order');
@@ -2982,20 +3105,22 @@ async function handleFinishAndClear() {
     const r = await fetch(window.location.href, { method: 'POST', body: fd });
     const data = await r.json();
 
+    resetDashboardToWaiting();
+
     if (data && data.success) {
       toastRider('✓ ' + (data.message || 'Delivery cleared! Ready for next orders.'));
-      // Reset rider dashboard state to Waiting for next orders
       setTimeout(() => {
         location.reload();
-      }, 500);
+      }, 400);
     } else {
-      toastRider((data && data.message) ? data.message : 'Delivery cleared. Updating status...', false);
-      setTimeout(() => location.reload(), 600);
+      toastRider((data && data.message) ? data.message : 'Delivery cleared.', false);
+      setTimeout(() => location.reload(), 500);
     }
   } catch (err) {
     console.error('Error in handleFinishAndClear:', err);
-    toastRider('Delivery session ended. Refreshing...', false);
-    setTimeout(() => location.reload(), 500);
+    resetDashboardToWaiting();
+    toastRider('Delivery session ended.', false);
+    setTimeout(() => location.reload(), 400);
   } finally {
     if (confirmBtn) {
       confirmBtn.disabled = false;
@@ -3267,16 +3392,24 @@ async function pollRiderOrderCommunication() {
     }
 
     // 2. Customer Arrival Acknowledgment Alert
-    if (data.arrival_acknowledged && !lastSeenCustomerAck) {
+    const ackResp = data.arrival_ack_response || 'Coming outside!';
+    const badge = document.getElementById(`riderAckBadge_${activeRiderDeliveryOrderId}`);
+    if (badge && data.arrival_acknowledged) {
+      badge.innerHTML = `<i class="fa-solid fa-circle-check"></i> Customer Acknowledged: <b>"${escapeHtml(ackResp)}"</b>`;
+      badge.style.display = 'flex';
+    }
+
+    const alreadySeenAck = hasSeenArrivalAck(activeRiderDeliveryOrderId) || data.acknowledged_seen || lastSeenCustomerAck;
+    if (data.arrival_acknowledged && !alreadySeenAck) {
       lastSeenCustomerAck = true;
-      const ackResp = data.arrival_ack_response || 'Coming outside!';
-      const badge = document.getElementById(`riderAckBadge_${activeRiderDeliveryOrderId}`);
-      if (badge) {
-        badge.innerHTML = `<i class="fa-solid fa-circle-check"></i> Customer Acknowledged: <b>"${escapeHtml(ackResp)}"</b>`;
-        badge.style.display = 'flex';
-      }
+      markSeenArrivalAck(activeRiderDeliveryOrderId);
       toastRider(`🔔 Customer Acknowledged Arrival: "${ackResp}"`);
       playRiderChime();
+    } else if (data.arrival_acknowledged) {
+      lastSeenCustomerAck = true;
+      if (!hasSeenArrivalAck(activeRiderDeliveryOrderId)) {
+        try { sessionStorage.setItem('fd_ack_seen_order_' + activeRiderDeliveryOrderId, '1'); } catch (e) {}
+      }
     }
 
     // 3. Live Customer Message Alerts & Dynamic Chat Append

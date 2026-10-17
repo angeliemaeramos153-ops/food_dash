@@ -238,4 +238,24 @@ if ($action === 'order_details') {
     order_api_out(true, 'Order details retrieved.', ['order' => $order, 'timeline' => $timeline]);
 }
 
+// 4. MARK ARRIVAL ACKNOWLEDGEMENT SEEN
+if ($action === 'mark_ack_seen' || $action === 'dismiss_arrival_ack') {
+    $order_id = (int)($payload['order_id'] ?? $_GET['order_id'] ?? 0);
+    if ($order_id <= 0) {
+        order_api_out(false, 'Valid order_id is required.', [], 422);
+    }
+
+    try {
+        $conn->prepare("UPDATE food_orders SET acknowledged_seen = 1 WHERE order_id = :oid")->execute([':oid' => $order_id]);
+    } catch (Throwable $e) {}
+    try {
+        $conn->prepare("UPDATE orders SET acknowledged_seen = 1 WHERE order_id = :oid")->execute([':oid' => $order_id]);
+    } catch (Throwable $e) {}
+    try {
+        $conn->prepare("UPDATE notifications SET is_read = TRUE WHERE order_id = :oid AND notification_type = 'arrival_ack'")->execute([':oid' => $order_id]);
+    } catch (Throwable $e) {}
+
+    order_api_out(true, 'Arrival acknowledgement marked as seen.', ['order_id' => $order_id, 'acknowledged_seen' => true]);
+}
+
 order_api_out(false, 'Invalid order API action.', [], 400);

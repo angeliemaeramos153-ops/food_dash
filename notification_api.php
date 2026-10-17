@@ -61,5 +61,22 @@ if ($action === 'mark_all_read') {
     echo json_encode(['success' => (bool)$ok]);
     exit;
 }
+if ($action === 'mark_arrival_ack_read' || $action === 'mark_ack_seen') {
+    $oid = (int)($payload['order_id'] ?? 0);
+    if ($oid > 0) {
+        try {
+            $stmt = $conn->prepare("UPDATE notifications SET is_read = TRUE WHERE order_id = :oid AND notification_type = 'arrival_ack' AND user_id = :uid");
+            $stmt->execute([':oid' => $oid, ':uid' => $user_id]);
+        } catch (Throwable $e) {}
+        try {
+            $conn->prepare("UPDATE food_orders SET acknowledged_seen = 1 WHERE order_id = :oid")->execute([':oid' => $oid]);
+        } catch (Throwable $e) {}
+        try {
+            $conn->prepare("UPDATE orders SET acknowledged_seen = 1 WHERE order_id = :oid")->execute([':oid' => $oid]);
+        } catch (Throwable $e) {}
+        echo json_encode(['success' => true, 'order_id' => $oid]);
+        exit;
+    }
+}
 echo json_encode(['success' => false, 'message' => 'Unknown notification action']);
 ?>

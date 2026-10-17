@@ -260,6 +260,36 @@ if ($action === 'acknowledge_arrival') {
 }
 
 // -------------------------------------------------------------
+// 3.5 MARK ACKNOWLEDGEMENT SEEN (Rider dismissed / seen ack toast)
+// -------------------------------------------------------------
+if ($action === 'mark_ack_seen' || $action === 'dismiss_arrival_ack') {
+    $order_id = (int)($payload['order_id'] ?? $_GET['order_id'] ?? 0);
+    if ($order_id <= 0) {
+        comm_out(false, 'Valid order_id is required.', [], 422);
+    }
+
+    try {
+        $upd_fo = $conn->prepare("UPDATE food_orders SET acknowledged_seen = 1 WHERE order_id = :oid");
+        $upd_fo->execute([':oid' => $order_id]);
+    } catch (Throwable $e) {}
+
+    try {
+        $upd_o = $conn->prepare("UPDATE orders SET acknowledged_seen = 1 WHERE order_id = :oid");
+        $upd_o->execute([':oid' => $order_id]);
+    } catch (Throwable $e) {}
+
+    try {
+        $upd_notif = $conn->prepare("UPDATE notifications SET is_read = TRUE WHERE order_id = :oid AND notification_type = 'arrival_ack'");
+        $upd_notif->execute([':oid' => $order_id]);
+    } catch (Throwable $e) {}
+
+    comm_out(true, 'Arrival acknowledgement marked as seen.', [
+        'order_id'          => $order_id,
+        'acknowledged_seen' => true
+    ]);
+}
+
+// -------------------------------------------------------------
 // 4. RESPOND / UPDATE CALL STATUS
 // -------------------------------------------------------------
 if ($action === 'respond_call' || $action === 'end_call') {
@@ -338,6 +368,7 @@ if ($action === 'get_updates' || $method === 'GET') {
         COALESCE(o.customer_phone, cu.phone, '+63 917 123 4567') AS customer_phone,
         o.store_name, o.delivery_address, o.status, o.delivery_status,
         o.arrival_acknowledged_at, o.arrival_ack_response,
+        COALESCE(o.acknowledged_seen, 0) AS acknowledged_seen,
         COALESCE(r.rider_name, ru.full_name, 'Alex Rider') AS rider_name,
         COALESCE(o.rider_phone, r.phone, ru.phone, '+63 917 555 0192') AS rider_phone
     FROM food_orders o
@@ -355,6 +386,7 @@ if ($action === 'get_updates' || $method === 'GET') {
             'delivery_status'       => 'none',
             'is_arrived'            => false,
             'arrival_acknowledged'  => false,
+            'acknowledged_seen'     => false,
             'arrival_ack_response'  => null,
             'active_call'           => null,
             'messages'              => [],
@@ -452,6 +484,7 @@ if ($action === 'get_updates' || $method === 'GET') {
 
     $is_arrived = (strtolower(trim((string)($order['delivery_status'] ?? ''))) === 'arrived' || strtolower(trim((string)($order['status'] ?? ''))) === 'arrived');
     $arrival_acknowledged = !empty($order['arrival_acknowledged_at']);
+    $acknowledged_seen = !empty($order['acknowledged_seen']);
     $arrival_ack_response = $order['arrival_ack_response'] ?? null;
 
     comm_out(true, 'Updates retrieved.', [
@@ -461,6 +494,7 @@ if ($action === 'get_updates' || $method === 'GET') {
         'delivery_status'       => $order['delivery_status'] ?? 'none',
         'is_arrived'            => $is_arrived,
         'arrival_acknowledged'  => $arrival_acknowledged,
+        'acknowledged_seen'     => $acknowledged_seen,
         'arrival_ack_response'  => $arrival_ack_response,
         'customer_name'         => $order['customer_name'] ?? 'Customer',
         'customer_phone'        => $order['customer_phone'],
