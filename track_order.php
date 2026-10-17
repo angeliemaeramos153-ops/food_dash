@@ -1495,7 +1495,48 @@ async function sendTrackChatMessage(e) {
   }
 }
 
-window.displayedNotificationIds = window.displayedNotificationIds || new Set();
+// -------------------------------------------------------------
+// WEB AUDIO SYNTHETIC 2-TONE CHIME & BANNER CHIME
+// -------------------------------------------------------------
+function playCustomerChime() {
+  try {
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtxClass) {
+      const ctx = new AudioCtxClass();
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(880, now);
+      gain1.gain.setValueAtTime(0.2, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.28);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1320, now + 0.12);
+      gain2.gain.setValueAtTime(0.25, now + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.12);
+      osc2.stop(now + 0.5);
+    }
+  } catch (e) {}
+
+  try {
+    const snd = new Audio('assets/notification_chime.wav');
+    snd.volume = 0.85;
+    snd.play().catch(() => {});
+  } catch (e) {}
+}
+window.playMessageChime = playCustomerChime;
+window.playCustomerChime = playCustomerChime;
 
 function handleLiveRiderMessage(msg) {
   if (!msg || !msg.message_id) return;
@@ -1517,7 +1558,7 @@ function handleLiveRiderMessage(msg) {
   const titleEl = document.getElementById('liveMsgBannerTitle');
   const textEl = document.getElementById('liveMsgBannerText');
   if (banner && textEl) {
-    if (titleEl) titleEl.textContent = `New message from rider (${senderName})`;
+    if (titleEl) titleEl.textContent = `MESSAGE FROM RIDER (${senderName})`;
     textEl.textContent = msg.message_text;
     banner.style.display = 'flex';
 
@@ -1528,7 +1569,7 @@ function handleLiveRiderMessage(msg) {
   }
 
   // Play an alert notification sound
-  playMessageChime();
+  playCustomerChime();
 
   // Update the unread badge counter in real time and append to chat drawer
   unreadChatCount++;

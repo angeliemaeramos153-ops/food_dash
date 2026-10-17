@@ -1347,6 +1347,58 @@ button{cursor:pointer}
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(180, 83, 9, 0.45);
 }
+/* Scrollable Live Tracking Modal on Mobile */
+.tracking-modal,
+#trackingModal .modal-content,
+#customerTrackingModal .modal-content,
+#customerTrackingModal .cust-track-modal-box,
+.modal-dialog-scrollable .modal-content,
+.cust-track-modal-box {
+  max-height: 88vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  padding-bottom: 24px !important;
+  box-sizing: border-box !important;
+}
+
+.tracking-modal-body,
+#trackingModal .modal-body,
+#customerTrackingModal .modal-body,
+#customerTrackingModal .tracking-modal-body {
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  flex: 1 1 auto !important;
+}
+
+#cust-tracking-map,
+.cust-tracking-map {
+  height: 230px !important;
+  min-height: 200px;
+}
+
+@media (max-width: 600px) {
+  #cust-tracking-map,
+  .cust-tracking-map {
+    height: 220px !important;
+  }
+  .tracking-modal,
+  #customerTrackingModal {
+    padding: 10px 8px !important;
+    align-items: flex-start !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  .tracking-modal .modal-content,
+  #customerTrackingModal .cust-track-modal-box,
+  .cust-track-modal-box {
+    max-height: 88vh !important;
+    margin: auto 0 !important;
+    padding-bottom: 24px !important;
+  }
+}
+
 .cust-track-modal-box {
   width: min(440px, 100%);
   padding: 16px;
@@ -1824,76 +1876,90 @@ button{cursor:pointer}
   font-variant-numeric: tabular-nums;
 }
 
-/* Live Rider Message Banner */
+/* Matching Floating Notification Banner from Rider Dashboard */
+.customer-floating-banner,
+#liveRiderMessageBanner,
 .live-rider-msg-banner {
-  position: fixed;
-  top: 64px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  width: calc(100% - 32px);
-  max-width: 440px;
-  background: #1e293b;
-  color: #ffffff;
-  border-radius: 16px;
-  padding: 12px 14px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-  border: 1.5px solid rgba(255, 255, 255, 0.12);
-  cursor: pointer;
-  animation: bannerSlideDown 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  position: fixed !important;
+  top: 16px !important;
+  left: 16px !important;
+  right: 16px !important;
+  z-index: 99999 !important;
+  max-width: 440px !important;
+  margin: 0 auto !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.12) !important;
+  border: 1px solid #e2e8f0 !important;
+  padding: 12px 14px !important;
+  display: none;
+  align-items: center !important;
+  gap: 12px !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  animation: bannerSlideDown 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.customer-floating-banner.show,
+#liveRiderMessageBanner.show,
+.live-rider-msg-banner.show {
+  display: flex !important;
 }
 @keyframes bannerSlideDown {
-  0% { transform: translate(-50%, -40px); opacity: 0; }
-  100% { transform: translate(-50%, 0); opacity: 1; }
+  0% { transform: translateY(-25px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
 }
-.msg-banner-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #16a34a;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.4);
+.customer-floating-banner .rct-icon,
+.live-rider-msg-banner .rct-icon {
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 50% !important;
+  background: #dcfce7 !important;
+  color: #16a34a !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 1.1rem !important;
+  flex-shrink: 0 !important;
 }
-.msg-banner-content {
-  flex: 1;
-  min-width: 0;
+.customer-floating-banner .rct-body,
+.live-rider-msg-banner .rct-body {
+  flex: 1 !important;
+  overflow: hidden !important;
+  min-width: 0 !important;
 }
-.msg-banner-title {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #94a3b8;
-  text-transform: uppercase;
-  margin-bottom: 2px;
+.customer-floating-banner .rct-title,
+.live-rider-msg-banner .rct-title {
+  color: #15803d !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+  margin-bottom: 2px !important;
 }
-.msg-banner-body {
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: #ffffff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.customer-floating-banner .rct-text,
+.live-rider-msg-banner .rct-text {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #0f172a !important;
+  line-height: 1.35 !important;
+  word-break: break-word !important;
+  white-space: normal !important;
 }
-.tap-reply-pill {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 5px 9px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
+.customer-floating-banner .rct-close,
+.live-rider-msg-banner .rct-close {
+  background: transparent !important;
+  border: none !important;
+  color: #94a3b8 !important;
+  font-size: 1.35rem !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  padding: 4px 6px !important;
+  flex-shrink: 0 !important;
+}
+.customer-floating-banner .rct-close:hover,
+.live-rider-msg-banner .rct-close:hover {
+  color: #0f172a !important;
 }
 
 /* Order Cancellation UI */
@@ -2694,9 +2760,9 @@ button{cursor:pointer}
 <div class="logout-modal" id="logoutModal" onclick="if(event.target===this)closeLogout()"><div class="logout-box"><img class="logout-logo" src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out. You can log in again anytime.</p><div class="logout-actions"><button class="logout-cancel" type="button" onclick="closeLogout()">Cancel</button><button class="logout-confirm" type="button" onclick="executeLogout()">Yes, Log Out</button></div></div></div>
 
 <!-- Customer Live Delivery Tracking Modal -->
-<div class="fd-modal" id="customerTrackingModal" onclick="if(event.target===this)closeCustomerTrackingModal()">
-  <div class="fd-modal-box cust-track-modal-box">
-    <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
+<div class="fd-modal tracking-modal" id="customerTrackingModal" onclick="if(event.target===this)closeCustomerTrackingModal()">
+  <div class="fd-modal-box cust-track-modal-box modal-content">
+    <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone); flex-shrink:0;">
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="font-size:18px;">🛵</span>
         <div>
@@ -2707,52 +2773,54 @@ button{cursor:pointer}
       <button class="fd-modal-close" onclick="closeCustomerTrackingModal()">&times;</button>
     </div>
 
-    <!-- Rider Contact Card -->
-    <div class="cust-rider-card">
-      <div class="cust-rider-left">
-        <div class="cust-rider-avatar"><i class="fa-solid fa-motorcycle"></i></div>
-        <div>
-          <div class="cust-rider-title">Your Delivery Rider</div>
-          <div id="custTrackRiderName" class="cust-rider-name">Alex Rider</div>
-          <div id="custTrackRiderPhone" class="cust-rider-phone"><i class="fa-solid fa-phone-volume"></i> +63 917 555 0192</div>
+    <div class="tracking-modal-body modal-body" style="overflow-y:auto; -webkit-overflow-scrolling:touch; flex:1 1 auto;">
+      <!-- Rider Contact Card -->
+      <div class="cust-rider-card">
+        <div class="cust-rider-left">
+          <div class="cust-rider-avatar"><i class="fa-solid fa-motorcycle"></i></div>
+          <div>
+            <div class="cust-rider-title">Your Delivery Rider</div>
+            <div id="custTrackRiderName" class="cust-rider-name">Alex Rider</div>
+            <div id="custTrackRiderPhone" class="cust-rider-phone"><i class="fa-solid fa-phone-volume"></i> +63 917 555 0192</div>
+          </div>
+        </div>
+        <div class="cust-rider-actions">
+          <button id="custTrackCallLink" type="button" class="cust-comm-btn call" onclick="initiateCustomerVoiceCall()" title="Call Rider via Synchronized In-App Voice">
+            <i class="fa-solid fa-phone"></i> Call Rider
+          </button>
+          <button id="custTrackMsgBtn" type="button" class="cust-comm-btn msg" onclick="openCustomerChat()" title="Message Rider (Chat)">
+            <i class="fa-solid fa-comment-dots"></i> Message Rider <span class="cust-chat-unread-badge badge" style="display:none;margin-left:4px;">0</span>
+          </button>
+          <a id="custTrackSmsBtn" href="sms:+639175550192" class="cust-comm-btn sms" title="Direct SMS to Rider">
+            <i class="fa-solid fa-envelope"></i> SMS
+          </a>
         </div>
       </div>
-      <div class="cust-rider-actions">
-        <button id="custTrackCallLink" type="button" class="cust-comm-btn call" onclick="initiateCustomerVoiceCall()" title="Call Rider via Synchronized In-App Voice">
-          <i class="fa-solid fa-phone"></i> Call Rider
-        </button>
-        <button id="custTrackMsgBtn" type="button" class="cust-comm-btn msg" onclick="openCustomerChat()" title="Message Rider (Chat)">
-          <i class="fa-solid fa-comment-dots"></i> Message Rider <span class="cust-chat-unread-badge badge" style="display:none;margin-left:4px;">0</span>
-        </button>
-        <a id="custTrackSmsBtn" href="sms:+639175550192" class="cust-comm-btn sms" title="Direct SMS to Rider">
-          <i class="fa-solid fa-envelope"></i> SMS
-        </a>
+
+      <!-- Remaining distance & ETA badge (e.g. "500m away • ~3 mins") -->
+      <div class="cust-track-eta-badge" id="custTrackEtaBadge">
+        <i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i>
+        <span id="custTrackEtaBadgeText">Locating rider & calculating ETA...</span>
+      </div>
+
+      <!-- ETA and Distance Bar -->
+      <div class="cust-track-status-bar">
+        <div id="custTrackEta"><i class="fa-solid fa-clock" style="color:var(--harvest-sun)"></i> <span id="custTrackEtaText">Locating rider...</span></div>
+        <div id="custTrackDist" class="dist-pill"><i class="fa-solid fa-route"></i> <span id="custTrackDistText">Calculating...</span></div>
+      </div>
+
+      <!-- Interactive Leaflet Live Tracking Map -->
+      <div id="cust-tracking-map" class="cust-tracking-map" style="width: 100%; border-radius: 12px; margin-top: 10px; border: 1.5px solid var(--sandstone); position:relative;"></div>
+
+      <!-- Legend -->
+      <div class="cust-map-legend">
+        <span><span class="legend-dot store"></span> Store Pickup</span>
+        <span><span class="legend-dot rider"></span> Rider GPS</span>
+        <span><span class="legend-dot customer"></span> Your Destination</span>
       </div>
     </div>
 
-    <!-- Remaining distance & ETA badge (e.g. "500m away • ~3 mins") -->
-    <div class="cust-track-eta-badge" id="custTrackEtaBadge">
-      <i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i>
-      <span id="custTrackEtaBadgeText">Locating rider & calculating ETA...</span>
-    </div>
-
-    <!-- ETA and Distance Bar -->
-    <div class="cust-track-status-bar">
-      <div id="custTrackEta"><i class="fa-solid fa-clock" style="color:var(--harvest-sun)"></i> <span id="custTrackEtaText">Locating rider...</span></div>
-      <div id="custTrackDist" class="dist-pill"><i class="fa-solid fa-route"></i> <span id="custTrackDistText">Calculating...</span></div>
-    </div>
-
-    <!-- Interactive Leaflet Live Tracking Map -->
-    <div id="cust-tracking-map" style="height: 310px; width: 100%; border-radius: 12px; margin-top: 10px; border: 1.5px solid var(--sandstone); position:relative;"></div>
-
-    <!-- Legend -->
-    <div class="cust-map-legend">
-      <span><span class="legend-dot store"></span> Store Pickup</span>
-      <span><span class="legend-dot rider"></span> Rider GPS</span>
-      <span><span class="legend-dot customer"></span> Your Destination</span>
-    </div>
-
-    <div class="fd-modal-actions" style="margin-top:12px;">
+    <div class="fd-modal-actions" style="margin-top:12px; flex-shrink:0;">
       <button class="btn-fd-secondary" onclick="closeCustomerTrackingModal()">Close Map</button>
       <button class="btn-fd-primary" onclick="openCustomerChat()"><i class="fa-solid fa-comment-dots"></i> Chat with Rider <span class="cust-chat-unread-badge" style="display:none;margin-left:4px;">0</span></button>
     </div>
@@ -2854,19 +2922,14 @@ button{cursor:pointer}
   </div>
 </div>
 
-<!-- Live Rider Message Banner -->
-<div id="liveRiderMessageBanner" class="live-rider-msg-banner" style="display:none;" onclick="openChatFromBanner()">
-  <div class="msg-banner-avatar"><i class="fa-solid fa-motorcycle"></i></div>
-  <div class="msg-banner-content">
-    <div class="msg-banner-title">
-      <span id="liveMsgBannerTitle">Rider Alex</span>
-      <span class="msg-banner-time">Just now</span>
-    </div>
-    <div class="msg-banner-body" id="liveMsgBannerText">I'm outside with your order! 🛵</div>
+<!-- Floating Rider Message Notification Banner -->
+<div id="liveRiderMessageBanner" class="customer-floating-banner live-rider-msg-banner" style="display:none;" onclick="openChatFromBanner()">
+  <div class="rct-icon"><i class="fa-solid fa-comment-dots"></i></div>
+  <div class="rct-body">
+    <div class="rct-title" id="liveMsgBannerTitle">MESSAGE FROM RIDER</div>
+    <div class="rct-text" id="liveMsgBannerText">I'm outside with your order! 🛵</div>
   </div>
-  <div class="msg-banner-action">
-    <span class="tap-reply-pill">Reply <i class="fa-solid fa-chevron-right"></i></span>
-  </div>
+  <button type="button" class="rct-close" onclick="event.stopPropagation(); dismissLiveRiderBanner()">&times;</button>
 </div>
 
 <!-- Generic In-App Confirmation Modal (Food Dash Palette) -->
@@ -5127,10 +5190,15 @@ function openCustomerTrackingModal(orderId) {
   }
   activeCustomerTrackingOrderId = targetId;
 
-  const modal = document.getElementById('customerTrackingModal');
+  const modal = document.getElementById('customerTrackingModal') || document.getElementById('trackingModal');
   if (modal) modal.classList.add('show');
 
   fetchCustomerLiveTracking(targetId, true);
+  setTimeout(() => {
+    if (custTrackingMap) {
+      custTrackingMap.invalidateSize();
+    }
+  }, 250);
 
   if (custTrackingTimer) clearInterval(custTrackingTimer);
   custTrackingTimer = setInterval(() => {
@@ -5141,7 +5209,7 @@ function openCustomerTrackingModal(orderId) {
 }
 
 function closeCustomerTrackingModal() {
-  const modal = document.getElementById('customerTrackingModal');
+  const modal = document.getElementById('customerTrackingModal') || document.getElementById('trackingModal');
   if (modal) modal.classList.remove('show');
   if (custTrackingTimer) {
     clearInterval(custTrackingTimer);
@@ -5717,11 +5785,87 @@ async function submitCustomerMessage(orderId, text) {
   }
 }
 
+// -------------------------------------------------------------
+// WEB AUDIO SYNTHETIC 2-TONE CHIME & MATCHING RIDER-STYLE BANNER
+// -------------------------------------------------------------
+function playCustomerChime() {
+  // 1. Web Audio API synthesized melodic two-tone chime (880Hz -> 1320Hz) matching rider_dashboard.php
+  try {
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtxClass) {
+      const ctx = new AudioCtxClass();
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(880, now);
+      gain1.gain.setValueAtTime(0.2, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.28);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1320, now + 0.12);
+      gain2.gain.setValueAtTime(0.25, now + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.12);
+      osc2.stop(now + 0.5);
+    }
+  } catch (e) {}
+
+  // 2. Audio file fallback
+  try {
+    const snd = new Audio('assets/notification_chime.wav');
+    snd.volume = 0.85;
+    snd.play().catch(() => {});
+  } catch (e) {}
+}
+window.playMessageChime = playCustomerChime;
+window.playCustomerChime = playCustomerChime;
+
+function dismissLiveRiderBanner() {
+  const banner = document.getElementById('liveRiderMessageBanner');
+  if (banner) {
+    banner.classList.remove('show');
+    banner.style.display = 'none';
+  }
+}
+
+function showCustomerFloatingBanner(title, text, onClick = null) {
+  const banner = document.getElementById('liveRiderMessageBanner');
+  const titleEl = document.getElementById('liveMsgBannerTitle');
+  const textEl = document.getElementById('liveMsgBannerText');
+  if (banner && textEl) {
+    if (titleEl) titleEl.textContent = title || 'MESSAGE FROM RIDER';
+    textEl.textContent = text;
+    banner.onclick = (e) => {
+      if (e.target.closest('.rct-close')) return;
+      if (typeof onClick === 'function') onClick();
+      else openChatFromBanner();
+    };
+    banner.classList.add('show');
+    banner.style.display = 'flex';
+
+    if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
+    msgBannerTimeout = setTimeout(() => {
+      dismissLiveRiderBanner();
+    }, 4500);
+  }
+  playCustomerChime();
+}
+
 // Strict Single-Toast & Notification De-duplication Manager
 window.displayedNotificationIds = new Set();
 let _custToastTimeout = null;
 
-function showToastCustomer(msg, uniqueId = null) {
+function showToastCustomer(msg, uniqueId = null, title = null) {
   if (!msg) return;
 
   // If uniqueId is passed, prevent duplicate display for 15s
@@ -5731,29 +5875,10 @@ function showToastCustomer(msg, uniqueId = null) {
     setTimeout(() => window.displayedNotificationIds.delete(uniqueId), 15000);
   }
 
-  // Dismiss existing live toast banners cleanly
-  document.querySelectorAll('.live-toast-banner, .cust-toast').forEach(el => el.remove());
-  const riderBanner = document.getElementById('liveRiderMessageBanner');
-  if (riderBanner) riderBanner.style.display = 'none';
-
-  if (_custToastTimeout) clearTimeout(_custToastTimeout);
-
-  const toast = document.createElement('div');
-  toast.id = 'customerLiveToast';
-  toast.className = 'cust-toast live-toast-banner';
-  toast.innerHTML = `<i class="fa-solid fa-bell" style="color:var(--harvest-sun, #D88F2A);"></i> <span>${escapeCustHtml(msg)}</span>`;
-  document.body.appendChild(toast);
-
-  // Trigger reflow for smooth slide-down animation
-  void toast.offsetWidth;
-  toast.classList.add('show');
-
-  _custToastTimeout = setTimeout(() => {
-    if (toast && toast.parentNode) {
-      toast.classList.remove('show');
-      setTimeout(() => toast.remove(), 350);
-    }
-  }, 4000); // Strictly auto-dismiss after 4 seconds
+  showCustomerFloatingBanner(title || 'MESSAGE FROM RIDER', msg, () => {
+    if (activeCustomerTrackingOrderId) openCustomerTrackingModal(activeCustomerTrackingOrderId);
+    else showScreen('orders');
+  });
 }
 
 // Redirect all window.alert calls to the FoodDash in-app toast
@@ -6019,26 +6144,8 @@ function handleLiveRiderMessage(msg) {
 
   const senderName = msg.sender_name || currentTrackingRiderName || 'Alex';
 
-  // Dismiss any existing toast / banner (strict single-toast queue)
-  document.querySelectorAll('.live-toast-banner, .cust-toast').forEach(el => el.remove());
-
-  // Show top floating push banner below header
-  const banner = document.getElementById('liveRiderMessageBanner');
-  const titleEl = document.getElementById('liveMsgBannerTitle');
-  const textEl = document.getElementById('liveMsgBannerText');
-  if (banner && textEl) {
-    if (titleEl) titleEl.textContent = `New message from rider (${senderName})`;
-    textEl.textContent = msg.message_text;
-    banner.style.display = 'flex';
-
-    if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
-    msgBannerTimeout = setTimeout(() => {
-      banner.style.display = 'none';
-    }, 4000);
-  }
-
-  // Play an alert notification sound
-  playMessageChime();
+  // Show top floating push banner pinned at top matching rider dashboard
+  showCustomerFloatingBanner('MESSAGE FROM RIDER', msg.message_text, openChatFromBanner);
 
   // Update the unread badge counter in real time
   unreadChatCount++;
@@ -6047,8 +6154,7 @@ function handleLiveRiderMessage(msg) {
 }
 
 function openChatFromBanner() {
-  const banner = document.getElementById('liveRiderMessageBanner');
-  if (banner) banner.style.display = 'none';
+  dismissLiveRiderBanner();
   openCustomerChat();
 }
 
