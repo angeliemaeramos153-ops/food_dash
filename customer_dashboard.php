@@ -1347,8 +1347,19 @@ button{cursor:pointer}
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(180, 83, 9, 0.45);
 }
-/* Scrollable Live Tracking Modal on Mobile */
+/* Tracking Modal Default State: Hidden until explicitly shown */
 .tracking-modal,
+#customerTrackingModal,
+#trackingModal {
+  display: none !important;
+}
+.tracking-modal.show,
+#customerTrackingModal.show,
+#trackingModal.show {
+  display: flex !important;
+}
+
+/* Scrollable Live Tracking Modal on Mobile */
 #trackingModal .modal-content,
 #customerTrackingModal .modal-content,
 #customerTrackingModal .cust-track-modal-box,
@@ -2760,7 +2771,7 @@ button{cursor:pointer}
 <div class="logout-modal" id="logoutModal" onclick="if(event.target===this)closeLogout()"><div class="logout-box"><img class="logout-logo" src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out. You can log in again anytime.</p><div class="logout-actions"><button class="logout-cancel" type="button" onclick="closeLogout()">Cancel</button><button class="logout-confirm" type="button" onclick="executeLogout()">Yes, Log Out</button></div></div></div>
 
 <!-- Customer Live Delivery Tracking Modal -->
-<div class="fd-modal tracking-modal" id="customerTrackingModal" onclick="if(event.target===this)closeCustomerTrackingModal()">
+<div class="fd-modal tracking-modal" id="customerTrackingModal" style="display: none;" onclick="if(event.target===this)closeCustomerTrackingModal()">
   <div class="fd-modal-box cust-track-modal-box modal-content">
     <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone); flex-shrink:0;">
       <div style="display:flex; align-items:center; gap:8px;">
@@ -5147,14 +5158,11 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// URL Query Parameter Routing (e.g. ?track=123 or ?screen=orders or ?screen=account)
+// URL Query Parameter Routing (e.g. ?screen=orders or ?screen=account)
+// Auto-modal popup on login/load is strictly disabled per requirement.
+// The tracking modal should ONLY open when the user explicitly taps "Live Track Rider".
 const customerUrlParams = new URLSearchParams(window.location.search);
-if (customerUrlParams.has('track') || customerUrlParams.has('track_order') || customerUrlParams.has('order_id')) {
-  const trackId = parseInt(customerUrlParams.get('track') || customerUrlParams.get('track_order') || customerUrlParams.get('order_id'));
-  if (trackId) {
-    setTimeout(() => openCustomerTrackingModal(trackId), 250);
-  }
-} else if (customerUrlParams.get('screen') === 'orders') {
+if (customerUrlParams.get('screen') === 'orders') {
   showScreen('orders');
 } else if (customerUrlParams.get('screen') === 'account') {
   showScreen('account');
@@ -5178,6 +5186,16 @@ let custLastMessageId = 0;
 
 function openTrackingModal(orderId) {
   openCustomerTrackingModal(orderId);
+  setTimeout(() => {
+    if (window.trackingMap && typeof window.trackingMap.invalidateSize === 'function') trackingMap.invalidateSize();
+    if (window.map && typeof window.map.invalidateSize === 'function') map.invalidateSize();
+    if (window.custTrackingMap && typeof window.custTrackingMap.invalidateSize === 'function') custTrackingMap.invalidateSize();
+  }, 200);
+  setTimeout(() => {
+    if (window.trackingMap && typeof window.trackingMap.invalidateSize === 'function') trackingMap.invalidateSize();
+    if (window.map && typeof window.map.invalidateSize === 'function') map.invalidateSize();
+    if (window.custTrackingMap && typeof window.custTrackingMap.invalidateSize === 'function') custTrackingMap.invalidateSize();
+  }, 300);
 }
 window.openTrackingModal = openTrackingModal;
 
@@ -5191,14 +5209,24 @@ function openCustomerTrackingModal(orderId) {
   activeCustomerTrackingOrderId = targetId;
 
   const modal = document.getElementById('customerTrackingModal') || document.getElementById('trackingModal');
-  if (modal) modal.classList.add('show');
+  if (modal) {
+    modal.classList.add('show');
+    modal.style.display = 'flex';
+  }
 
   fetchCustomerLiveTracking(targetId, true);
   setTimeout(() => {
-    if (custTrackingMap) {
-      custTrackingMap.invalidateSize();
-    }
-  }, 250);
+    if (window.trackingMap && typeof window.trackingMap.invalidateSize === 'function') trackingMap.invalidateSize();
+    if (window.map && typeof window.map.invalidateSize === 'function') map.invalidateSize();
+    if (window.custTrackingMap && typeof window.custTrackingMap.invalidateSize === 'function') custTrackingMap.invalidateSize();
+    else if (custTrackingMap && typeof custTrackingMap.invalidateSize === 'function') custTrackingMap.invalidateSize();
+  }, 200);
+  setTimeout(() => {
+    if (window.trackingMap && typeof window.trackingMap.invalidateSize === 'function') trackingMap.invalidateSize();
+    if (window.map && typeof window.map.invalidateSize === 'function') map.invalidateSize();
+    if (window.custTrackingMap && typeof window.custTrackingMap.invalidateSize === 'function') custTrackingMap.invalidateSize();
+    else if (custTrackingMap && typeof custTrackingMap.invalidateSize === 'function') custTrackingMap.invalidateSize();
+  }, 300);
 
   if (custTrackingTimer) clearInterval(custTrackingTimer);
   custTrackingTimer = setInterval(() => {
@@ -5210,7 +5238,10 @@ function openCustomerTrackingModal(orderId) {
 
 function closeCustomerTrackingModal() {
   const modal = document.getElementById('customerTrackingModal') || document.getElementById('trackingModal');
-  if (modal) modal.classList.remove('show');
+  if (modal) {
+    modal.classList.remove('show');
+    modal.style.display = 'none';
+  }
   if (custTrackingTimer) {
     clearInterval(custTrackingTimer);
     custTrackingTimer = null;
@@ -5543,9 +5574,17 @@ function renderCustomerMap(opts) {
       attributionControl: false
     }).setView(center, 16);
 
+    window.custTrackingMap = custTrackingMap;
+    window.trackingMap = custTrackingMap;
+    window.map = custTrackingMap;
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19
     }).addTo(custTrackingMap);
+  } else {
+    window.custTrackingMap = custTrackingMap;
+    window.trackingMap = custTrackingMap;
+    window.map = custTrackingMap;
   }
 
   // Icons
