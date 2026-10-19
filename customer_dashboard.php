@@ -3389,7 +3389,6 @@ function toast(msg){
     clearTimeout(window._toast);
     window._toast = setTimeout(()=>t.classList.remove('show'), 4000);
   }
-  showToastCustomer(msg);
 }
 
 let _custConfirmCallback = null;
@@ -5753,7 +5752,7 @@ function renderChatMessages(messages, scrollToBottom = true) {
         container.appendChild(bubble);
 
         if (!isMe && !scrollToBottom) {
-          showToastCustomer(`Rider: ${msg.message_text}`);
+          showCustomerFloatingBanner('MESSAGE FROM RIDER', msg.message_text, openChatFromBanner);
         }
       }
     });
@@ -5869,11 +5868,17 @@ function playCustomerChime() {
 window.playMessageChime = playCustomerChime;
 window.playCustomerChime = playCustomerChime;
 
+let msgBannerTimeout = null;
+
 function dismissLiveRiderBanner() {
   const banner = document.getElementById('liveRiderMessageBanner');
   if (banner) {
     banner.classList.remove('show');
     banner.style.display = 'none';
+  }
+  if (msgBannerTimeout) {
+    clearTimeout(msgBannerTimeout);
+    msgBannerTimeout = null;
   }
 }
 
@@ -5914,15 +5919,22 @@ function showToastCustomer(msg, uniqueId = null, title = null) {
     setTimeout(() => window.displayedNotificationIds.delete(uniqueId), 15000);
   }
 
-  showCustomerFloatingBanner(title || 'MESSAGE FROM RIDER', msg, () => {
-    if (activeCustomerTrackingOrderId) openCustomerTrackingModal(activeCustomerTrackingOrderId);
-    else showScreen('orders');
-  });
+  // Strictly reserve the top floating banner for actual incoming rider messages
+  if (title === 'MESSAGE FROM RIDER') {
+    showCustomerFloatingBanner('MESSAGE FROM RIDER', msg, () => {
+      if (activeCustomerTrackingOrderId) openCustomerTrackingModal(activeCustomerTrackingOrderId);
+      else showScreen('orders');
+    });
+    return;
+  }
+
+  // All other system/action notifications go to the clean bottom toast snackbar
+  toast(msg);
 }
 
 // Redirect all window.alert calls to the FoodDash in-app toast
 window.alert = function(msg) {
-  showToastCustomer(String(msg || ''));
+  toast(String(msg || ''));
 };
 
 function escapeCustHtml(str) {
@@ -5944,7 +5956,6 @@ let currentIncomingCall = null;
 let callConnectedTimer = null;
 let callConnectedSeconds = 0;
 let lastSeenRiderMsgId = 0;
-let msgBannerTimeout = null;
 
 function startRingtone() {
   try {
@@ -6285,7 +6296,7 @@ function handleRiderArrivedEvent(data) {
     if (modal) modal.style.display = 'flex';
   }
 
-  showToastCustomer(`📍 Your rider has arrived! Please choose a response.`, arrivedKey);
+  toast(`📍 Your rider has arrived! Please choose a response.`);
   updateOrderStatusToArrived(oId);
 }
 
