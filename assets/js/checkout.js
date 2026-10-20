@@ -3,16 +3,9 @@
  * Safe, WebKit-compliant payment selection without fragile querySelector or regex calls.
  */
 
-// GUARD: cart.php has its own self-contained controller — do not override it.
-if (window.location.pathname.indexOf('cart.php') !== -1) {
-    // cart.php manages its own globals; this file must not interfere.
-    // All aliases are handled by cart.php's DOMContentLoaded block.
-} else {
-
 var activePaymentMethod = 'gcash';
 var currentPayment = 'gcash';
 var totalFormatted = window.grandTotalFormatted || '₱200.00';
-
 
 function setPayment(method) {
     activePaymentMethod = method;
@@ -237,11 +230,11 @@ function finalizeOrder(method, address, coords) {
     .then(function(res) { return res.json(); })
     .then(function(data) {
         try { localStorage.removeItem('foodDashCart'); } catch(e) {}
-        // redirect removed
+        window.location.href = 'customer_dashboard.php?order_placed=1';
     })
     .catch(function() {
         try { localStorage.removeItem('foodDashCart'); } catch(e) {}
-        // redirect removed
+        window.location.href = 'customer_dashboard.php?order_placed=1';
     });
 }
 
@@ -329,6 +322,3 @@ window.dispatchOrderPlacement = finalizeOrder;
 window.setPayment = setPayment;
 window.selectMethod = setPayment;
 window.updatePaymentTheme = setPayment;
-
-} // end guard: not cart.php
-
