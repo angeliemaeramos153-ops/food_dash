@@ -127,7 +127,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
     // Dynamic Delivery Location from submitted payload
     $delivery_address = trim((string)($payload['delivery_address'] ?? $payload['address'] ?? ''));
     if ($delivery_address === '') {
-        $delivery_address = 'Ormoc City, Leyte';
+        $delivery_address = 'Western Leyte College';
     }
 
     $delivery_lat = null;
@@ -150,8 +150,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
     if ($delivery_lng === null && isset($payload['delivery_lng']) && is_numeric($payload['delivery_lng'])) {
         $delivery_lng = (float)$payload['delivery_lng'];
     }
-    if ($delivery_lat === null) $delivery_lat = 11.01031;
-    if ($delivery_lng === null) $delivery_lng = 124.61791;
+    if ($delivery_lat === null) $delivery_lat = 11.01039;
+    if ($delivery_lng === null) $delivery_lng = 124.61788;
     $customer_lat = $delivery_lat;
     $customer_lng = $delivery_lng;
 

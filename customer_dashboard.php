@@ -6626,6 +6626,35 @@ var triggerCheckoutFlow = handlePayAction;
 var processOrderAJAX = handlePayAction;
 var submitOrderToBackend = handlePayAction;
 var submitDynamicOrder = dispatchOrderPlacement;
+
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get('order_placed') === '1') {
+            try {
+                localStorage.removeItem('foodDashCart');
+                var cartBadge = document.getElementById('cartBadge');
+                if (cartBadge) cartBadge.style.display = 'none';
+            } catch(e) {}
+
+            var banner = document.createElement('div');
+            banner.id = 'orderSuccessNotification';
+            banner.style.cssText = 'position:fixed; top:18px; left:50%; transform:translateX(-50%); background:#283d23; color:#ffffff; padding:12px 22px; border-radius:30px; box-shadow:0 8px 24px rgba(0,0,0,0.3); z-index:999999; font-size:14px; font-weight:700; display:flex; align-items:center; gap:10px; font-family:sans-serif; animation:slideDown 0.3s ease-out;';
+            banner.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#30d158; font-size:18px;"></i> Order Placed Successfully!';
+            document.body.appendChild(banner);
+            setTimeout(function() {
+                banner.style.transition = 'opacity 0.5s ease';
+                banner.style.opacity = '0';
+                setTimeout(function() { banner.remove(); }, 500);
+            }, 4000);
+
+            if (window.history && window.history.replaceState) {
+                var cleanUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
+            }
+        }
+    } catch(e) {}
+});
 </script>
 <?php require_once 'gmail_simulator_modal.php'; ?>
 </body>

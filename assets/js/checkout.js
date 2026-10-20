@@ -96,7 +96,7 @@ function updateWalletModalTheme(method) {
         if (btn) {
             btn.style.setProperty('background-color', '#007DFE', 'important');
             btn.style.setProperty('color', '#ffffff', 'important');
-            btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Pay ' + formattedTotal;
+            btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Confirm & Pay • ' + formattedTotal;
         }
     } else if (method === 'maya') {
         if (header) header.style.background = '#023a2b';
@@ -108,7 +108,7 @@ function updateWalletModalTheme(method) {
         if (btn) {
             btn.style.setProperty('background-color', '#023a2b', 'important');
             btn.style.setProperty('color', '#05B851', 'important');
-            btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Pay ' + formattedTotal;
+            btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Confirm & Pay • ' + formattedTotal;
         }
     } else if (method === 'gotyme') {
         if (header) header.style.background = '#0a2540';
@@ -120,9 +120,18 @@ function updateWalletModalTheme(method) {
         if (btn) {
             btn.style.setProperty('background-color', '#0a2540', 'important');
             btn.style.setProperty('color', '#00d2ff', 'important');
-            btn.innerHTML = '<i class="fa-solid fa-building-columns"></i> Transfer & Pay ' + formattedTotal;
+            btn.innerHTML = '<i class="fa-solid fa-building-columns"></i> Confirm & Pay • ' + formattedTotal;
         }
     }
+
+    var codTot = document.getElementById('codTotal');
+    if (codTot) codTot.textContent = formattedTotal;
+    var codCash = document.getElementById('codCashAmt');
+    if (codCash) codCash.textContent = formattedTotal;
+    var codBtn = document.getElementById('codSubmitBtn');
+    if (codBtn) codBtn.innerHTML = '<i class="fa-solid fa-check"></i> Confirm COD Order • ' + formattedTotal;
+    var appleTot = document.getElementById('appleModalTotal');
+    if (appleTot) appleTot.textContent = formattedTotal;
 }
 
 // 2. HARD-ISOLATE THE BUTTON CLICK & PREVENT SUPPRESSION
@@ -148,13 +157,6 @@ function triggerCheckout(event) {
         if (appleModal) {
             appleModal.style.display = 'flex';
             if (typeof startApplePayScan === 'function') startApplePayScan();
-            setTimeout(function() {
-                var status = document.getElementById('faceIdStatus');
-                if (status) status.innerHTML = '✔ Done';
-                setTimeout(function() {
-                    dispatchOrderPlacement('apple_pay', address, latLng);
-                }, 800);
-            }, 1400);
             return;
         }
     } else if (['gcash', 'maya', 'gotyme'].includes(activePaymentMethod)) {
@@ -232,6 +234,61 @@ function dispatchOrderPlacement(method, address, coords) {
         try { localStorage.removeItem('foodDashCart'); } catch(e) {}
         window.location.href = 'customer_dashboard.php?order_placed=1';
     });
+}
+
+function startApplePayScan() {
+    var scanLine = document.getElementById('appleFaceIdScanLine');
+    var svg = document.getElementById('appleFaceIdSvg');
+    var check = document.getElementById('appleFaceIdCheck');
+    var box = document.getElementById('appleFaceIdBox');
+    var status = document.getElementById('faceIdStatus');
+    var btn = document.getElementById('btnApplePayTrigger');
+
+    if (btn) {
+        btn.disabled = true;
+        btn.style.background = '#333336';
+        btn.style.color = '#8e8e93';
+        btn.innerHTML = '<span style="font-size:18px;"></span> Scanning Face...';
+    }
+    if (scanLine) scanLine.style.display = 'block';
+    if (svg) svg.style.display = 'block';
+    if (check) check.style.display = 'none';
+    if (box) {
+        box.classList.remove('success');
+        box.classList.add('scanning');
+    }
+    if (status) {
+        status.innerHTML = '<span class="pulse-scan" style="color:#007aff; font-size:14px; font-weight:700;"><i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Scanning Face...</span>';
+    }
+
+    // 1.2s Face ID scan animation -> green checkmark "Done"
+    setTimeout(function() {
+        if (scanLine) scanLine.style.display = 'none';
+        if (svg) svg.style.display = 'none';
+        if (check) check.style.display = 'block';
+        if (box) {
+            box.classList.remove('scanning');
+            box.classList.add('success');
+        }
+        if (status) {
+            status.innerHTML = '<span style="color:#30d158; font-size:16px; font-weight:800; display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-check"></i> Done</span>';
+        }
+        if (btn) {
+            btn.style.background = '#30d158';
+            btn.style.color = '#ffffff';
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Done';
+        }
+
+        try {
+            if (navigator.vibrate) navigator.vibrate([35, 45, 35]);
+        } catch(e) {}
+
+        setTimeout(function() {
+            var latLng = document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
+            var address = document.getElementById('delivery_address')?.value || 'Western Leyte College';
+            dispatchOrderPlacement('apple_pay', address, latLng);
+        }, 700);
+    }, 1200);
 }
 
 function closeModal(id) {
