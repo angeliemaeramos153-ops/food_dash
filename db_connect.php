@@ -6,32 +6,51 @@ $is_render    = getenv('RENDER') !== false || !empty($_ENV['RENDER']) || !empty(
 
 try {
     if ($is_render) {
-        $host     = getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? ($_SERVER['DB_HOST'] ?? 'db.ijxbecblutgwfmuguxkg.supabase.co'));
-        $port     = getenv('DB_PORT') ?: ($_ENV['DB_PORT'] ?? ($_SERVER['DB_PORT'] ?? '5432'));
-        $dbname   = getenv('DB_NAME') ?: ($_ENV['DB_NAME'] ?? ($_SERVER['DB_NAME'] ?? 'postgres'));
-        $user     = getenv('DB_USER') ?: ($_ENV['DB_USER'] ?? ($_SERVER['DB_USER'] ?? 'postgres'));
-        $password = getenv('DB_PASS') ?: ($_ENV['DB_PASS'] ?? ($_SERVER['DB_PASS'] ?? 'Ventrue@2026!'));
+        // Supabase IPv4 Session Pooler (Required for Render IPv4-only production environment)
+        $default_host = 'aws-0-ap-southeast-1.pooler.supabase.com';
+        $default_port = '5432';
+        $default_db   = 'postgres';
+        $default_user = 'postgres.ijxbecblutgwfmuguxkg';
+        $default_pass = 'TDTEFcitYwQmQcFa';
+
+        $host     = getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? ($_SERVER['DB_HOST'] ?? $default_host));
+        $port     = getenv('DB_PORT') ?: ($_ENV['DB_PORT'] ?? ($_SERVER['DB_PORT'] ?? $default_port));
+        $dbname   = getenv('DB_NAME') ?: ($_ENV['DB_NAME'] ?? ($_SERVER['DB_NAME'] ?? $default_db));
+        $user     = getenv('DB_USER') ?: ($_ENV['DB_USER'] ?? ($_SERVER['DB_USER'] ?? $default_user));
+        $password = getenv('DB_PASS') ?: ($_ENV['DB_PASS'] ?? ($_SERVER['DB_PASS'] ?? $default_pass));
+
+        // If direct IPv6-only host is passed, safely redirect to IPv4 pooler
+        if ($host === 'db.ijxbecblutgwfmuguxkg.supabase.co') {
+            $host = $default_host;
+            if ($user === 'postgres') {
+                $user = $default_user;
+            }
+        }
 
         if (!empty($database_url) && !str_starts_with($database_url, 'mysql:')) {
-            if (str_starts_with($database_url, 'pgsql:')) {
-                $dsn = $database_url;
-            } else {
-                $dbParts  = parse_url($database_url);
-                $host     = $dbParts['host'] ?? $host;
-                $port     = $dbParts['port'] ?? $port;
-                $dbname   = isset($dbParts['path']) ? ltrim($dbParts['path'], '/') : $dbname;
-                $user     = isset($dbParts['user']) ? urldecode($dbParts['user']) : $user;
-                $password = isset($dbParts['pass']) ? urldecode($dbParts['pass']) : $password;
-                $dsn      = "pgsql:host=$host;port=$port;dbname=$dbname";
+            $dbParts  = parse_url($database_url);
+            $parsed_host = $dbParts['host'] ?? $host;
+            if ($parsed_host === 'db.ijxbecblutgwfmuguxkg.supabase.co') {
+                $parsed_host = $default_host;
             }
-        } else {
-            $dsn = "pgsql:host=$host;port=$port;dbname=$dbname";
+            $host     = $parsed_host;
+            $port     = $dbParts['port'] ?? $port;
+            $dbname   = isset($dbParts['path']) ? ltrim($dbParts['path'], '/') : $dbname;
+            $parsed_user = isset($dbParts['user']) ? urldecode($dbParts['user']) : $user;
+            if ($parsed_user === 'postgres' && str_contains($host, 'pooler.supabase.com')) {
+                $parsed_user = $default_user;
+            }
+            $user     = $parsed_user;
+            $password = isset($dbParts['pass']) ? urldecode($dbParts['pass']) : $password;
         }
+
+        $dsn = "pgsql:host=$host;port=$port;dbname=$dbname;sslmode=require";
 
         $conn = new PDO($dsn, $user, $password, [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
+            PDO::ATTR_TIMEOUT            => 10,
         ]);
         $pdo = $conn;
     } else {
