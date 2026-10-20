@@ -4500,7 +4500,7 @@ async function checkout() {
         console.error('Checkout error:', err);
         var safeMsg = (err && err.message && !err.message.includes('pattern')) ? err.message : 'Processing order...';
         toast(safeMsg);
-        setTimeout(() => { window.location.href = 'cart.php'; }, 500);
+        setTimeout(() => { if (typeof handlePayAction === 'function') { handlePayAction(); } }, 500);
     });
 }
 
@@ -6586,7 +6586,7 @@ function handlePayAction(e) {
 
 function triggerCheckout(event) {
     if (event && event.preventDefault) event.preventDefault();
-    window.location.href = 'cart.php';
+    if (typeof handlePayAction === 'function') { handlePayAction(); }
     return false;
 }
 
