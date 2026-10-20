@@ -347,18 +347,40 @@ $active_tracking_order = null;
 $is_demo_cust = ($user_id === 15 || $user_id === 26 || strtolower($username) === 'customer');
 
 // Primary query: User's own orders (excluding finished & cleared deliveries)
-$stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE (customer_id = :cid OR user_id = :uid) AND COALESCE(rider_cleared, 0) = 0 ORDER BY order_id DESC LIMIT 50");
-if ($stmt) {
-    $stmt->execute([':cid' => $user_id, ':uid' => $user_id]);
-    $db_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+try {
+    $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE customer_id = :cid AND COALESCE(rider_cleared, 0) = 0 ORDER BY order_id DESC LIMIT 50");
+    if ($stmt) {
+        $stmt->execute([':cid' => $user_id]);
+        $db_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Throwable $e) {
+    try {
+        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE customer_id = :cid ORDER BY order_id DESC LIMIT 50");
+        if ($stmt) {
+            $stmt->execute([':cid' => $user_id]);
+            $db_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } catch (Throwable $e2) {
+        $db_orders = [];
+    }
 }
 
 // Fallback: If user has zero orders and is a demo account, load demo orders
 if (empty($db_orders) && $is_demo_cust) {
-    $d_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE (customer_id IN (15, 26, 0) OR user_id IN (15, 26, 0)) AND COALESCE(rider_cleared, 0) = 0 ORDER BY order_id DESC LIMIT 50");
-    if ($d_stmt) {
-        $d_stmt->execute();
-        $db_orders = $d_stmt->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $d_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE customer_id IN (15, 26, 0) AND COALESCE(rider_cleared, 0) = 0 ORDER BY order_id DESC LIMIT 50");
+        if ($d_stmt) {
+            $d_stmt->execute();
+            $db_orders = $d_stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } catch (Throwable $e) {
+        try {
+            $d_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE customer_id IN (15, 26, 0) ORDER BY order_id DESC LIMIT 50");
+            if ($d_stmt) {
+                $d_stmt->execute();
+                $db_orders = $d_stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+        } catch (Throwable $e2) {}
     }
 }
 
