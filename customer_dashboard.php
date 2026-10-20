@@ -6629,14 +6629,7 @@ function selectPaymentMethod(method) {
         btn.style.setProperty('background-color', '#000000', 'important');
         btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ₱200.00';
     }
-}
-   // window.location.href = 'cart.php';
-if (typeof window.openPaymentPopup === 'function') {
-    window.openPaymentPopup();
-}
 
-    return false;
-}
 
 function dispatchOrderPlacement(method, address, coords) {
     var chosenMethod = method || 'cod';
