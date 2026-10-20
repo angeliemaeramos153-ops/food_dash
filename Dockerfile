@@ -1,16 +1,11 @@
 FROM php:8.2-apache
-
-# Install PostgreSQL driver extension for PHP PDO
 RUN apt-get update && apt-get install -y libpq-dev \
-    && docker-php-ext-install pdo pdo_pgsql
-
-# Copy project source code into Apache document root
-COPY . /var/www/html/
-
-# Enable Apache mod_rewrite
+    && docker-php-ext-install pdo pdo_pgsql pgsql
 RUN a2enmod rewrite
-
-# Expose HTTP port
+WORKDIR /var/www/html
+COPY . /var/www/html/
+RUN if [ -d "/var/www/html/food_dash" ]; then cp -r /var/www/html/food_dash/* /var/www/html/ 2>/dev/null || true; fi
+RUN if [ ! -e "/var/www/html/food_dash" ]; then ln -s /var/www/html /var/www/html/food_dash 2>/dev/null || true; fi
+RUN chown -R www-data:www-data /var/www/html && chmod -R 755 /var/www/html
 EXPOSE 80
-
 CMD ["apache2-foreground"]

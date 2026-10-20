@@ -1,64 +1,47 @@
 <?php
 // Food Dash Dual-Environment Database Connection (Local MySQL & Cloud Supabase PostgreSQL)
 
-$databaseUrl = getenv('DATABASE_URL') ?: ($_ENV['DATABASE_URL'] ?? ($_SERVER['DATABASE_URL'] ?? null));
-$isRender    = getenv('RENDER') ?: ($_ENV['RENDER'] ?? ($_SERVER['RENDER'] ?? null));
-$isCloud     = !empty($databaseUrl) || !empty($isRender);
+$database_url = getenv('DATABASE_URL') ?: ($_ENV['DATABASE_URL'] ?? ($_SERVER['DATABASE_URL'] ?? null));
+$is_render    = getenv('RENDER') !== false || !empty($_ENV['RENDER']) || !empty($_SERVER['RENDER']) || !empty($database_url);
 
 try {
-    if ($isCloud) {
-        // Cloud Environment: Supabase PostgreSQL via DATABASE_URL
-        if (!empty($databaseUrl)) {
-            if (str_starts_with($databaseUrl, 'pgsql:')) {
-                $dsn = $databaseUrl;
-                if (!str_contains($dsn, 'sslmode=')) {
-                    $dsn .= (str_ends_with($dsn, ';') ? '' : ';') . 'sslmode=require';
-                }
-                $user = getenv('DB_USER') ?: ($_ENV['DB_USER'] ?? ($_SERVER['DB_USER'] ?? null));
-                $password = getenv('DB_PASS') ?: ($_ENV['DB_PASS'] ?? ($_SERVER['DB_PASS'] ?? null));
+    if ($is_render) {
+        $host     = getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? ($_SERVER['DB_HOST'] ?? 'db.ijxbecblutgwfmuguxkg.supabase.co'));
+        $port     = getenv('DB_PORT') ?: ($_ENV['DB_PORT'] ?? ($_SERVER['DB_PORT'] ?? '5432'));
+        $dbname   = getenv('DB_NAME') ?: ($_ENV['DB_NAME'] ?? ($_SERVER['DB_NAME'] ?? 'postgres'));
+        $user     = getenv('DB_USER') ?: ($_ENV['DB_USER'] ?? ($_SERVER['DB_USER'] ?? 'postgres'));
+        $password = getenv('DB_PASS') ?: ($_ENV['DB_PASS'] ?? ($_SERVER['DB_PASS'] ?? 'Ventrue@2026!'));
+
+        if (!empty($database_url) && !str_starts_with($database_url, 'mysql:')) {
+            if (str_starts_with($database_url, 'pgsql:')) {
+                $dsn = $database_url;
             } else {
-                $dbParts  = parse_url($databaseUrl);
-                $host     = $dbParts['host'] ?? (getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? ($_SERVER['DB_HOST'] ?? 'aws-0-ap-southeast-1.pooler.supabase.com')));
-                $port     = $dbParts['port'] ?? (getenv('DB_PORT') ?: ($_ENV['DB_PORT'] ?? ($_SERVER['DB_PORT'] ?? '6543')));
-                $dbname   = isset($dbParts['path']) ? ltrim($dbParts['path'], '/') : (getenv('DB_NAME') ?: ($_ENV['DB_NAME'] ?? ($_SERVER['DB_NAME'] ?? 'postgres')));
-                $user     = isset($dbParts['user']) ? urldecode($dbParts['user']) : (getenv('DB_USER') ?: ($_ENV['DB_USER'] ?? ($_SERVER['DB_USER'] ?? 'postgres.ijxbecblutgwfmuguxkg')));
-                $password = isset($dbParts['pass']) ? urldecode($dbParts['pass']) : (getenv('DB_PASS') ?: ($_ENV['DB_PASS'] ?? ($_SERVER['DB_PASS'] ?? 'TDTEFcitYwQmQcFa')));
-                $dsn      = "pgsql:host={$host};port={$port};dbname={$dbname};sslmode=require";
+                $dbParts  = parse_url($database_url);
+                $host     = $dbParts['host'] ?? $host;
+                $port     = $dbParts['port'] ?? $port;
+                $dbname   = isset($dbParts['path']) ? ltrim($dbParts['path'], '/') : $dbname;
+                $user     = isset($dbParts['user']) ? urldecode($dbParts['user']) : $user;
+                $password = isset($dbParts['pass']) ? urldecode($dbParts['pass']) : $password;
+                $dsn      = "pgsql:host=$host;port=$port;dbname=$dbname";
             }
         } else {
-            // Cloud environment without explicit DATABASE_URL (e.g. Render detection fallback)
-            $host     = getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? ($_SERVER['DB_HOST'] ?? 'aws-0-ap-southeast-1.pooler.supabase.com'));
-            $port     = getenv('DB_PORT') ?: ($_ENV['DB_PORT'] ?? ($_SERVER['DB_PORT'] ?? '6543'));
-            $dbname   = getenv('DB_NAME') ?: ($_ENV['DB_NAME'] ?? ($_SERVER['DB_NAME'] ?? 'postgres'));
-            $user     = getenv('DB_USER') ?: ($_ENV['DB_USER'] ?? ($_SERVER['DB_USER'] ?? 'postgres.ijxbecblutgwfmuguxkg'));
-            $password = getenv('DB_PASS') ?: ($_ENV['DB_PASS'] ?? ($_SERVER['DB_PASS'] ?? 'TDTEFcitYwQmQcFa'));
-            $dsn      = "pgsql:host={$host};port={$port};dbname={$dbname};sslmode=require";
+            $dsn = "pgsql:host=$host;port=$port;dbname=$dbname";
         }
 
-        $pdo = new PDO($dsn, $user, $password, [
+        $conn = new PDO($dsn, $user, $password, [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
         ]);
+        $pdo = $conn;
     } else {
-        // Local Environment: Apache / XAMPP MySQL
-        $host     = getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? ($_SERVER['DB_HOST'] ?? '127.0.0.1'));
-        $dbname   = getenv('DB_NAME') ?: ($_ENV['DB_NAME'] ?? ($_SERVER['DB_NAME'] ?? 'food_dash'));
-        $user     = getenv('DB_USER') ?: ($_ENV['DB_USER'] ?? ($_SERVER['DB_USER'] ?? 'root'));
-        $password = (getenv('DB_PASS') !== false) ? getenv('DB_PASS') : ($_ENV['DB_PASS'] ?? ($_SERVER['DB_PASS'] ?? ''));
-        $charset  = 'utf8mb4';
-
-        $dsn = "mysql:host={$host};dbname={$dbname};charset={$charset}";
-        $pdo = new PDO($dsn, $user, $password, [
+        $conn = new PDO("mysql:host=localhost;dbname=food_dash;charset=utf8mb4", "root", "", [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
         ]);
+        $pdo = $conn;
     }
-
-    // Keep $conn available for existing queries and backwards compatibility
-    $conn = $pdo;
-
 } catch (PDOException $e) {
     if (!headers_sent()) {
         http_response_code(500);
