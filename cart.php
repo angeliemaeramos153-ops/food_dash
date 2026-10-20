@@ -13,8 +13,8 @@ $user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 26;
 $customer_name = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Noah James';
 $customer_phone = '+63 928 555 0148';
 $default_address = 'Western Leyte College';
-$default_lat = 11.01020;
-$default_lng = 124.61779;
+$default_lat = 11.01042;
+$default_lng = 124.61786;
 $total_amount = 200.00;
 $meal_subtotal = 170.00;
 $delivery_fee = 30.00;
@@ -508,12 +508,12 @@ $delivery_fee = 30.00;
       
       <div class="coords-badge">
         <i class="fa-solid fa-circle-check"></i>
-        <span>Exact Live GPS Pin: <b id="coordsDisplay">11.01020, 124.61779</b></span>
+        <span>Exact Live GPS Pin: <b id="coordsDisplay">11.01042, 124.61786</b></span>
       </div>
 
       <!-- Clean parsed coordinate text fields (no strict patterns) -->
-      <input type="text" style="display:none;" name="delivery_lat" id="delivery_lat" value="11.01020">
-      <input type="text" style="display:none;" name="delivery_lng" id="delivery_lng" value="124.61779">
+      <input type="text" style="display:none;" name="delivery_lat" id="delivery_lat" value="11.01042">
+      <input type="text" style="display:none;" name="delivery_lng" id="delivery_lng" value="124.61786">
     </div>
 
     <!-- Payment Methods: 5 Options with active classes and radio inputs -->
@@ -521,7 +521,7 @@ $delivery_fee = 30.00;
       <div class="card-title"><i class="fa-solid fa-credit-card"></i> Payment Method</div>
       <div class="pay-options-list">
         <!-- Cash on Delivery -->
-        <div class="payment-card pay-option active" data-method="cod" data-name="Cash on Delivery (COD)">
+        <div class="payment-card pay-option active" data-method="cod" data-name="Cash on Delivery (COD)" onclick="updatePaymentTheme('cod')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/cod.svg" alt="COD"></div>
             <div class="pay-info">
@@ -534,7 +534,7 @@ $delivery_fee = 30.00;
         </div>
 
         <!-- GCash -->
-        <div class="payment-card pay-option" data-method="gcash" data-name="GCash">
+        <div class="payment-card pay-option" data-method="gcash" data-name="GCash" onclick="updatePaymentTheme('gcash')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/gcash.svg" alt="GCash"></div>
             <div class="pay-info">
@@ -547,7 +547,7 @@ $delivery_fee = 30.00;
         </div>
 
         <!-- Maya -->
-        <div class="payment-card pay-option" data-method="maya" data-name="Maya (PayMaya)">
+        <div class="payment-card pay-option" data-method="maya" data-name="Maya (PayMaya)" onclick="updatePaymentTheme('maya')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/maya.svg" alt="Maya"></div>
             <div class="pay-info">
@@ -560,7 +560,7 @@ $delivery_fee = 30.00;
         </div>
 
         <!-- GoTyme Bank -->
-        <div class="payment-card pay-option" data-method="gotyme" data-name="GoTyme Bank">
+        <div class="payment-card pay-option" data-method="gotyme" data-name="GoTyme Bank" onclick="updatePaymentTheme('gotyme')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/gotyme.svg" alt="GoTyme"></div>
             <div class="pay-info">
@@ -573,7 +573,7 @@ $delivery_fee = 30.00;
         </div>
 
         <!-- Apple Pay -->
-        <div class="payment-card pay-option" data-method="apple_pay" data-name="Apple Pay">
+        <div class="payment-card pay-option" data-method="apple_pay" data-name="Apple Pay" onclick="updatePaymentTheme('apple_pay')">
           <div class="pay-option-left">
             <div class="pay-logo-box" style="background:#000;"><img src="assets/logos/apple-pay.svg" alt="Apple Pay"></div>
             <div class="pay-info">
@@ -595,8 +595,8 @@ $delivery_fee = 30.00;
       <div class="summary-row total"><span>Total Amount</span><span id="displayTotal">₱200.00</span></div>
     </div>
 
-    <!-- 1. Main Checkout button with type="button" and id="mainCheckoutBtn" -->
-    <button type="button" class="btn-submit-order checkout-btn" id="mainCheckoutBtn" onclick="handlePlaceOrderClick(event)">
+    <!-- 1. Main Checkout button with type="button" and id="payActionBtn" -->
+    <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="payActionBtn" onclick="handlePayAction()">
       <i class="fa-solid fa-money-bill-wave" style="margin-right:8px;"></i> Place Order • ₱200.00
     </button>
   </form>
@@ -1175,16 +1175,28 @@ function submitOrderViaAjax(paymentMethod, extraData = {}) {
 
 function handlePlaceOrderClick(e) {
   if (e && e.preventDefault) e.preventDefault();
+  handlePayAction();
+}
 
+function showApplePayModal() {
   const addrInput = document.getElementById('deliveryAddressInput');
   const address = (addrInput ? addrInput.value : '').trim() || 'Western Leyte College';
+  openApplePayModal(address);
+}
 
-  if (currentMethod === 'apple_pay') {
-    openApplePayModal(address);
-  } else if (currentMethod === 'cod') {
+function showWalletModal(method) {
+  const addrInput = document.getElementById('deliveryAddressInput');
+  const address = (addrInput ? addrInput.value : '').trim() || 'Western Leyte College';
+  openWalletModal(method, address);
+}
+
+function submitOrderAJAX() {
+  const addrInput = document.getElementById('deliveryAddressInput');
+  const address = (addrInput ? addrInput.value : '').trim() || 'Western Leyte College';
+  if (selectedMethod === 'cod') {
     openCodModal(address);
   } else {
-    openWalletModal(currentMethod, address);
+    submitOrderViaAjax(selectedMethod);
   }
 }
 
@@ -1196,9 +1208,9 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Attach button click handler
-  const btn = document.getElementById('mainCheckoutBtn') || document.querySelector('.checkout-btn');
+  const btn = document.getElementById('payActionBtn') || document.getElementById('mainCheckoutBtn') || document.querySelector('.btn-checkout');
   if (btn) {
-    btn.addEventListener('click', handlePlaceOrderClick);
+    btn.addEventListener('click', handlePayAction);
   }
 
   // 2. Attach click listeners to every payment card container
@@ -1210,18 +1222,84 @@ document.addEventListener('DOMContentLoaded', function() {
         if (parent) method = parent.getAttribute('data-method') || parent.getAttribute('data-name');
       }
       if (method) {
-        selectPaymentMethod(method);
+        updatePaymentTheme(normalizeMethodKey(method));
       }
     });
   });
 
   // Default to Cash on Delivery (COD)
-  selectPaymentMethod('cod');
+  updatePaymentTheme('cod');
 });
 </script>
 
 <!-- 5. Cache-busted script reference -->
 <script src="assets/js/checkout.js?v=<?= time() ?>"></script>
 
+<!-- 3. INLINE JAVASCRIPT THEME SWITCHER DIRECTLY ABOVE </body> -->
+<script>
+let selectedMethod = 'cod';
+const orderTotal = '₱200.00';
+
+function updatePaymentTheme(method) {
+    selectedMethod = method;
+    currentMethod = method;
+    const btn = document.getElementById('payActionBtn') || document.querySelector('.btn-checkout');
+    if (!btn) return;
+
+    // Sync radio buttons
+    document.querySelectorAll('input[name="payment_method"]').forEach(r => r.checked = false);
+    const targetRadio = document.querySelector(`input[value="${method}"]`);
+    if (targetRadio) targetRadio.checked = true;
+
+    // Sync active classes & card radios
+    document.querySelectorAll('.payment-card, .pay-option').forEach(card => {
+        const cardMethod = card.getAttribute('data-method') || '';
+        const isSelected = (cardMethod === method);
+        const iconRadio = card.querySelector('.pay-radio');
+        if (isSelected) {
+            card.classList.add('active');
+            if (iconRadio) iconRadio.className = 'fa-solid fa-circle-check pay-radio';
+        } else {
+            card.classList.remove('active');
+            if (iconRadio) iconRadio.className = 'fa-regular fa-circle pay-radio';
+        }
+    });
+
+    const hiddenMethod = document.getElementById('selectedPaymentMethod');
+    if (hiddenMethod) hiddenMethod.value = method;
+
+    if (method === 'cod') {
+        btn.style.setProperty('background-color', '#283d23', 'important');
+        btn.style.setProperty('color', '#ffffff', 'important');
+        btn.innerHTML = '<i class="fa-solid fa-money-bill-wave" style="margin-right:8px;"></i> Place Order • ' + orderTotal;
+    } else if (method === 'gcash') {
+        btn.style.setProperty('background-color', '#007DFE', 'important');
+        btn.style.setProperty('color', '#ffffff', 'important');
+        btn.innerHTML = '<span style="background:#fff; color:#007DFE; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ' + orderTotal;
+    } else if (method === 'maya') {
+        btn.style.setProperty('background-color', '#023a2b', 'important');
+        btn.style.setProperty('color', '#05B851', 'important');
+        btn.innerHTML = '<span style="background:#05B851; color:#023a2b; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">M</span> Pay with Maya • ' + orderTotal;
+    } else if (method === 'gotyme') {
+        btn.style.setProperty('background-color', '#0a2540', 'important');
+        btn.style.setProperty('color', '#00d2ff', 'important');
+        btn.innerHTML = '<span style="background:#00d2ff; color:#0a2540; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">GT</span> Pay with GoTyme • ' + orderTotal;
+    } else if (method === 'apple_pay') {
+        btn.style.setProperty('background-color', '#000000', 'important');
+        btn.style.setProperty('color', '#ffffff', 'important');
+        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + orderTotal;
+    }
+}
+
+function handlePayAction() {
+    if (selectedMethod === 'apple_pay') {
+        showApplePayModal();
+    } else if (['gcash', 'maya', 'gotyme'].includes(selectedMethod)) {
+        showWalletModal(selectedMethod);
+    } else {
+        submitOrderAJAX();
+    }
+}
+</script>
 </body>
 </html>

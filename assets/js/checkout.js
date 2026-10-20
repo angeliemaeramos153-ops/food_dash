@@ -40,7 +40,7 @@ function normalizeMethodKey(m) {
 
 // 2. ATTACH PAYMENT CARD CLICK HANDLERS (COLOR, LOGO, & TEXT)
 function selectPaymentMethod(method) {
-  const btn = document.getElementById('mainCheckoutBtn') || document.querySelector('.checkout-btn') || document.getElementById('placeOrderBtn');
+  const btn = document.getElementById('payActionBtn') || document.getElementById('mainCheckoutBtn') || document.querySelector('.btn-checkout') || document.querySelector('.checkout-btn') || document.getElementById('placeOrderBtn');
   if (!btn) return;
   
   const totalText = '₱200.00'; // or dynamic total PHP variable
@@ -398,7 +398,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Attach button click handler
-  const btn = document.getElementById('mainCheckoutBtn') || document.querySelector('.checkout-btn') || document.getElementById('placeOrderBtn');
+  const btn = document.getElementById('payActionBtn') || document.getElementById('mainCheckoutBtn') || document.querySelector('.btn-checkout') || document.querySelector('.checkout-btn') || document.getElementById('placeOrderBtn');
   if (btn) {
     btn.addEventListener('click', handlePlaceOrderClick);
   }

@@ -2535,7 +2535,7 @@ button{cursor:pointer}
         <i class="fa-solid fa-wallet" style="color:var(--harvest-sun)"></i> Payment Method
       </div>
       <div class="payment-options-grid" id="checkoutPaymentOptions">
-        <div class="pay-option active" data-method="Cash on Delivery (COD)" onclick="setCustomerPaymentMethod('Cash on Delivery (COD)', this)">
+        <div class="pay-option active" data-method="Cash on Delivery (COD)" onclick="setCustomerPaymentMethod('Cash on Delivery (COD)', this); updatePaymentTheme('cod')">
           <div class="pay-option-logo-box">
             <img src="assets/logos/cod.svg" alt="Cash on Delivery" class="pay-option-brand-logo">
           </div>
@@ -2545,7 +2545,7 @@ button{cursor:pointer}
           </div>
           <i class="fa-solid fa-circle-check pay-check"></i>
         </div>
-        <div class="pay-option" data-method="GCash" onclick="setCustomerPaymentMethod('GCash', this)">
+        <div class="pay-option" data-method="GCash" onclick="setCustomerPaymentMethod('GCash', this); updatePaymentTheme('gcash')">
           <div class="pay-option-logo-box">
             <img src="assets/logos/gcash.svg" alt="GCash" class="pay-option-brand-logo">
           </div>
@@ -2555,7 +2555,7 @@ button{cursor:pointer}
           </div>
           <i class="fa-regular fa-circle pay-check"></i>
         </div>
-        <div class="pay-option" data-method="Maya (PayMaya)" onclick="setCustomerPaymentMethod('Maya (PayMaya)', this)">
+        <div class="pay-option" data-method="Maya (PayMaya)" onclick="setCustomerPaymentMethod('Maya (PayMaya)', this); updatePaymentTheme('maya')">
           <div class="pay-option-logo-box">
             <img src="assets/logos/maya.svg" alt="Maya" class="pay-option-brand-logo">
           </div>
@@ -2565,7 +2565,7 @@ button{cursor:pointer}
           </div>
           <i class="fa-regular fa-circle pay-check"></i>
         </div>
-        <div class="pay-option" data-method="GoTyme Bank" onclick="setCustomerPaymentMethod('GoTyme Bank', this)">
+        <div class="pay-option" data-method="GoTyme Bank" onclick="setCustomerPaymentMethod('GoTyme Bank', this); updatePaymentTheme('gotyme')">
           <div class="pay-option-logo-box">
             <img src="assets/logos/gotyme.svg" alt="GoTyme Bank" class="pay-option-brand-logo">
           </div>
@@ -2575,7 +2575,7 @@ button{cursor:pointer}
           </div>
           <i class="fa-regular fa-circle pay-check"></i>
         </div>
-        <div class="pay-option" data-method="Apple Pay" onclick="setCustomerPaymentMethod('Apple Pay', this)">
+        <div class="pay-option" data-method="Apple Pay" onclick="setCustomerPaymentMethod('Apple Pay', this); updatePaymentTheme('apple_pay')">
           <div class="pay-option-logo-box">
             <img src="assets/logos/apple-pay.svg" alt="Apple Pay" class="pay-option-brand-logo">
           </div>
@@ -2594,7 +2594,7 @@ button{cursor:pointer}
       <div class="sumrow"><span>Delivery Fee</span><span>₱30.00</span></div>
       <div class="sumrow total"><span>Total</span><span id="total">₱30.00</span></div>
     </div>
-    <button class="primary" style="margin-top:12px" id="btnCheckoutSubmit" onclick="checkout()">Checkout</button>
+    <button type="button" class="primary btn-checkout" style="margin-top:12px" id="payActionBtn" onclick="handlePayAction()">Checkout</button>
   </div>
 </section>
 
@@ -6536,6 +6536,49 @@ if (window.location.hash) {
   if (document.getElementById(targetScreen)) {
     showScreen(targetScreen);
   }
+}
+</script>
+<script>
+let selectedMethod = 'cod';
+const orderTotal = '₱200.00';
+
+function updatePaymentTheme(method) {
+    selectedMethod = method;
+    const btn = document.getElementById('payActionBtn') || document.getElementById('btnCheckoutSubmit') || document.querySelector('.btn-checkout');
+    if (!btn) return;
+
+    // Sync radio buttons
+    document.querySelectorAll('input[name="payment_method"]').forEach(r => r.checked = false);
+    const targetRadio = document.querySelector(`input[value="${method}"]`);
+    if (targetRadio) targetRadio.checked = true;
+
+    if (method === 'cod') {
+        btn.style.setProperty('background-color', '#283d23', 'important');
+        btn.style.setProperty('color', '#ffffff', 'important');
+        btn.innerHTML = '<i class="fa-solid fa-money-bill-wave" style="margin-right:8px;"></i> Place Order • ' + orderTotal;
+    } else if (method === 'gcash') {
+        btn.style.setProperty('background-color', '#007DFE', 'important');
+        btn.style.setProperty('color', '#ffffff', 'important');
+        btn.innerHTML = '<span style="background:#fff; color:#007DFE; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ' + orderTotal;
+    } else if (method === 'maya') {
+        btn.style.setProperty('background-color', '#023a2b', 'important');
+        btn.style.setProperty('color', '#05B851', 'important');
+        btn.innerHTML = '<span style="background:#05B851; color:#023a2b; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">M</span> Pay with Maya • ' + orderTotal;
+    } else if (method === 'gotyme') {
+        btn.style.setProperty('background-color', '#0a2540', 'important');
+        btn.style.setProperty('color', '#00d2ff', 'important');
+        btn.innerHTML = '<span style="background:#00d2ff; color:#0a2540; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">GT</span> Pay with GoTyme • ' + orderTotal;
+    } else if (method === 'apple_pay') {
+        btn.style.setProperty('background-color', '#000000', 'important');
+        btn.style.setProperty('color', '#ffffff', 'important');
+        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + orderTotal;
+    }
+}
+
+function handlePayAction() {
+    if (typeof checkout === 'function') {
+        checkout();
+    }
 }
 </script>
 <?php require_once 'gmail_simulator_modal.php'; ?>
