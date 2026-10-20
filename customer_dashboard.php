@@ -6578,7 +6578,7 @@ function handlePayAction(e) {
 
     var selectedRadio = document.querySelector('input[name="payment_method"]:checked') || 
                         document.querySelector('input[name="payment_option"]:checked');
-    var method = selectedRadio ? selectedRadio.value : (window.selectedPaymentMethod || 'maya');
+    var method = selectedRadio ? selectedRadio.value : (window.selectedPaymentMethod || 'gcash');
 
     var walletModal = document.getElementById('walletModal');
     var appleModal = document.getElementById('applePayModal');
@@ -6601,8 +6601,35 @@ function handlePayAction(e) {
     return false;
 }
 
-function triggerCheckout(event) {
-    if (event && event.preventDefault) event.preventDefault();
+function selectPaymentMethod(method) {
+    window.selectedPaymentMethod = method;
+    
+    // Check radio
+    document.querySelectorAll('input[name="payment_method"]').forEach(function(r) { r.checked = false; });
+    var target = document.querySelector('input[value="' + method + '"]');
+    if (target) target.checked = true;
+
+    // Update button color and text
+    var btn = document.getElementById('mainPayBtn') || document.querySelector('.checkout-btn') || document.querySelector('#payActionBtn');
+    if (!btn) return;
+
+    if (method === 'cod') {
+        btn.style.setProperty('background-color', '#283d23', 'important');
+        btn.innerHTML = 'Place Order • ₱200.00';
+    } else if (method === 'gcash') {
+        btn.style.setProperty('background-color', '#007DFE', 'important');
+        btn.innerHTML = '<span style="background:#fff; color:#007DFE; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ₱200.00';
+    } else if (method === 'maya') {
+        btn.style.setProperty('background-color', '#023a2b', 'important');
+        btn.innerHTML = '<span style="background:#05B851; color:#023a2b; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">M</span> Pay with Maya • ₱200.00';
+    } else if (method === 'gotyme') {
+        btn.style.setProperty('background-color', '#0a2540', 'important');
+        btn.innerHTML = '<span style="background:#00d2ff; color:#0a2540; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">GT</span> Pay with GoTyme • ₱200.00';
+    } else if (method === 'apple_pay') {
+        btn.style.setProperty('background-color', '#000000', 'important');
+        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ₱200.00';
+    }
+}
    // window.location.href = 'cart.php';
 if (typeof window.openPaymentPopup === 'function') {
     window.openPaymentPopup();
