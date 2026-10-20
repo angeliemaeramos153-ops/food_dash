@@ -497,11 +497,7 @@ $grand_total = $subtotal + $delivery_fee;
 <body>
 
 <div class="checkout-wrapper">
-  <header class="checkout-header">
-    <a href="customer_dashboard.php#cart" class="back-btn"><i class="fa-solid fa-chevron-left"></i></a>
-    <h1><i class="fa-solid fa-bag-shopping" style="color:var(--harvest-sun);"></i> Order Checkout</h1>
-    <span id="cartHeaderCount" style="font-size:12px; font-weight:700; color:var(--olive);"><?= !empty($cart_items) ? count($cart_items) . ' Item(s)' : '1 Item' ?></span>
-  </header>
+  
 
   <!-- 2. Form with novalidate and onsubmit="return false;" - ZERO pattern attributes, standard type="text" -->
   <form id="cartCheckoutForm" novalidate onsubmit="return false;" class="checkout-content">
