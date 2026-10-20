@@ -566,7 +566,7 @@ $grand_total  = $subtotal + $delivery_fee;
 
 <!-- SECTION 5: STICKY ACTION BUTTON -->
 <div class="sticky-pay-bar">
-  <button type="button" id="mainPayBtn">
+<button type="button" id="mainPayBtn" onclick="openPaymentPopup(event)">
     <span style="background:#fff;color:#007DFE;font-weight:bold;padding:2px 7px;border-radius:4px;font-size:12px;">G</span>
     Pay with GCash &#183; &#8369;<?= number_format($grand_total, 2) ?>
   </button>
