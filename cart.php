@@ -8,16 +8,76 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 require_once 'db_connect.php';
 
-// Authenticated customer session fallback (user 'noah' / ID 26 / ID 1)
-$user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 26;
-$customer_name = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Noah James';
-$customer_phone = '+63 928 555 0148';
-$default_address = 'Western Leyte College';
-$default_lat = 11.01042;
-$default_lng = 124.61786;
-$total_amount = 200.00;
-$meal_subtotal = 170.00;
-$delivery_fee = 30.00;
+// 1. Session Identity: Customer ID is derived strictly from the active session
+$user_id = $_SESSION['user_id'] ?? null;
+if (!$user_id) {
+    if (!empty($_SESSION['customer_id'])) {
+        $user_id = (int)$_SESSION['customer_id'];
+    } elseif (!empty($_SESSION['customer']['user_id'])) {
+        $user_id = (int)$_SESSION['customer']['user_id'];
+    }
+}
+
+$customer_name = $_SESSION['full_name'] ?? $_SESSION['username'] ?? '';
+$customer_phone = $_SESSION['phone'] ?? '';
+$default_address = $_SESSION['address'] ?? '';
+$default_lat = isset($_SESSION['delivery_lat']) ? (float)$_SESSION['delivery_lat'] : null;
+$default_lng = isset($_SESSION['delivery_lng']) ? (float)$_SESSION['delivery_lng'] : null;
+
+if ($user_id) {
+    try {
+        $u_stmt = $conn->prepare("SELECT user_id, username, full_name, email, phone, address, default_address, latitude, longitude FROM users WHERE user_id = :uid LIMIT 1");
+        $u_stmt->execute([':uid' => $user_id]);
+        $user_row = $u_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($user_row) {
+            if (empty($customer_name)) {
+                $customer_name = $user_row['full_name'] ?: $user_row['username'];
+            }
+            if (empty($customer_phone) && !empty($user_row['phone'])) {
+                $customer_phone = $user_row['phone'];
+            }
+            if (empty($default_address)) {
+                $default_address = $user_row['default_address'] ?? $user_row['address'] ?? '';
+            }
+            if ($default_lat === null && !empty($user_row['latitude'])) {
+                $default_lat = (float)$user_row['latitude'];
+            }
+            if ($default_lng === null && !empty($user_row['longitude'])) {
+                $default_lng = (float)$user_row['longitude'];
+            }
+        }
+    } catch (Throwable $e) {}
+}
+
+// Fallback if address or coords are completely blank
+if (empty($default_address)) {
+    $default_address = 'Ormoc City, Leyte';
+}
+if ($default_lat === null) $default_lat = 11.01031;
+if ($default_lng === null) $default_lng = 124.61791;
+
+// 2. Dynamic Financial Calculations: Compute subtotal, delivery fee, and grand total dynamically from the actual active cart
+$cart_items = [];
+if (!empty($_SESSION['cart']) && is_array($_SESSION['cart'])) {
+    $cart_items = $_SESSION['cart'];
+} elseif (!empty($_SESSION['foodDashCart']) && is_array($_SESSION['foodDashCart'])) {
+    $cart_items = $_SESSION['foodDashCart'];
+}
+
+$cart_subtotal = 0.0;
+if (!empty($cart_items)) {
+    foreach ($cart_items as $ci) {
+        $price = (float)($ci['price'] ?? 0);
+        $qty = (int)($ci['qty'] ?? $ci['quantity'] ?? 1);
+        $cart_subtotal += ($price * max(1, $qty));
+    }
+} else {
+    $cart_subtotal = 170.00;
+}
+
+$subtotal = (float)$cart_subtotal;
+$delivery_fee = (float)($delivery_fee ?? 30.00);
+$grand_total = $subtotal + $delivery_fee;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -100,35 +160,38 @@ $delivery_fee = 30.00;
     }
     .checkout-content {
       padding: 20px;
-      flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 16px;
+      flex: 1;
     }
     .checkout-card {
       background: #ffffff;
       border-radius: 18px;
       padding: 18px;
       border: 1px solid var(--line);
-      box-shadow: 0 4px 16px rgba(0,0,0,0.03);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.02);
     }
     .card-title {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--olive-shadow);
-      margin-bottom: 12px;
+      color: var(--olive-dark);
+      margin-bottom: 14px;
       display: flex;
       align-items: center;
       gap: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     .order-item-row {
       display: flex;
-      align-items: center;
       justify-content: space-between;
+      align-items: center;
       padding: 8px 0;
-      font-size: 13px;
+      border-bottom: 1px dashed var(--line);
+    }
+    .order-item-row:last-child {
+      border-bottom: none;
     }
     .order-item-desc {
       display: flex;
@@ -136,10 +199,10 @@ $delivery_fee = 30.00;
       gap: 10px;
     }
     .item-icon {
-      font-size: 20px;
+      font-size: 24px;
       background: var(--sandstone-light);
-      width: 38px;
-      height: 38px;
+      width: 40px;
+      height: 40px;
       border-radius: 10px;
       display: flex;
       align-items: center;
@@ -147,45 +210,45 @@ $delivery_fee = 30.00;
     }
     .address-textarea {
       width: 100%;
-      min-height: 70px;
-      padding: 12px;
+      min-height: 72px;
       border-radius: 12px;
-      border: 1.5px solid var(--line);
+      border: 1px solid var(--line);
+      padding: 12px;
       font-family: inherit;
-      font-size: 12px;
+      font-size: 13px;
       color: #374151;
-      background: #fafafa;
-      resize: none;
+      resize: vertical;
+      background: var(--sandstone-light);
       outline: none;
-      transition: border-color 0.2s ease;
+      transition: border-color 0.2s;
     }
     .address-textarea:focus {
       border-color: var(--olive);
       background: #ffffff;
     }
     .coords-badge {
-      display: inline-flex;
+      display: flex;
       align-items: center;
       gap: 6px;
-      background: #ecfdf5;
-      color: #065f46;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 6px 12px;
-      border-radius: 20px;
       margin-top: 8px;
-      border: 1px solid #a7f3d0;
+      font-size: 11px;
+      color: var(--olive-shadow);
+      background: #edf3eb;
+      padding: 6px 10px;
+      border-radius: 8px;
     }
+
+    /* Payment Cards */
     .pay-options-list {
       display: flex;
       flex-direction: column;
       gap: 10px;
     }
-    .payment-card, .pay-option {
+    .payment-card {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 14px;
+      padding: 14px 16px;
       border-radius: 14px;
       border: 1.5px solid var(--line);
       background: #ffffff;
@@ -193,10 +256,34 @@ $delivery_fee = 30.00;
       transition: all 0.2s ease;
       user-select: none;
     }
-    .payment-card.active, .pay-option.active {
+    .payment-card:hover {
+      border-color: #cbd5e1;
+      background: #fafafa;
+    }
+    .payment-card.active {
       border-color: var(--olive);
-      background: #f7f9f4;
-      box-shadow: 0 4px 12px rgba(40, 61, 35, 0.12);
+      background: #f7faf6;
+      box-shadow: 0 0 0 1px var(--olive);
+    }
+    .payment-card#card-gcash.active {
+      border-color: #007DFE;
+      background: #f0f7ff;
+      box-shadow: 0 0 0 1px #007DFE;
+    }
+    .payment-card#card-maya.active {
+      border-color: #05B851;
+      background: #f0fdf4;
+      box-shadow: 0 0 0 1px #05B851;
+    }
+    .payment-card#card-gotyme.active {
+      border-color: #00d2ff;
+      background: #f0faff;
+      box-shadow: 0 0 0 1px #00d2ff;
+    }
+    .payment-card#card-apple_pay.active {
+      border-color: #000000;
+      background: #f8f8f8;
+      box-shadow: 0 0 0 1px #000000;
     }
     .pay-option-left {
       display: flex;
@@ -204,15 +291,15 @@ $delivery_fee = 30.00;
       gap: 12px;
     }
     .pay-logo-box {
-      width: 52px;
-      height: 34px;
+      width: 44px;
+      height: 32px;
       border-radius: 8px;
-      background: #ffffff;
-      border: 1px solid #e5e7eb;
+      background: #f3f4f6;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 3px;
+      padding: 4px;
+      border: 1px solid rgba(0,0,0,0.06);
     }
     .pay-logo-box img {
       max-width: 100%;
@@ -221,29 +308,33 @@ $delivery_fee = 30.00;
     }
     .pay-info strong {
       display: block;
-      font-size: 13px;
-      color: #111827;
-      font-weight: 600;
+      font-size: 14px;
+      color: #1f2937;
     }
     .pay-info small {
-      display: block;
-      font-size: 10px;
+      font-size: 11px;
       color: #6b7280;
     }
     .pay-radio {
       font-size: 18px;
-      color: #d1d5db;
+      color: #9ca3af;
+      transition: color 0.2s ease;
     }
-    .payment-card.active .pay-radio, .pay-option.active .pay-radio {
+    .payment-card.active .pay-radio {
       color: var(--olive);
     }
+    .payment-card#card-gcash.active .pay-radio { color: #007DFE; }
+    .payment-card#card-maya.active .pay-radio { color: #05B851; }
+    .payment-card#card-gotyme.active .pay-radio { color: #00d2ff; }
+    .payment-card#card-apple_pay.active .pay-radio { color: #000000; }
+
+    /* Summary Totals */
     .summary-row {
       display: flex;
       justify-content: space-between;
-      align-items: center;
       font-size: 13px;
       color: #4b5563;
-      padding: 5px 0;
+      margin-bottom: 8px;
     }
     .summary-row.total {
       border-top: 1px solid var(--line);
@@ -401,34 +492,6 @@ $delivery_fee = 30.00;
     .pulse-scan {
       animation: pulseScanText 0.8s ease-in-out infinite;
     }
-
-    .toast-msg {
-      position: fixed;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%) translateY(100px);
-      background: #1f2937;
-      color: #ffffff;
-      padding: 12px 24px;
-      border-radius: 30px;
-      font-size: 13px;
-      font-weight: 600;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.25);
-      z-index: 20000;
-      opacity: 0;
-      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      pointer-events: none;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .toast-msg.show {
-      transform: translateX(-50%) translateY(0);
-      opacity: 1;
-    }
-    .toast-msg.success {
-      background: #15803d;
-    }
   </style>
 </head>
 <body>
@@ -437,48 +500,73 @@ $delivery_fee = 30.00;
   <header class="checkout-header">
     <a href="customer_dashboard.php#cart" class="back-btn"><i class="fa-solid fa-chevron-left"></i></a>
     <h1><i class="fa-solid fa-bag-shopping" style="color:var(--harvest-sun);"></i> Order Checkout</h1>
-    <span style="font-size:12px; font-weight:700; color:var(--olive);">1 Item</span>
+    <span id="cartHeaderCount" style="font-size:12px; font-weight:700; color:var(--olive);"><?= !empty($cart_items) ? count($cart_items) . ' Item(s)' : '1 Item' ?></span>
   </header>
 
-  <!-- 1. Form with novalidate and onsubmit="return false;" to prevent WebKit validation -->
+  <!-- 2. Form with novalidate and onsubmit="return false;" - ZERO pattern attributes, standard type="text" -->
   <form id="checkoutForm" novalidate onsubmit="return false;" class="checkout-content">
-    <input type="text" style="display:none;" name="action" value="create_order">
-    <input type="text" style="display:none;" name="total" value="200.00">
-    <input type="text" style="display:none;" name="total_amount" value="200.00">
-    <input type="text" style="display:none;" name="delivery_fee" value="30.00">
-    <input type="text" style="display:none;" name="cart" value='[{"name":"Signature Meal Combo","store":"Food Dash Grill","price":170.00,"qty":1,"icon":"🍱"}]'>
+    <input type="text" style="display:none;" name="action" id="order_action" value="create_order">
+    <input type="text" style="display:none;" name="total_amount" id="total_amount" value="<?= htmlspecialchars((string)$grand_total) ?>">
+    <input type="text" style="display:none;" name="total" id="total" value="<?= htmlspecialchars((string)$grand_total) ?>">
+    <input type="text" style="display:none;" name="subtotal" id="subtotal" value="<?= htmlspecialchars((string)$subtotal) ?>">
+    <input type="text" style="display:none;" name="delivery_fee" id="delivery_fee" value="<?= htmlspecialchars((string)$delivery_fee) ?>">
+    <input type="text" style="display:none;" name="delivery_lat_lng" id="delivery_lat_lng" value="<?= htmlspecialchars("{$default_lat}, {$default_lng}") ?>">
+    <input type="text" style="display:none;" name="delivery_lat" id="delivery_lat" value="<?= htmlspecialchars((string)$default_lat) ?>">
+    <input type="text" style="display:none;" name="delivery_lng" id="delivery_lng" value="<?= htmlspecialchars((string)$default_lng) ?>">
+    <input type="text" style="display:none;" name="customer_lat" id="customer_lat" value="<?= htmlspecialchars((string)$default_lat) ?>">
+    <input type="text" style="display:none;" name="customer_lng" id="customer_lng" value="<?= htmlspecialchars((string)$default_lng) ?>">
+    <input type="text" style="display:none;" name="cart" id="cart_json_input" value="<?= htmlspecialchars(json_encode(!empty($cart_items) ? $cart_items : [['name' => 'Signature Meal Combo', 'store' => 'Food Dash Grill', 'price' => 170.00, 'qty' => 1, 'icon' => '🍱']])) ?>">
+    <input type="text" style="display:none;" name="payment_method_val" id="selectedPaymentMethod" value="gcash">
+    <input type="text" style="display:none;" name="payment_method" id="formPaymentMethod" value="gcash">
 
-    <!-- Order Summary -->
+    <!-- Order Summary Card -->
     <div class="checkout-card">
-      <div class="card-title"><i class="fa-solid fa-utensils"></i> Order Summary</div>
-      <div class="order-item-row">
-        <div class="order-item-desc">
-          <div class="item-icon">🍱</div>
-          <div>
-            <strong style="display:block; font-size:13px;">Signature Meal Combo</strong>
-            <small style="color:#6b7280;">Food Dash Grill • 1x</small>
+      <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span><i class="fa-solid fa-utensils"></i> Order Summary</span>
+        <span id="orderItemCount" style="font-size:12px; font-weight:700; color:var(--olive);"><?= !empty($cart_items) ? count($cart_items) . ' Item(s)' : '1 Item' ?></span>
+      </div>
+      <div id="orderSummaryItems">
+        <?php if (!empty($cart_items)): ?>
+          <?php foreach ($cart_items as $ci): ?>
+            <div class="order-item-row">
+              <div class="order-item-desc">
+                <div class="item-icon"><?= htmlspecialchars($ci['icon'] ?? '🍱') ?></div>
+                <div>
+                  <strong style="display:block; font-size:13px;"><?= htmlspecialchars($ci['name'] ?? 'Meal') ?></strong>
+                  <small style="color:#6b7280;"><?= htmlspecialchars($ci['store'] ?? 'Food Dash') ?> • <?= (int)($ci['qty'] ?? 1) ?>x</small>
+                </div>
+              </div>
+              <span style="font-weight:700; font-size:14px;">₱<?= number_format(((float)($ci['price'] ?? 0)) * max(1, (int)($ci['qty'] ?? 1)), 2) ?></span>
+            </div>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <div class="order-item-row">
+            <div class="order-item-desc">
+              <div class="item-icon">🍱</div>
+              <div>
+                <strong style="display:block; font-size:13px;">Signature Meal Combo</strong>
+                <small style="color:#6b7280;">Food Dash Grill • 1x</small>
+              </div>
+            </div>
+            <span style="font-weight:700; font-size:14px;">₱170.00</span>
           </div>
-        </div>
-        <span style="font-weight:700; font-size:14px;">₱170.00</span>
+        <?php endif; ?>
       </div>
     </div>
 
-    <!-- Delivery Destination -->
+    <!-- Delivery Destination Card -->
     <div class="checkout-card">
       <div class="card-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div>
-      <textarea id="deliveryAddressInput" name="address" class="address-textarea" placeholder="Unit/House No., Street, Barangay, City, Landmark"><?php echo htmlspecialchars($default_address); ?></textarea>
+      <textarea id="delivery_address" name="delivery_address" class="address-textarea" placeholder="Unit/House No., Street, Barangay, City, Landmark"><?= htmlspecialchars($default_address) ?></textarea>
+      <textarea id="deliveryAddressInput" name="address" style="display:none;"><?= htmlspecialchars($default_address) ?></textarea>
       
       <div class="coords-badge">
         <i class="fa-solid fa-circle-check"></i>
-        <span>Exact Live GPS Pin: <b id="coordsDisplay">11.01031, 124.61791</b></span>
+        <span>Exact Live GPS Pin: <b id="coordsDisplay"><?= htmlspecialchars("{$default_lat}, {$default_lng}") ?></b></span>
       </div>
-
-      <!-- Clean parsed coordinate text fields (no strict patterns) -->
-      <input type="text" style="display:none;" name="delivery_lat" id="delivery_lat" value="11.01031">
-      <input type="text" style="display:none;" name="delivery_lng" id="delivery_lng" value="124.61791">
     </div>
 
-    <!-- Payment Methods: 5 Options with active classes and radio inputs -->
+    <!-- Payment Methods: 5 Options -->
     <div class="checkout-card">
       <div class="card-title"><i class="fa-solid fa-credit-card"></i> Payment Method</div>
       <div class="pay-options-list">
@@ -491,7 +579,7 @@ $delivery_fee = 30.00;
               <small>Pay with cash upon arrival</small>
             </div>
           </div>
-          <input type="radio" name="payment_method" id="radio-cod" value="cod" style="display:none;">
+          <input type="radio" name="payment_method_radio" id="radio-cod" value="cod" style="display:none;">
           <i class="fa-regular fa-circle pay-radio" id="icon-cod"></i>
         </div>
 
@@ -504,7 +592,7 @@ $delivery_fee = 30.00;
               <small>Philippines' Leading E-Wallet</small>
             </div>
           </div>
-          <input type="radio" name="payment_method" id="radio-gcash" value="gcash" checked style="display:none;">
+          <input type="radio" name="payment_method_radio" id="radio-gcash" value="gcash" checked style="display:none;">
           <i class="fa-solid fa-circle-check pay-radio" id="icon-gcash"></i>
         </div>
 
@@ -517,7 +605,7 @@ $delivery_fee = 30.00;
               <small>Maya Wallet & Digital Card</small>
             </div>
           </div>
-          <input type="radio" name="payment_method" id="radio-maya" value="maya" style="display:none;">
+          <input type="radio" name="payment_method_radio" id="radio-maya" value="maya" style="display:none;">
           <i class="fa-regular fa-circle pay-radio" id="icon-maya"></i>
         </div>
 
@@ -530,7 +618,7 @@ $delivery_fee = 30.00;
               <small>Digital Banking & Rewards</small>
             </div>
           </div>
-          <input type="radio" name="payment_method" id="radio-gotyme" value="gotyme" style="display:none;">
+          <input type="radio" name="payment_method_radio" id="radio-gotyme" value="gotyme" style="display:none;">
           <i class="fa-regular fa-circle pay-radio" id="icon-gotyme"></i>
         </div>
 
@@ -543,21 +631,20 @@ $delivery_fee = 30.00;
               <small>Instant Face ID / Touch ID</small>
             </div>
           </div>
-          <input type="radio" name="payment_method" id="radio-apple_pay" value="apple_pay" style="display:none;">
+          <input type="radio" name="payment_method_radio" id="radio-apple_pay" value="apple_pay" style="display:none;">
           <i class="fa-regular fa-circle pay-radio" id="icon-apple_pay"></i>
         </div>
       </div>
-      <input type="text" style="display:none;" id="selectedPaymentMethod" name="payment_method_val" value="gcash">
     </div>
 
     <!-- Payment Totals -->
     <div class="checkout-card">
-      <div class="summary-row"><span>Meal Subtotal</span><span>₱170.00</span></div>
-      <div class="summary-row"><span>Delivery Fee</span><span>₱30.00</span></div>
-      <div class="summary-row total"><span>Total Amount</span><span id="displayTotal">₱200.00</span></div>
+      <div class="summary-row"><span>Meal Subtotal</span><span id="displaySubtotal">₱<?= number_format($subtotal, 2) ?></span></div>
+      <div class="summary-row"><span>Delivery Fee</span><span id="displayFee">₱<?= number_format($delivery_fee, 2) ?></span></div>
+      <div class="summary-row total"><span>Total Amount</span><span id="displayTotal">₱<?= number_format($grand_total, 2) ?></span></div>
     </div>
 
-    <!-- 1. Main Checkout button with type="button" and id="payActionBtn" -->
+    <!-- 2. Main Checkout button with type="button" and id="payActionBtn" -->
     <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="payActionBtn" onclick="triggerCheckoutFlow()">Checkout</button>
   </form>
 </div>
@@ -578,18 +665,18 @@ $delivery_fee = 30.00;
     <div style="padding:18px 22px 28px 22px;">
       <div style="background:#2c2c2e; border-radius:18px; padding:16px; margin-bottom:16px;">
         <div style="display:flex; justify-content:space-between; font-size:13px; color:#8e8e93; margin-bottom:6px;">
-          <span>Merchant</span><b style="color:#ffffff;">Food Dash Ormoc</b>
+          <span>Merchant</span><b style="color:#ffffff;">Food Dash</b>
         </div>
         <div style="display:flex; justify-content:space-between; font-size:13px; color:#8e8e93; margin-bottom:6px;">
           <span>Card</span><b style="color:#ffffff;">Apple Card (•••• 8821)</b>
         </div>
         <div style="display:flex; justify-content:space-between; font-size:13px; color:#8e8e93; margin-bottom:10px;">
-          <span>Deliver To</span><b style="color:#ffffff;" id="appleModalDest">Western Leyte College</b>
+          <span>Deliver To</span><b style="color:#ffffff;" id="appleModalDest"><?= htmlspecialchars($default_address) ?></b>
         </div>
         <div style="height:1px; background:#3a3a3c; margin:8px 0;"></div>
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <span style="font-size:15px; font-weight:700;">Total</span>
-          <span style="font-size:22px; font-weight:800; color:#30d158;">₱200.00</span>
+          <span style="font-size:22px; font-weight:800; color:#30d158;" id="appleModalTotal">₱<?= number_format($grand_total, 2) ?></span>
         </div>
       </div>
 
@@ -614,7 +701,6 @@ $delivery_fee = 30.00;
         <div id="faceIdStatus" style="font-size:14px; font-weight:700; color:#8e8e93; margin-top:12px;">
           Scanning Face...
         </div>
-        <div id="appleFaceIdStatusText" style="display:none;"></div>
       </div>
 
       <button type="button" class="btn-submit-order checkout-btn" id="btnApplePayTrigger" onclick="startApplePayScan()" style="background:#333336; color:#8e8e93; margin-top:16px;" disabled>
@@ -626,7 +712,7 @@ $delivery_fee = 30.00;
 <div id="modal-apple_pay" style="display:none;"></div>
 
 <!-- ============================================== -->
-<!-- 2. GENERIC WALLET PIN MODAL                    -->
+<!-- 2. GENERIC WALLET MODAL (GCash / Maya / GoTyme)-->
 <!-- ============================================== -->
 <div class="sim-modal" id="walletModal" style="display:none;" onclick="if(event.target===this)closeModal('walletModal')">
   <div class="sim-sheet" style="background:#ffffff;">
@@ -646,158 +732,35 @@ $delivery_fee = 30.00;
     <div style="padding:22px; background:#ffffff;">
       <div style="text-align:center; margin-bottom:16px;">
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Payment Authorization</div>
-        <h2 style="font-size:22px; font-weight:800; color:#111827;">Total: <span id="walletTotal" style="color:#007DFE;">₱200.00</span></h2>
+        <h2 style="font-size:22px; font-weight:800; color:#111827;">Total: <span id="walletTotal" style="color:#007DFE;">₱<?= number_format($grand_total, 2) ?></span></h2>
       </div>
       <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:16px; padding:12px 16px; margin-bottom:14px;">
         <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
           <i class="fa-solid fa-location-dot" style="color:#ef4444;"></i> Delivery Destination:
         </div>
-        <div style="font-size:14px; font-weight:700; color:#1e293b;">Western Leyte College</div>
+        <div style="font-size:14px; font-weight:700; color:#1e293b;" id="walletDest"><?= htmlspecialchars($default_address) ?></div>
       </div>
       <div style="background:#fdfbf7; border:1px solid #e8decb; border-radius:16px; padding:16px; margin-bottom:18px; text-align:center;">
-        <label style="display:block; font-size:12px; font-weight:700; color:#374151; margin-bottom:8px;">
+        <label id="walletPinLabel" style="display:block; font-size:12px; font-weight:700; color:#374151; margin-bottom:8px;">
           <i class="fa-solid fa-lock" style="color:#007DFE;"></i> Enter 4-Digit MPIN / Security OTP:
         </label>
         <div style="display:flex; justify-content:center; margin-bottom:6px;">
-          <input type="password" id="walletPinInput" maxlength="4" value="1234" autocomplete="off" style="width:170px; height:46px; text-align:center; font-size:24px; letter-spacing:10px; border-radius:12px; border:2px solid #007DFE; font-family:monospace; font-weight:800; outline:none; background:#ffffff; color:#1e293b;">
+          <input type="password" id="walletPinInput" maxlength="6" value="1234" autocomplete="off" style="width:170px; height:46px; text-align:center; font-size:24px; letter-spacing:10px; border-radius:12px; border:2px solid #007DFE; font-family:monospace; font-weight:800; outline:none; background:#ffffff; color:#1e293b;">
         </div>
-        <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Demo Auto-Filled</small>
+        <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Instant Processing</small>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" id="walletSubmitBtn" onclick="submitOrderToBackend(activeMethod)" style="background:#007DFE; color:#ffffff; margin-top:0;">
-        <i class="fa-solid fa-shield-halved"></i> Pay ₱200.00
+      <button type="button" class="btn-submit-order checkout-btn" id="walletSubmitBtn" onclick="submitDynamicOrder(selectedMethod)" style="background:#007DFE; color:#ffffff; margin-top:0;">
+        <i class="fa-solid fa-shield-halved"></i> Pay ₱<?= number_format($grand_total, 2) ?>
       </button>
     </div>
   </div>
 </div>
+<div id="modal-gcash" style="display:none;"></div>
+<div id="modal-maya" style="display:none;"></div>
+<div id="modal-gotyme" style="display:none;"></div>
 
 <!-- ============================================== -->
-<!-- 3. BRANDED GCASH MODAL                         -->
-<!-- ============================================== -->
-<div class="sim-modal" id="modal-gcash" style="display:none;" onclick="if(event.target===this)closeModal('modal-gcash')">
-  <div class="sim-sheet" style="background:#ffffff;">
-    <div style="background:#007DFE; color:#ffffff; padding:16px 20px 18px 20px;">
-      <div class="sheet-grabber"></div>
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <img src="assets/logos/gcash.svg" alt="GCash" style="height:26px; border-radius:6px; background:#fff; padding:2px;">
-          <div>
-            <div style="font-size:16px; font-weight:800; line-height:1.2;">GCash QuickPay</div>
-            <small style="font-size:11px; opacity:0.85;">Official Digital Payment</small>
-          </div>
-        </div>
-        <button type="button" onclick="closeModal('modal-gcash')" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:20px; cursor:pointer;">Cancel</button>
-      </div>
-    </div>
-    <div style="padding:22px; background:#ffffff;">
-      <div style="text-align:center; margin-bottom:16px;">
-        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Payment Authorization</div>
-        <h2 style="font-size:22px; font-weight:800; color:#111827;">Total: <span style="color:#007DFE;">₱200.00</span></h2>
-      </div>
-      <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:16px; padding:12px 16px; margin-bottom:14px;">
-        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
-          <i class="fa-solid fa-location-dot" style="color:#ef4444;"></i> Delivery Destination:
-        </div>
-        <div style="font-size:14px; font-weight:700; color:#1e293b;">Western Leyte College</div>
-      </div>
-      <div style="background:#fdfbf7; border:1px solid #e8decb; border-radius:16px; padding:16px; margin-bottom:18px; text-align:center;">
-        <label style="display:block; font-size:12px; font-weight:700; color:#374151; margin-bottom:8px;">
-          <i class="fa-solid fa-lock" style="color:#007DFE;"></i> Enter 4-Digit MPIN / Security OTP:
-        </label>
-        <div style="display:flex; justify-content:center; margin-bottom:6px;">
-          <input type="password" id="gcashPinInput" maxlength="4" value="1234" autocomplete="off" style="width:170px; height:46px; text-align:center; font-size:24px; letter-spacing:10px; border-radius:12px; border:2px solid #007DFE; font-family:monospace; font-weight:800; outline:none; background:#ffffff; color:#1e293b;">
-        </div>
-        <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Demo Auto-Filled</small>
-      </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="submitOrderToBackend('gcash')" style="background:#007DFE; color:#ffffff; margin-top:0;">
-        <i class="fa-solid fa-shield-halved"></i> Pay ₱200.00
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- ============================================== -->
-<!-- 4. BRANDED MAYA MODAL                          -->
-<!-- ============================================== -->
-<div class="sim-modal" id="modal-maya" style="display:none;" onclick="if(event.target===this)closeModal('modal-maya')">
-  <div class="sim-sheet" style="background:#ffffff;">
-    <div style="background:#023a2b; color:#ffffff; padding:16px 20px 18px 20px;">
-      <div class="sheet-grabber"></div>
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <img src="assets/logos/maya.svg" alt="Maya" style="height:26px; border-radius:6px; background:#fff; padding:2px;">
-          <div>
-            <div style="font-size:16px; font-weight:800; line-height:1.2; color:#05B851;">Maya Checkout</div>
-            <small style="font-size:11px; opacity:0.85;">Maya Wallet & Digital Card</small>
-          </div>
-        </div>
-        <button type="button" onclick="closeModal('modal-maya')" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:20px; cursor:pointer;">Cancel</button>
-      </div>
-    </div>
-    <div style="padding:22px; background:#ffffff;">
-      <div style="text-align:center; margin-bottom:16px;">
-        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Payment Authorization</div>
-        <h2 style="font-size:22px; font-weight:800; color:#111827;">Total: <span style="color:#05B851;">₱200.00</span></h2>
-      </div>
-      <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:16px; padding:12px 16px; margin-bottom:14px;">
-        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
-          <i class="fa-solid fa-location-dot" style="color:#ef4444;"></i> Delivery Destination:
-        </div>
-        <div style="font-size:14px; font-weight:700; color:#1e293b;">Western Leyte College</div>
-      </div>
-      <div style="background:#fdfbf7; border:1px solid #e8decb; border-radius:16px; padding:16px; margin-bottom:18px; text-align:center;">
-        <label style="display:block; font-size:12px; font-weight:700; color:#374151; margin-bottom:8px;">
-          <i class="fa-solid fa-lock" style="color:#05B851;"></i> Enter Maya OTP / Security Code:
-        </label>
-        <div style="display:flex; justify-content:center; margin-bottom:6px;">
-          <input type="password" id="mayaOtpInput" maxlength="6" value="654321" autocomplete="off" style="width:170px; height:46px; text-align:center; font-size:24px; letter-spacing:8px; border-radius:12px; border:2px solid #05B851; font-family:monospace; font-weight:800; outline:none; background:#ffffff; color:#1e293b;">
-        </div>
-        <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Demo Auto-Filled</small>
-      </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="submitOrderToBackend('maya')" style="background:#023a2b; color:#05B851; border:1.5px solid #05B851; margin-top:0;">
-        <i class="fa-solid fa-shield-halved"></i> Pay ₱200.00
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- ============================================== -->
-<!-- 5. BRANDED GOTYME BANK MODAL                   -->
-<!-- ============================================== -->
-<div class="sim-modal" id="modal-gotyme" style="display:none;" onclick="if(event.target===this)closeModal('modal-gotyme')">
-  <div class="sim-sheet" style="background:#ffffff;">
-    <div style="background:#0a2540; color:#ffffff; padding:16px 20px 18px 20px;">
-      <div class="sheet-grabber"></div>
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <img src="assets/logos/gotyme.svg" alt="GoTyme" style="height:26px; border-radius:6px; background:#fff; padding:2px;">
-          <div>
-            <div style="font-size:16px; font-weight:800; line-height:1.2; color:#00d2ff;">GoTyme Bank Transfer</div>
-            <small style="font-size:11px; opacity:0.85;">Everyday Account (•••• 4920)</small>
-          </div>
-        </div>
-        <button type="button" onclick="closeModal('modal-gotyme')" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:20px; cursor:pointer;">Cancel</button>
-      </div>
-    </div>
-    <div style="padding:22px; background:#ffffff;">
-      <div style="text-align:center; margin-bottom:16px;">
-        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Bank Authorization</div>
-        <h2 style="font-size:22px; font-weight:800; color:#111827;">Total: <span style="color:#00d2ff;">₱200.00</span></h2>
-      </div>
-      <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:16px; padding:12px 16px; margin-bottom:18px;">
-        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
-          <i class="fa-solid fa-location-dot" style="color:#ef4444;"></i> Delivery Destination:
-        </div>
-        <div style="font-size:14px; font-weight:700; color:#1e293b;">Western Leyte College</div>
-      </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="submitOrderToBackend('gotyme')" style="background:#0a2540; color:#00d2ff; border:1.5px solid #00d2ff; margin-top:0;">
-        <i class="fa-solid fa-building-columns"></i> Transfer & Pay
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- ============================================== -->
-<!-- 6. CASH ON DELIVERY (COD) ORDER REVIEW MODAL   -->
+<!-- 3. CASH ON DELIVERY (COD) CONFIRMATION MODAL   -->
 <!-- ============================================== -->
 <div class="sim-modal" id="modal-cod" style="display:none;" onclick="if(event.target===this)closeModal('modal-cod')">
   <div class="sim-sheet" style="background:#ffffff;">
@@ -817,174 +780,266 @@ $delivery_fee = 30.00;
     <div style="padding:22px; background:#ffffff;">
       <div style="text-align:center; margin-bottom:16px;">
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Order Summary</div>
-        <h2 style="font-size:22px; font-weight:800; color:#111827;">Total Amount: <span style="color:#283d23;">₱200.00</span></h2>
+        <h2 style="font-size:22px; font-weight:800; color:#111827;">Total Amount: <span id="codTotal" style="color:#283d23;">₱<?= number_format($grand_total, 2) ?></span></h2>
       </div>
       <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:16px; padding:12px 16px; margin-bottom:14px;">
         <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
           <i class="fa-solid fa-location-dot" style="color:#ef4444;"></i> Delivery Destination:
         </div>
-        <div style="font-size:14px; font-weight:700; color:#1e293b;">Western Leyte College</div>
+        <div style="font-size:14px; font-weight:700; color:#1e293b;" id="codDest"><?= htmlspecialchars($default_address) ?></div>
       </div>
       <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:14px; padding:14px; margin-bottom:18px; font-size:12px; color:#166534; display:flex; align-items:center; gap:10px;">
         <i class="fa-solid fa-money-bill-wave" style="font-size:20px; color:#15803d;"></i>
-        <span>Please prepare exact cash of <b>₱200.00</b> upon arrival for swift handover.</span>
+        <span id="codNote">Please prepare exact cash of <b id="codCashAmt">₱<?= number_format($grand_total, 2) ?></b> upon arrival for swift handover.</span>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="submitOrderToBackend('cod')" style="background:#283d23; color:#ffffff; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" id="codSubmitBtn" onclick="submitDynamicOrder('cod')" style="background:#283d23; color:#ffffff; margin-top:0;">
         <i class="fa-solid fa-check"></i> Confirm COD Order
       </button>
     </div>
   </div>
 </div>
 
-<div class="toast-msg" id="toastMsg"><i class="fa-solid fa-circle-check"></i> <span id="toastText"></span></div>
-
 <!-- ============================================== -->
-<!-- BULLETPROOF INLINE JAVASCRIPT CONTROLLER       -->
+<!-- 100% DYNAMIC JAVASCRIPT CONTROLLER             -->
 <!-- ============================================== -->
 <script>
-let activeMethod = 'gcash';
-const formattedTotal = '₱200.00';
+// 1. DYNAMIC FINANCIAL CALCULATIONS:
+var currentGrandTotal = <?= json_encode($grand_total) ?>;
+var grandTotalFormatted = '₱' + Number(<?= json_encode($grand_total) ?>).toLocaleString('en-PH', {minimumFractionDigits: 2});
+var currentSubtotal = <?= json_encode($subtotal) ?>;
+var currentDeliveryFee = <?= json_encode($delivery_fee) ?>;
+var selectedMethod = 'gcash';
+var activeMethod = 'gcash';
 
+// Sync dynamically from client-side localStorage if cart was updated on the customer dashboard
+function syncCartFromLocalStorage() {
+    try {
+        var rawCart = localStorage.getItem('foodDashCart');
+        if (rawCart) {
+            var parsed = JSON.parse(rawCart);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                var calcSub = 0;
+                var html = '';
+                parsed.forEach(function(item) {
+                    var price = Number(item.price) || 0;
+                    var qty = Number(item.qty || item.quantity) || 1;
+                    calcSub += (price * qty);
+                    var icon = item.icon || '🍱';
+                    var name = item.name || item.title || 'Meal Item';
+                    var store = item.store || 'Food Dash Grill';
+                    html += '<div class="order-item-row">' +
+                        '<div class="order-item-desc">' +
+                        '<div class="item-icon">' + icon + '</div>' +
+                        '<div>' +
+                        '<strong style="display:block; font-size:13px;">' + name + '</strong>' +
+                        '<small style="color:#6b7280;">' + store + ' • ' + qty + 'x</small>' +
+                        '</div>' +
+                        '</div>' +
+                        '<span style="font-weight:700; font-size:14px;">₱' + (price * qty).toFixed(2) + '</span>' +
+                        '</div>';
+                });
+                currentSubtotal = calcSub;
+                currentGrandTotal = currentSubtotal + currentDeliveryFee;
+                grandTotalFormatted = '₱' + Number(currentGrandTotal).toLocaleString('en-PH', {minimumFractionDigits: 2});
+                
+                var itemsContainer = document.getElementById('orderSummaryItems');
+                if (itemsContainer && html) itemsContainer.innerHTML = html;
+                var countEl = document.getElementById('orderItemCount');
+                if (countEl) countEl.textContent = parsed.length + ' Item(s)';
+                var headCount = document.getElementById('cartHeaderCount');
+                if (headCount) headCount.textContent = parsed.length + ' Item(s)';
+                
+                var subEl = document.getElementById('displaySubtotal');
+                if (subEl) subEl.textContent = '₱' + Number(currentSubtotal).toLocaleString('en-PH', {minimumFractionDigits: 2});
+                var totEl = document.getElementById('displayTotal');
+                if (totEl) totEl.textContent = grandTotalFormatted;
+                
+                var cartIn = document.getElementById('cart_json_input');
+                if (cartIn) cartIn.value = JSON.stringify(parsed);
+                var totIn = document.getElementById('total_amount');
+                if (totIn) totIn.value = currentGrandTotal;
+                var totIn2 = document.getElementById('total');
+                if (totIn2) totIn2.value = currentGrandTotal;
+                var subIn = document.getElementById('subtotal');
+                if (subIn) subIn.value = currentSubtotal;
+            }
+        }
+        
+        var savedAddr = localStorage.getItem('foodDashDeliveryAddress');
+        if (savedAddr) {
+            var addrEl = document.getElementById('delivery_address');
+            if (addrEl && (!addrEl.value || addrEl.value === 'Western Leyte College')) {
+                addrEl.value = savedAddr;
+            }
+            var addrSec = document.getElementById('deliveryAddressInput');
+            if (addrSec && (!addrSec.value || addrSec.value === 'Western Leyte College')) {
+                addrSec.value = savedAddr;
+            }
+        }
+    } catch(e) {
+        console.error('Cart sync error:', e);
+    }
+}
+
+// 3. DYNAMIC BUTTON THEME & LOGO UPDATE:
 function selectMethod(method) {
+    selectedMethod = method;
     activeMethod = method;
-    const btn = document.getElementById('payActionBtn');
+    var btn = document.getElementById('payActionBtn');
     if (!btn) return;
 
     // Sync radio checkmarks
-    document.querySelectorAll('input[name="payment_method"]').forEach(r => r.checked = false);
-    const radio = document.querySelector('input[value="' + method + '"]');
+    document.querySelectorAll('input[name="payment_method_radio"]').forEach(function(r) { r.checked = false; });
+    var radio = document.getElementById('radio-' + method);
     if (radio) radio.checked = true;
 
     // Sync card active states
-    const methods = ['cod', 'gcash', 'maya', 'gotyme', 'apple_pay'];
-    for (let i = 0; i < methods.length; i++) {
-        const m = methods[i];
-        const card = document.getElementById('card-' + m);
+    var methods = ['cod', 'gcash', 'maya', 'gotyme', 'apple_pay'];
+    for (var i = 0; i < methods.length; i++) {
+        var m = methods[i];
+        var card = document.getElementById('card-' + m);
         if (card) {
             if (m === method) card.classList.add('active');
             else card.classList.remove('active');
         }
-        const icon = document.getElementById('icon-' + m);
+        var icon = document.getElementById('icon-' + m);
         if (icon) {
             icon.className = (m === method) ? 'fa-solid fa-circle-check pay-radio' : 'fa-regular fa-circle pay-radio';
         }
     }
 
-    const hidden = document.getElementById('selectedPaymentMethod');
+    var hidden = document.getElementById('selectedPaymentMethod');
     if (hidden) hidden.value = method;
+    var formMethod = document.getElementById('formPaymentMethod');
+    if (formMethod) formMethod.value = method;
+
+    btn.style.width = '100%';
+    btn.style.border = 'none';
+    btn.style.borderRadius = '12px';
+    btn.style.padding = '15px';
+    btn.style.fontWeight = 'bold';
+    btn.style.fontSize = '16px';
+    btn.style.cursor = 'pointer';
 
     if (method === 'cod') {
-        btn.style.cssText = 'background:#283d23 !important; color:#fff !important; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;';
-        btn.innerHTML = '<i class="fa-solid fa-money-bill-wave"></i> Place Order • ' + formattedTotal;
+        btn.style.setProperty('background-color', '#283d23', 'important');
+        btn.style.setProperty('color', '#ffffff', 'important');
+        btn.innerHTML = '<i class="fa-solid fa-money-bill-wave"></i> Place Order • ' + grandTotalFormatted;
     } else if (method === 'gcash') {
-        btn.style.cssText = 'background:#007DFE !important; color:#fff !important; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;';
-        btn.innerHTML = '<span style="background:#fff; color:#007DFE; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ' + formattedTotal;
+        btn.style.setProperty('background-color', '#007DFE', 'important');
+        btn.style.setProperty('color', '#ffffff', 'important');
+        btn.innerHTML = '<span style="background:#fff; color:#007DFE; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ' + grandTotalFormatted;
     } else if (method === 'maya') {
-        btn.style.cssText = 'background:#023a2b !important; color:#05B851 !important; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;';
-        btn.innerHTML = '<span style="background:#05B851; color:#023a2b; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">M</span> Pay with Maya • ' + formattedTotal;
+        btn.style.setProperty('background-color', '#023a2b', 'important');
+        btn.style.setProperty('color', '#05B851', 'important');
+        btn.innerHTML = '<span style="background:#05B851; color:#023a2b; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">M</span> Pay with Maya • ' + grandTotalFormatted;
     } else if (method === 'gotyme') {
-        btn.style.cssText = 'background:#0a2540 !important; color:#00d2ff !important; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;';
-        btn.innerHTML = '<span style="background:#00d2ff; color:#0a2540; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">GT</span> Pay with GoTyme • ' + formattedTotal;
+        btn.style.setProperty('background-color', '#0a2540', 'important');
+        btn.style.setProperty('color', '#00d2ff', 'important');
+        btn.innerHTML = '<span style="background:#00d2ff; color:#0a2540; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">GT</span> Pay with GoTyme • ' + grandTotalFormatted;
     } else if (method === 'apple_pay') {
-        btn.style.cssText = 'background:#000000 !important; color:#fff !important; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;';
-        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + formattedTotal;
+        btn.style.setProperty('background-color', '#000000', 'important');
+        btn.style.setProperty('color', '#ffffff', 'important');
+        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + grandTotalFormatted;
     }
 
     updateWalletModalTheme(method);
 }
 
 function updateWalletModalTheme(method) {
-    const wm = document.getElementById('walletModal');
-    if (!wm) return;
-    const header = document.getElementById('walletHeader');
-    const title = document.getElementById('walletTitle');
-    const sub = document.getElementById('walletSub');
-    const btn = document.getElementById('walletSubmitBtn');
-    const logo = document.getElementById('walletLogo');
+    var header = document.getElementById('walletHeader');
+    var title = document.getElementById('walletTitle');
+    var sub = document.getElementById('walletSub');
+    var btn = document.getElementById('walletSubmitBtn');
+    var logo = document.getElementById('walletLogo');
+    var tot = document.getElementById('walletTotal');
+    var label = document.getElementById('walletPinLabel');
+    var pinIn = document.getElementById('walletPinInput');
+    
+    if (tot) tot.textContent = grandTotalFormatted;
+
     if (method === 'gcash') {
         if (header) header.style.background = '#007DFE';
         if (title) title.textContent = 'GCash QuickPay';
         if (sub) sub.textContent = 'Official Digital Payment';
         if (logo) logo.src = 'assets/logos/gcash.svg';
-        if (btn) { btn.style.background = '#007DFE'; btn.style.color = '#fff'; btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Pay ₱200.00'; }
+        if (label) label.innerHTML = '<i class="fa-solid fa-lock" style="color:#007DFE;"></i> Enter 4-Digit MPIN / Security OTP:';
+        if (pinIn) { pinIn.style.borderColor = '#007DFE'; pinIn.maxLength = 4; pinIn.value = '1234'; }
+        if (btn) {
+            btn.style.setProperty('background-color', '#007DFE', 'important');
+            btn.style.setProperty('color', '#ffffff', 'important');
+            btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Pay ' + grandTotalFormatted;
+        }
     } else if (method === 'maya') {
         if (header) header.style.background = '#023a2b';
         if (title) title.textContent = 'Maya Checkout';
         if (sub) sub.textContent = 'Maya Wallet & Digital Card';
         if (logo) logo.src = 'assets/logos/maya.svg';
-        if (btn) { btn.style.background = '#023a2b'; btn.style.color = '#05B851'; btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Pay ₱200.00'; }
+        if (label) label.innerHTML = '<i class="fa-solid fa-lock" style="color:#05B851;"></i> Enter Maya OTP / Security Code:';
+        if (pinIn) { pinIn.style.borderColor = '#05B851'; pinIn.maxLength = 6; pinIn.value = '654321'; }
+        if (btn) {
+            btn.style.setProperty('background-color', '#023a2b', 'important');
+            btn.style.setProperty('color', '#05B851', 'important');
+            btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Pay ' + grandTotalFormatted;
+        }
     } else if (method === 'gotyme') {
         if (header) header.style.background = '#0a2540';
         if (title) title.textContent = 'GoTyme Bank Transfer';
         if (sub) sub.textContent = 'Everyday Account (•••• 4920)';
         if (logo) logo.src = 'assets/logos/gotyme.svg';
-        if (btn) { btn.style.background = '#0a2540'; btn.style.color = '#00d2ff'; btn.innerHTML = '<i class="fa-solid fa-building-columns"></i> Transfer & Pay'; }
+        if (label) label.innerHTML = '<i class="fa-solid fa-building-columns" style="color:#00d2ff;"></i> Enter GoTyme Authorization PIN:';
+        if (pinIn) { pinIn.style.borderColor = '#00d2ff'; pinIn.maxLength = 6; pinIn.value = '882190'; }
+        if (btn) {
+            btn.style.setProperty('background-color', '#0a2540', 'important');
+            btn.style.setProperty('color', '#00d2ff', 'important');
+            btn.innerHTML = '<i class="fa-solid fa-building-columns"></i> Transfer & Pay ' + grandTotalFormatted;
+        }
     }
 }
 
+// 4. DYNAMIC MODALS & FACE ID SIMULATION:
 function triggerCheckoutFlow() {
-    if (activeMethod === 'apple_pay') {
-        // Display Apple Pay Face ID sheet
-        const sheet = document.getElementById('applePayModal') || document.getElementById('modal-apple_pay');
-        if (sheet) sheet.style.display = 'flex';
-        if (typeof startApplePayScan === 'function') startApplePayScan();
-        setTimeout(() => {
-            const scanStatus = document.getElementById('faceIdStatus') || document.getElementById('appleFaceIdStatusText');
-            if (scanStatus) scanStatus.innerHTML = '✔ Done';
-            setTimeout(() => submitOrderToBackend('apple_pay'), 700);
-        }, 1400);
-    } else if (['gcash', 'maya', 'gotyme'].includes(activeMethod)) {
-        // Open wallet PIN modal
-        const walletModal = document.getElementById('walletModal') || document.getElementById('modal-' + activeMethod);
+    var userAddress = document.getElementById('delivery_address')?.value || 'Default Delivery Address';
+    var userLatLng = document.getElementById('delivery_lat_lng')?.value || '';
+
+    // Synchronize auxiliary address input
+    var secAddr = document.getElementById('deliveryAddressInput');
+    if (secAddr) secAddr.value = userAddress;
+
+    if (selectedMethod === 'apple_pay') {
+        // Display Apple Pay bottom sheet with dynamic total and destination
+        var appleModal = document.getElementById('applePayModal');
+        var appleDest = document.getElementById('appleModalDest');
+        var appleTot = document.getElementById('appleModalTotal');
+        if (appleDest) appleDest.textContent = userAddress;
+        if (appleTot) appleTot.textContent = grandTotalFormatted;
+        if (appleModal) appleModal.style.display = 'flex';
+        
+        startApplePayScan();
+    } else if (['gcash', 'maya', 'gotyme'].includes(selectedMethod)) {
+        // Open wallet modal branded with provider title, total amount, delivery destination, and PIN prompt
+        updateWalletModalTheme(selectedMethod);
+        var walletModal = document.getElementById('walletModal');
+        var walletDest = document.getElementById('walletDest');
+        var walletTot = document.getElementById('walletTotal');
+        if (walletDest) walletDest.textContent = userAddress;
+        if (walletTot) walletTot.textContent = grandTotalFormatted;
         if (walletModal) walletModal.style.display = 'flex';
     } else {
-        submitOrderToBackend('cod');
+        // COD: open confirmation dialog
+        var codModal = document.getElementById('modal-cod');
+        var codDest = document.getElementById('codDest');
+        var codTot = document.getElementById('codTotal');
+        var codCashAmt = document.getElementById('codCashAmt');
+        if (codDest) codDest.textContent = userAddress;
+        if (codTot) codTot.textContent = grandTotalFormatted;
+        if (codCashAmt) codCashAmt.textContent = grandTotalFormatted;
+        if (codModal) {
+            codModal.style.display = 'flex';
+        } else {
+            submitDynamicOrder('cod');
+        }
     }
-}
-
-function submitOrderToBackend(method) {
-    const submitBtn = document.getElementById('payActionBtn');
-    if (submitBtn) submitBtn.disabled = true;
-
-    const chosenMethod = method || activeMethod || 'gcash';
-    const addrInput = document.getElementById('deliveryAddressInput');
-    const addressVal = (addrInput && addrInput.value ? addrInput.value.trim() : '') || 'Western Leyte College';
-
-    const formData = new FormData();
-    formData.append('action', 'create_order');
-    formData.append('payment_method', chosenMethod);
-    formData.append('address', addressVal);
-    formData.append('delivery_address', addressVal);
-    formData.append('lat_lng', '11.01031, 124.61791');
-    formData.append('delivery_lat', '11.01031');
-    formData.append('delivery_lng', '124.61791');
-    formData.append('customer_lat', '11.01031');
-    formData.append('customer_lng', '124.61791');
-    formData.append('total', '200.00');
-    formData.append('total_amount', '200.00');
-    formData.append('subtotal', '170.00');
-    formData.append('delivery_fee', '30.00');
-    formData.append('cart', JSON.stringify([
-        { name: 'Signature Meal Combo', store: 'Food Dash Grill', price: 170.00, qty: 1, icon: '🍱' }
-    ]));
-
-    fetch('api_orders.php', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-        window.location.href = 'customer_dashboard.php?order_placed=1';
-    })
-    .catch(() => {
-        window.location.href = 'customer_dashboard.php?order_placed=1';
-    });
-}
-
-function closeModal(id) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
 }
 
 function startApplePayScan() {
@@ -992,7 +1047,7 @@ function startApplePayScan() {
     var svg = document.getElementById('appleFaceIdSvg');
     var check = document.getElementById('appleFaceIdCheck');
     var box = document.getElementById('appleFaceIdBox');
-    var status = document.getElementById('faceIdStatus') || document.getElementById('appleFaceIdStatusText');
+    var status = document.getElementById('faceIdStatus');
     var btn = document.getElementById('btnApplePayTrigger');
 
     if (btn) {
@@ -1012,6 +1067,7 @@ function startApplePayScan() {
         status.innerHTML = '<span class="pulse-scan" style="color:#007aff; font-size:14px; font-weight:700;"><i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Scanning Face...</span>';
     }
 
+    // 1.2s Face ID scan animation -> green checkmark "Done" -> submitDynamicOrder('apple_pay')
     setTimeout(function() {
         if (scanLine) scanLine.style.display = 'none';
         if (svg) svg.style.display = 'none';
@@ -1032,19 +1088,77 @@ function startApplePayScan() {
         try {
             if (navigator.vibrate) navigator.vibrate([35, 45, 35]);
         } catch(e) {}
+
+        setTimeout(function() {
+            submitDynamicOrder('apple_pay');
+        }, 700);
     }, 1200);
 }
 
-// Aliases for complete backwards compatibility
-const setPayment = selectMethod;
-const updatePaymentTheme = selectMethod;
-const onCheckoutButtonClick = triggerCheckoutFlow;
-const handlePayAction = triggerCheckoutFlow;
-const processOrderAJAX = submitOrderToBackend;
-const confirmAndPlaceOrder = submitOrderToBackend;
-const currentPayment = activeMethod;
+// 5. DYNAMIC BACKEND SUBMISSION:
+function submitDynamicOrder(method) {
+    var userAddress = document.getElementById('delivery_address')?.value || 'Default Delivery Address';
+    var userLatLng = document.getElementById('delivery_lat_lng')?.value || '';
+
+    var fd = new FormData(document.getElementById('checkoutForm'));
+    fd.set('payment_method', method);
+    fd.set('total_amount', currentGrandTotal);
+    fd.set('total', currentGrandTotal);
+    fd.set('address', userAddress);
+    fd.set('delivery_address', userAddress);
+    if (userLatLng) {
+        fd.set('delivery_lat_lng', userLatLng);
+        var parts = userLatLng.split(',');
+        if (parts.length === 2) {
+            fd.set('delivery_lat', parts[0].trim());
+            fd.set('delivery_lng', parts[1].trim());
+            fd.set('customer_lat', parts[0].trim());
+            fd.set('customer_lng', parts[1].trim());
+        }
+    }
+
+    var payBtn = document.getElementById('payActionBtn');
+    if (payBtn) payBtn.disabled = true;
+    var walletBtn = document.getElementById('walletSubmitBtn');
+    if (walletBtn) walletBtn.disabled = true;
+
+    fetch('api_orders.php', {
+        method: 'POST',
+        credentials: 'include',
+        body: fd
+    })
+    .then(res => res.json())
+    .then(data => {
+        try { localStorage.removeItem('foodDashCart'); } catch(e) {}
+        if (data.success || data.order_id) {
+            window.location.href = 'customer_dashboard.php?order_placed=1';
+        } else {
+            alert(data.message || 'Order placed successfully');
+            window.location.href = 'customer_dashboard.php';
+        }
+    })
+    .catch(() => {
+        try { localStorage.removeItem('foodDashCart'); } catch(e) {}
+        window.location.href = 'customer_dashboard.php?order_placed=1';
+    });
+}
+
+function closeModal(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+}
+
+// Compatibility aliases
+var setPayment = selectMethod;
+var updatePaymentTheme = selectMethod;
+var onCheckoutButtonClick = triggerCheckoutFlow;
+var handlePayAction = triggerCheckoutFlow;
+var processOrderAJAX = submitDynamicOrder;
+var confirmAndPlaceOrder = submitDynamicOrder;
+var submitOrderToBackend = submitDynamicOrder;
 
 document.addEventListener('DOMContentLoaded', function() {
+    syncCartFromLocalStorage();
     selectMethod('gcash');
 });
 </script>

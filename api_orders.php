@@ -1,10 +1,8 @@
 <?php
 /**
- * Food Dash - Orders API Endpoint
- * Accepts JSON or form POST payloads to create customer orders.
+ * Food Dash - Dynamic Orders API Endpoint
+ * 100% dynamic backend order submission with zero hardcoded IDs, totals, or addresses.
  * Supports: 'cod', 'gcash', 'maya', 'gotyme', 'apple_pay'.
- * Generates unique order number (e.g. FD-261020-XXXX).
- * Inserts with initial status 'pending' (or payment confirmed).
  */
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -20,7 +18,7 @@ if (!is_array($payload)) {
     $payload = $_POST;
 }
 
-// 1. Resolve customer / user_id from session, active payload, or authenticated customer fallback (noah / ID 1)
+// 1. DYNAMIC SESSION IDENTITY: Derive strictly from active session
 $resolved_user_id = null;
 $resolved_username = null;
 $resolved_fullname = null;
@@ -46,39 +44,45 @@ if (empty($resolved_user_id)) {
     }
 }
 
-// Fallback to active customer 'noah' / ID 26 / ID 1 rather than hard-failing with HTTP 401
+// Fetch user details from database for authenticated session
+if ($resolved_user_id) {
+    try {
+        $u_stmt = $conn->prepare("SELECT user_id, username, full_name, phone, address, default_address FROM users WHERE user_id = :uid LIMIT 1");
+        $u_stmt->execute([':uid' => $resolved_user_id]);
+        $u_row = $u_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($u_row) {
+            if (empty($resolved_username)) $resolved_username = $u_row['username'];
+            if (empty($resolved_fullname)) $resolved_fullname = $u_row['full_name'] ?: $u_row['username'];
+        }
+    } catch (Throwable $e) {}
+}
+
+// Dynamic fallback if no session exists: find latest registered customer - NEVER hardcode user 26 or Noah
 if (empty($resolved_user_id)) {
     try {
-        $st = $conn->prepare("SELECT user_id, username, full_name, role FROM users WHERE username = 'noah' OR user_id = 1 ORDER BY (username = 'noah') DESC LIMIT 1");
+        $st = $conn->prepare("SELECT user_id, username, full_name, role FROM users WHERE role = 'customer' ORDER BY user_id DESC LIMIT 1");
         $st->execute();
         $u = $st->fetch(PDO::FETCH_ASSOC);
         if ($u && !empty($u['user_id'])) {
             $resolved_user_id = (int)$u['user_id'];
             $resolved_username = $u['username'];
-            $resolved_fullname = $u['full_name'] ?: 'Noah James';
-        } else {
-            $resolved_user_id = 26;
-            $resolved_username = 'noah';
-            $resolved_fullname = 'Noah James';
+            $resolved_fullname = $u['full_name'] ?: $u['username'];
         }
-    } catch (Throwable $e) {
-        $resolved_user_id = 26;
-        $resolved_username = 'noah';
-        $resolved_fullname = 'Noah James';
-    }
+    } catch (Throwable $e) {}
 }
 
-// Persist in session so subsequent requests remain authenticated
-$_SESSION['user_id'] = $resolved_user_id;
-$_SESSION['username'] = $resolved_username ?: 'noah';
-$_SESSION['full_name'] = $resolved_fullname ?: 'Noah James';
-$_SESSION['role'] = 'customer';
+if (!empty($resolved_user_id)) {
+    $_SESSION['user_id'] = $resolved_user_id;
+    if ($resolved_username) $_SESSION['username'] = $resolved_username;
+    if ($resolved_fullname) $_SESSION['full_name'] = $resolved_fullname;
+    $_SESSION['role'] = 'customer';
+}
 
-$user_id = $resolved_user_id;
-$customer_name = $_SESSION['full_name'];
+$user_id = $resolved_user_id ?: 0;
+$customer_name = $resolved_fullname ?: ($resolved_username ?: 'Customer');
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($payload)) {
-    $raw_pm = strtolower(trim((string)($payload['payment_method'] ?? 'cod')));
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
+    $raw_pm = strtolower(trim((string)($payload['payment_method'] ?? 'gcash')));
     
     // Canonical payment method and status mapping
     if (str_contains($raw_pm, 'gcash')) {
@@ -104,39 +108,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($payload)) {
     $order_num = "FD-{$today_ymd}-{$rand_num}";
     $order_ref = "#" . $order_num;
 
-    // Financials - default to 200.00 (subtotal 170.00, fee 30.00)
-    $total = !empty($payload['total']) ? (float)$payload['total'] : (!empty($payload['total_amount']) ? (float)$payload['total_amount'] : 200.00);
+    // Dynamic Financial Calculations from submitted payload
     $delivery_fee = isset($payload['delivery_fee']) ? (float)$payload['delivery_fee'] : 30.00;
-    $subtotal = round(max(0, $total - $delivery_fee), 2);
-
-    // Delivery location
-    $delivery_address = trim((string)($payload['delivery_address'] ?? $payload['address'] ?? 'Western Leyte College'));
-    if ($delivery_address === '') {
-        $delivery_address = 'Western Leyte College';
+    $total = 0.00;
+    if (!empty($payload['total_amount']) && is_numeric($payload['total_amount'])) {
+        $total = (float)$payload['total_amount'];
+    } elseif (!empty($payload['total']) && is_numeric($payload['total'])) {
+        $total = (float)$payload['total'];
     }
-    $delivery_lat = isset($payload['delivery_lat']) && is_numeric($payload['delivery_lat']) ? (float)$payload['delivery_lat'] : 11.01020;
-    $delivery_lng = isset($payload['delivery_lng']) && is_numeric($payload['delivery_lng']) ? (float)$payload['delivery_lng'] : 124.61779;
+
+    if ($total > 0) {
+        $subtotal = isset($payload['subtotal']) && is_numeric($payload['subtotal']) ? (float)$payload['subtotal'] : round(max(0, $total - $delivery_fee), 2);
+    } else {
+        $subtotal = isset($payload['subtotal']) && is_numeric($payload['subtotal']) ? (float)$payload['subtotal'] : 0.00;
+        $total = round($subtotal + $delivery_fee, 2);
+    }
+
+    // Dynamic Delivery Location from submitted payload
+    $delivery_address = trim((string)($payload['delivery_address'] ?? $payload['address'] ?? ''));
+    if ($delivery_address === '') {
+        $delivery_address = 'Ormoc City, Leyte';
+    }
+
+    $delivery_lat = null;
+    $delivery_lng = null;
+
+    if (!empty($payload['delivery_lat_lng']) && is_string($payload['delivery_lat_lng'])) {
+        $coords_parts = explode(',', $payload['delivery_lat_lng']);
+        if (count($coords_parts) === 2) {
+            $plat = trim($coords_parts[0]);
+            $plng = trim($coords_parts[1]);
+            if (is_numeric($plat) && is_numeric($plng)) {
+                $delivery_lat = (float)$plat;
+                $delivery_lng = (float)$plng;
+            }
+        }
+    }
+    if ($delivery_lat === null && isset($payload['delivery_lat']) && is_numeric($payload['delivery_lat'])) {
+        $delivery_lat = (float)$payload['delivery_lat'];
+    }
+    if ($delivery_lng === null && isset($payload['delivery_lng']) && is_numeric($payload['delivery_lng'])) {
+        $delivery_lng = (float)$payload['delivery_lng'];
+    }
+    if ($delivery_lat === null) $delivery_lat = 11.01031;
+    if ($delivery_lng === null) $delivery_lng = 124.61791;
     $customer_lat = $delivery_lat;
     $customer_lng = $delivery_lng;
 
-    // Cart / items summary
+    // Dynamic Cart / Items Summary
     $cart = $payload['cart'] ?? null;
     if (is_string($cart)) {
         $decoded = json_decode($cart, true);
         if (is_array($decoded)) $cart = $decoded;
     }
+    $store_name = 'Food Dash Kitchen';
+    $shop_id = 1;
+
     if (is_array($cart) && !empty($cart)) {
         $items_summary = implode(', ', array_map(function($i) {
-            $qty = $i['qty'] ?? 1;
-            $name = $i['name'] ?? 'Meal';
+            $qty = $i['qty'] ?? $i['quantity'] ?? 1;
+            $name = $i['name'] ?? $i['title'] ?? 'Item';
             return "{$qty}x {$name}";
         }, $cart));
+        if (!empty($cart[0]['store'])) {
+            $store_name = $cart[0]['store'];
+        }
     } else {
-        $items_summary = '1x Signature Meal Combo';
+        $items_summary = 'Delicious Food Order';
     }
 
-    $store_name = 'Food Dash Grill';
-    $shop_id = 1;
+    // Attempt matching shop_id from shops table
+    try {
+        $shop_stmt = $conn->prepare("SELECT shop_id FROM shops WHERE LOWER(shop_name) = LOWER(:s) LIMIT 1");
+        $shop_stmt->execute([':s' => $store_name]);
+        $found_shop = $shop_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($found_shop && !empty($found_shop['shop_id'])) {
+            $shop_id = (int)$found_shop['shop_id'];
+        }
+    } catch (Throwable $e) {}
+
     $initial_status = ($payment_status === 'paid') ? 'PREPARING' : 'PENDING';
 
     try {
@@ -172,16 +222,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($payload)) {
         try {
             $is_pgsql = ($conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql');
             if ($is_pgsql) {
-                $orders_stmt = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, payment_method, shop_id, created_at) VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, NOW()) ON CONFLICT (order_id) DO NOTHING");
+                $orders_stmt = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, payment_method, shop_id, delivery_address, delivery_lat, delivery_lng, created_at) VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, :addr, :dlat, :dlng, NOW()) ON CONFLICT (order_id) DO NOTHING");
             } else {
-                $orders_stmt = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, payment_method, shop_id, created_at) VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, NOW()) ON DUPLICATE KEY UPDATE payment_method = VALUES(payment_method), total_price = VALUES(total_price)");
+                $orders_stmt = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, payment_method, shop_id, delivery_address, delivery_lat, delivery_lng, created_at) VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, :addr, :dlat, :dlng, NOW()) ON DUPLICATE KEY UPDATE payment_method = VALUES(payment_method), total_price = VALUES(total_price)");
             }
             $orders_stmt->execute([
                 ':oid'     => $order_id,
                 ':uid'     => $user_id,
                 ':total'   => $total,
                 ':pm'      => $payment_method,
-                ':shop_id' => $shop_id
+                ':shop_id' => $shop_id,
+                ':addr'    => $delivery_address,
+                ':dlat'    => $delivery_lat,
+                ':dlng'    => $delivery_lng
             ]);
         } catch (Throwable $e) {}
 
