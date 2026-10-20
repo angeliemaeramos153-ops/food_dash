@@ -28,19 +28,33 @@ function parseCoordinate(val, fallback) {
   return fallback;
 }
 
+function normalizeMethodKey(m) {
+  if (!m) return 'cod';
+  const s = String(m).toLowerCase();
+  if (s.includes('gcash')) return 'gcash';
+  if (s.includes('maya')) return 'maya';
+  if (s.includes('tyme')) return 'gotyme';
+  if (s.includes('apple')) return 'apple_pay';
+  return 'cod';
+}
+
 // 2. ATTACH PAYMENT CARD CLICK HANDLERS (COLOR, LOGO, & TEXT)
 function selectPaymentMethod(method) {
-  currentMethod = method;
+  const btn = document.getElementById('mainCheckoutBtn') || document.querySelector('.checkout-btn') || document.getElementById('placeOrderBtn');
+  if (!btn) return;
+  
+  const totalText = '₱200.00'; // or dynamic total PHP variable
+  
+  const norm = normalizeMethodKey(method);
+  currentMethod = norm;
+  
   const inputMethod = document.getElementById('selectedPaymentMethod');
-  if (inputMethod) inputMethod.value = method;
+  if (inputMethod) inputMethod.value = norm;
 
   // Update card active classes & radio checks
   document.querySelectorAll('.payment-card, .pay-option').forEach(card => {
-    const cardMethod = card.getAttribute('data-method') || '';
-    const isSelected = (cardMethod === method || 
-      (method.startsWith('Maya') && cardMethod.includes('Maya')) || 
-      (method.startsWith('Cash') && cardMethod.includes('COD')) ||
-      (method.startsWith('GoTyme') && cardMethod.includes('GoTyme')));
+    const cardMethod = normalizeMethodKey(card.getAttribute('data-method') || card.getAttribute('data-name') || '');
+    const isSelected = (cardMethod === norm);
     const radio = card.querySelector('input[type="radio"]');
     const iconRadio = card.querySelector('.pay-radio');
 
@@ -55,31 +69,26 @@ function selectPaymentMethod(method) {
     }
   });
 
-  // Mutate #placeOrderBtn branding
-  const btn = document.getElementById('placeOrderBtn');
-  if (!btn) return;
-
-  if (method === 'GCash') {
-    btn.style.backgroundColor = '#007dfe';
-    btn.style.color = '#ffffff';
-    btn.innerHTML = '<img src="assets/images/gcash.png" style="height:18px; vertical-align:middle; margin-right:6px;" onerror="this.remove()"> Pay with GCash • ₱200.00';
-  } else if (method.includes('Maya')) {
-    btn.style.backgroundColor = '#023a2b';
-    btn.style.color = '#ffffff';
-    btn.innerHTML = '<img src="assets/images/maya.png" style="height:18px; vertical-align:middle; margin-right:6px;" onerror="this.remove()"> Pay with Maya • ₱200.00';
-  } else if (method.includes('GoTyme') || method.includes('Tyme')) {
-    btn.style.backgroundColor = '#0a2540';
-    btn.style.color = '#ffffff';
-    btn.innerHTML = '<img src="assets/images/gotyme.png" style="height:18px; vertical-align:middle; margin-right:6px;" onerror="this.remove()"> Pay with GoTyme • ₱200.00';
-  } else if (method === 'Apple Pay') {
-    btn.style.backgroundColor = '#000000';
-    btn.style.color = '#ffffff';
-    btn.innerHTML = '<span style="font-size:18px;"></span> Pay • ₱200.00';
-  } else {
-    // Cash on Delivery (COD)
+  if (method === 'cod' || norm === 'cod') {
     btn.style.backgroundColor = '#283d23';
     btn.style.color = '#ffffff';
-    btn.innerHTML = '<i class="fa-solid fa-money-bill-wave"></i> Place Order • ₱200.00';
+    btn.innerHTML = '<i class="fa-solid fa-money-bill-wave" style="margin-right:8px;"></i> Place Order • ' + totalText;
+  } else if (method === 'gcash' || norm === 'gcash') {
+    btn.style.backgroundColor = '#007DFE';
+    btn.style.color = '#ffffff';
+    btn.innerHTML = '<span style="font-weight:bold; margin-right:8px; background:#fff; color:#007DFE; padding:2px 6px; border-radius:4px; font-size:12px;">G</span> Pay with GCash • ' + totalText;
+  } else if (method === 'maya' || norm === 'maya') {
+    btn.style.backgroundColor = '#023a2b';
+    btn.style.color = '#05b851';
+    btn.innerHTML = '<span style="font-weight:bold; margin-right:8px; background:#05b851; color:#023a2b; padding:2px 6px; border-radius:4px; font-size:12px;">M</span> Pay with Maya • ' + totalText;
+  } else if (method === 'gotyme' || norm === 'gotyme') {
+    btn.style.backgroundColor = '#0a2540';
+    btn.style.color = '#00d2ff';
+    btn.innerHTML = '<span style="font-weight:bold; margin-right:8px; background:#00d2ff; color:#0a2540; padding:2px 6px; border-radius:4px; font-size:12px;">GT</span> Pay with GoTyme • ' + totalText;
+  } else if (method === 'apple_pay' || norm === 'apple_pay') {
+    btn.style.backgroundColor = '#000000';
+    btn.style.color = '#ffffff';
+    btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + totalText;
   }
 }
 
@@ -371,12 +380,13 @@ function handlePlaceOrderClick(e) {
   const addrInput = document.getElementById('deliveryAddressInput');
   const address = (addrInput ? addrInput.value : '').trim() || 'Western Leyte College';
 
-  if (currentMethod === 'Apple Pay') {
+  const m = normalizeMethodKey(currentMethod);
+  if (m === 'apple_pay') {
     openApplePayModal(address);
-  } else if (currentMethod === 'Cash on Delivery (COD)' || currentMethod.includes('Cash') || currentMethod.includes('COD')) {
+  } else if (m === 'cod') {
     openCodModal(address);
   } else {
-    openWalletModal(currentMethod, address);
+    openWalletModal(m, address);
   }
 }
 
@@ -388,7 +398,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Attach button click handler
-  const btn = document.getElementById('placeOrderBtn');
+  const btn = document.getElementById('mainCheckoutBtn') || document.querySelector('.checkout-btn') || document.getElementById('placeOrderBtn');
   if (btn) {
     btn.addEventListener('click', handlePlaceOrderClick);
   }
@@ -396,10 +406,10 @@ document.addEventListener('DOMContentLoaded', function() {
   // 2. Attach click listeners to every payment card container
   document.querySelectorAll('.payment-card, .pay-option, input[name="payment_method"]').forEach(elem => {
     elem.addEventListener('click', function(e) {
-      let method = this.getAttribute('data-method') || this.value;
+      let method = this.getAttribute('data-method') || this.getAttribute('data-name') || this.value;
       if (!method) {
         const parent = this.closest('.payment-card, .pay-option');
-        if (parent) method = parent.getAttribute('data-method');
+        if (parent) method = parent.getAttribute('data-method') || parent.getAttribute('data-name');
       }
       if (method) {
         selectPaymentMethod(method);
@@ -408,5 +418,5 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Default to Cash on Delivery (COD)
-  selectPaymentMethod('Cash on Delivery (COD)');
+  selectPaymentMethod('cod');
 });
