@@ -416,22 +416,21 @@ $grand_total  = $subtotal + $delivery_fee;
 </head>
 <body>
 
-<!-- HIDDEN FORM INPUTS -->
-<form id="cartCheckoutForm" novalidate onsubmit="return false;" style="display:none;">
-  <input type="text" name="action"             id="order_action"        value="create_order">
-  <input type="text" name="total_amount"       id="total_amount"        value="<?= htmlspecialchars((string)$grand_total) ?>">
-  <input type="text" name="total"              id="total"               value="<?= htmlspecialchars((string)$grand_total) ?>">
-  <input type="text" name="subtotal"           id="subtotal"            value="<?= htmlspecialchars((string)$subtotal) ?>">
-  <input type="text" name="delivery_fee"       id="delivery_fee"        value="<?= htmlspecialchars((string)$delivery_fee) ?>">
-  <input type="text" name="delivery_lat_lng"   id="delivery_lat_lng"    value="<?= htmlspecialchars("{$default_lat}, {$default_lng}") ?>">
-  <input type="text" name="delivery_lat"       id="delivery_lat"        value="<?= htmlspecialchars((string)$default_lat) ?>">
-  <input type="text" name="delivery_lng"       id="delivery_lng"        value="<?= htmlspecialchars((string)$default_lng) ?>">
-  <input type="text" name="customer_lat"       id="customer_lat"        value="<?= htmlspecialchars((string)$default_lat) ?>">
-  <input type="text" name="customer_lng"       id="customer_lng"        value="<?= htmlspecialchars((string)$default_lng) ?>">
-  <input type="text" name="cart"               id="cart_json_input"     value="<?= htmlspecialchars(json_encode(!empty($cart_items) ? $cart_items : [['name'=>'Signature Meal Combo','store'=>'Food Dash Grill','price'=>170.00,'qty'=>1,'icon'=>'&#127857;']])) ?>">
-  <input type="text" name="payment_method_val" id="selectedPaymentMethod" value="gcash">
-  <input type="text" name="payment_method"     id="formPaymentMethod"   value="gcash">
-</form>
+<!-- MAIN CHECKOUT FORM (HARD PREVENT FORM REDIRECT: onsubmit="return false;" novalidate, NO action attribute) -->
+<form id="cartCheckoutForm" novalidate onsubmit="return false;">
+  <input type="hidden" name="action"             id="order_action"        value="create_order">
+  <input type="hidden" name="total_amount"       id="total_amount"        value="<?= htmlspecialchars((string)$grand_total) ?>">
+  <input type="hidden" name="total"              id="total"               value="<?= htmlspecialchars((string)$grand_total) ?>">
+  <input type="hidden" name="subtotal"           id="subtotal"            value="<?= htmlspecialchars((string)$subtotal) ?>">
+  <input type="hidden" name="delivery_fee"       id="delivery_fee"        value="<?= htmlspecialchars((string)$delivery_fee) ?>">
+  <input type="hidden" name="delivery_lat_lng"   id="delivery_lat_lng"    value="<?= htmlspecialchars("{$default_lat}, {$default_lng}") ?>">
+  <input type="hidden" name="delivery_lat"       id="delivery_lat"        value="<?= htmlspecialchars((string)$default_lat) ?>">
+  <input type="hidden" name="delivery_lng"       id="delivery_lng"        value="<?= htmlspecialchars((string)$default_lng) ?>">
+  <input type="hidden" name="customer_lat"       id="customer_lat"        value="<?= htmlspecialchars((string)$default_lat) ?>">
+  <input type="hidden" name="customer_lng"       id="customer_lng"        value="<?= htmlspecialchars((string)$default_lng) ?>">
+  <input type="hidden" name="cart"               id="cart_json_input"     value="<?= htmlspecialchars(json_encode(!empty($cart_items) ? $cart_items : [['name'=>'Signature Meal Combo','store'=>'Food Dash Grill','price'=>170.00,'qty'=>1,'icon'=>'&#127857;']])) ?>">
+  <input type="hidden" name="payment_method_val" id="selectedPaymentMethod" value="gcash">
+  <input type="hidden" name="payment_method"     id="formPaymentMethod"   value="gcash">
 
 <!-- MAIN CART WRAPPER -->
 <div class="cart-wrapper">
@@ -566,11 +565,12 @@ $grand_total  = $subtotal + $delivery_fee;
 
 <!-- SECTION 5: STICKY ACTION BUTTON -->
 <div class="sticky-pay-bar">
-<button type="button" id="mainPayBtn" onclick="openPaymentPopup(event)">
+  <button type="button" id="mainPayBtn" onclick="openPaymentPopup(event); return false;">
     <span style="background:#fff;color:#007DFE;font-weight:bold;padding:2px 7px;border-radius:4px;font-size:12px;">G</span>
     Pay with GCash &#183; &#8369;<?= number_format($grand_total, 2) ?>
   </button>
 </div>
+</form>
 
 
 <!-- MODAL 1: APPLE PAY -->
@@ -851,7 +851,10 @@ var pcIds = {cod:'pc-cod', gcash:'pc-gcash', maya:'pc-maya', gotyme:'pc-gotyme',
 var prIds = {cod:'pr-cod', gcash:'pr-gcash', maya:'pr-maya', gotyme:'pr-gotyme', apple_pay:'pr-apple'};
 
 function selectMethod(method) {
+    if (!method) return;
     activePaymentMethod = method;
+    try { localStorage.setItem('foodDashSelectedMethod', method); } catch(e){}
+
     for (var i = 0; i < payMethods.length; i++) {
         var m = payMethods[i];
         var card = document.getElementById(pcIds[m]);
@@ -887,7 +890,7 @@ function selectMethod(method) {
     } else if (method === 'apple_pay') {
         btn.style.setProperty('background-color','#000000','important');
         btn.style.setProperty('color','#ffffff','important');
-        btn.innerHTML = '<span style="font-size:18px;margin-right:4px;"></span> Pay &#183; ' + grandTotalFormatted;
+        btn.innerHTML = '<span style="font-size:18px;margin-right:4px;"></span> Pay &#183; ' + grandTotalFormatted;
     }
     updateWalletModalTheme(method);
 }
@@ -931,8 +934,11 @@ function updateWalletModalTheme(method) {
 }
 
 function openPaymentPopup(event) {
-    if(event && event.preventDefault)  event.preventDefault();
-    if(event && event.stopPropagation) event.stopPropagation();
+    if (event) {
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        if (typeof event.stopPropagation === 'function') event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+    }
 
     var address = document.getElementById('delivery_address') ? document.getElementById('delivery_address').value : 'Western Leyte College';
     var latLng  = document.getElementById('delivery_lat_lng')  ? document.getElementById('delivery_lat_lng').value  : '11.01039, 124.61788';
@@ -941,19 +947,27 @@ function openPaymentPopup(event) {
     var wd  = document.getElementById('walletDest');     if(wd)  wd.textContent  = address;
     var cd  = document.getElementById('codDest');        if(cd)  cd.textContent  = address;
 
-    if (activePaymentMethod === 'apple_pay') {
+    var cur = activePaymentMethod || 'gcash';
+
+    if (cur === 'apple_pay') {
         var m = document.getElementById('applePayModal');
-        if(m) { m.style.display = 'flex'; startApplePayScan(); }
-    } else if (activePaymentMethod === 'gcash' || activePaymentMethod === 'maya' || activePaymentMethod === 'gotyme') {
-        updateWalletModalTheme(activePaymentMethod);
+        if (m) {
+            m.style.display = 'flex';
+            startApplePayScan();
+        }
+    } else if (cur === 'maya' || cur === 'gcash' || cur === 'gotyme') {
+        updateWalletModalTheme(cur);
         var m2 = document.getElementById('walletModal');
-        if(m2) m2.style.display = 'flex';
-    } else if (activePaymentMethod === 'cod') {
+        if (m2) {
+            m2.style.display = 'flex';
+        }
+    } else if (cur === 'cod') {
         var m3 = document.getElementById('modal-cod');
-        if(m3) m3.style.display = 'flex';
-    } else {
-        finalizeOrder(activePaymentMethod, address, latLng);
+        if (m3) {
+            m3.style.display = 'flex';
+        }
     }
+    return false;
 }
 
 function finalizeOrder(method, address, coords) {
@@ -1057,20 +1071,33 @@ window.setPayment            = selectMethod;
 document.addEventListener('DOMContentLoaded', function() {
     initQtyMap();
     syncCartFromLocalStorage();
-    selectMethod('gcash');
+    var savedMethod = 'gcash';
+    try {
+        var stored = localStorage.getItem('foodDashSelectedMethod');
+        if (stored && ['cod','gcash','maya','gotyme','apple_pay'].indexOf(stored) !== -1) {
+            savedMethod = stored;
+        }
+    } catch(e){}
+    activePaymentMethod = savedMethod;
+    selectMethod(savedMethod);
 
     // ── HARD-ATTACH mainPayBtn click with useCapture so no external script can intercept ──
     var payBtn = document.getElementById('mainPayBtn');
     if (payBtn) {
-        // Remove any stale onclick attribute that could conflict
-        payBtn.removeAttribute('onclick');
+        payBtn.onclick = function(e) {
+            if (e && e.preventDefault)  e.preventDefault();
+            if (e && e.stopPropagation) e.stopPropagation();
+            if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
+            openPaymentPopup(e);
+            return false;
+        };
         payBtn.addEventListener('click', function(e) {
             if (e && e.preventDefault)  e.preventDefault();
             if (e && e.stopPropagation) e.stopPropagation();
             if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
             openPaymentPopup(e);
             return false;
-        }, true); // useCapture = true: fires before any bubble-phase listeners
+        }, true);
     }
 
     // ── Re-pin all globals AFTER DOMContentLoaded so cart.php always wins over checkout.js ──
