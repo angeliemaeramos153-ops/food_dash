@@ -6583,8 +6583,11 @@ function handlePayAction(e) {
 }
 
 var setPayment = updatePaymentTheme;
+var selectMethod = updatePaymentTheme;
 var onCheckoutButtonClick = handlePayAction;
+var triggerCheckoutFlow = handlePayAction;
 var processOrderAJAX = handlePayAction;
+var submitOrderToBackend = handlePayAction;
 </script>
 <?php require_once 'gmail_simulator_modal.php'; ?>
 </body>

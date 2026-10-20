@@ -147,10 +147,13 @@ function processOrderAJAX(method) {
 }
 
 // Aliases
+var selectMethod = setPayment;
 var selectPaymentMethod = setPayment;
 var updatePaymentTheme = setPayment;
+var triggerCheckoutFlow = onCheckoutButtonClick;
 var handlePlaceOrderClick = onCheckoutButtonClick;
 var handlePayAction = onCheckoutButtonClick;
 var openApplePaySheet = showApplePayModal;
 var openWalletSheet = showWalletModal;
+var submitOrderToBackend = processOrderAJAX;
 var confirmAndPlaceOrder = processOrderAJAX;

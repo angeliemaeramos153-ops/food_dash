@@ -470,12 +470,12 @@ $delivery_fee = 30.00;
       
       <div class="coords-badge">
         <i class="fa-solid fa-circle-check"></i>
-        <span>Exact Live GPS Pin: <b id="coordsDisplay">11.01042, 124.61786</b></span>
+        <span>Exact Live GPS Pin: <b id="coordsDisplay">11.01031, 124.61791</b></span>
       </div>
 
       <!-- Clean parsed coordinate text fields (no strict patterns) -->
-      <input type="text" style="display:none;" name="delivery_lat" id="delivery_lat" value="11.01042">
-      <input type="text" style="display:none;" name="delivery_lng" id="delivery_lng" value="124.61786">
+      <input type="text" style="display:none;" name="delivery_lat" id="delivery_lat" value="11.01031">
+      <input type="text" style="display:none;" name="delivery_lng" id="delivery_lng" value="124.61791">
     </div>
 
     <!-- Payment Methods: 5 Options with active classes and radio inputs -->
@@ -483,7 +483,7 @@ $delivery_fee = 30.00;
       <div class="card-title"><i class="fa-solid fa-credit-card"></i> Payment Method</div>
       <div class="pay-options-list">
         <!-- Cash on Delivery -->
-        <div class="payment-card pay-option active" id="card-cod" data-method="cod" onclick="setPayment('cod')">
+        <div class="payment-card pay-option" id="card-cod" data-method="cod" onclick="selectMethod('cod')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/cod.svg" alt="COD"></div>
             <div class="pay-info">
@@ -491,12 +491,12 @@ $delivery_fee = 30.00;
               <small>Pay with cash upon arrival</small>
             </div>
           </div>
-          <input type="radio" name="payment_method" id="radio-cod" value="cod" checked style="display:none;">
-          <i class="fa-solid fa-circle-check pay-radio" id="icon-cod"></i>
+          <input type="radio" name="payment_method" id="radio-cod" value="cod" style="display:none;">
+          <i class="fa-regular fa-circle pay-radio" id="icon-cod"></i>
         </div>
 
         <!-- GCash -->
-        <div class="payment-card pay-option" id="card-gcash" data-method="gcash" onclick="setPayment('gcash')">
+        <div class="payment-card pay-option active" id="card-gcash" data-method="gcash" onclick="selectMethod('gcash')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/gcash.svg" alt="GCash"></div>
             <div class="pay-info">
@@ -504,12 +504,12 @@ $delivery_fee = 30.00;
               <small>Philippines' Leading E-Wallet</small>
             </div>
           </div>
-          <input type="radio" name="payment_method" id="radio-gcash" value="gcash" style="display:none;">
-          <i class="fa-regular fa-circle pay-radio" id="icon-gcash"></i>
+          <input type="radio" name="payment_method" id="radio-gcash" value="gcash" checked style="display:none;">
+          <i class="fa-solid fa-circle-check pay-radio" id="icon-gcash"></i>
         </div>
 
         <!-- Maya -->
-        <div class="payment-card pay-option" id="card-maya" data-method="maya" onclick="setPayment('maya')">
+        <div class="payment-card pay-option" id="card-maya" data-method="maya" onclick="selectMethod('maya')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/maya.svg" alt="Maya"></div>
             <div class="pay-info">
@@ -522,7 +522,7 @@ $delivery_fee = 30.00;
         </div>
 
         <!-- GoTyme Bank -->
-        <div class="payment-card pay-option" id="card-gotyme" data-method="gotyme" onclick="setPayment('gotyme')">
+        <div class="payment-card pay-option" id="card-gotyme" data-method="gotyme" onclick="selectMethod('gotyme')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/gotyme.svg" alt="GoTyme"></div>
             <div class="pay-info">
@@ -535,7 +535,7 @@ $delivery_fee = 30.00;
         </div>
 
         <!-- Apple Pay -->
-        <div class="payment-card pay-option" id="card-apple_pay" data-method="apple_pay" onclick="setPayment('apple_pay')">
+        <div class="payment-card pay-option" id="card-apple_pay" data-method="apple_pay" onclick="selectMethod('apple_pay')">
           <div class="pay-option-left">
             <div class="pay-logo-box" style="background:#000;"><img src="assets/logos/apple-pay.svg" alt="Apple Pay"></div>
             <div class="pay-info">
@@ -547,7 +547,7 @@ $delivery_fee = 30.00;
           <i class="fa-regular fa-circle pay-radio" id="icon-apple_pay"></i>
         </div>
       </div>
-      <input type="text" style="display:none;" id="selectedPaymentMethod" name="payment_method_val" value="cod">
+      <input type="text" style="display:none;" id="selectedPaymentMethod" name="payment_method_val" value="gcash">
     </div>
 
     <!-- Payment Totals -->
@@ -558,23 +558,21 @@ $delivery_fee = 30.00;
     </div>
 
     <!-- 1. Main Checkout button with type="button" and id="payActionBtn" -->
-    <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="payActionBtn" onclick="onCheckoutButtonClick(event); return false;">
-      <i class="fa-solid fa-money-bill-wave" style="margin-right:8px;"></i> Place Order • ₱200.00
-    </button>
+    <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="payActionBtn" onclick="triggerCheckoutFlow()">Checkout</button>
   </form>
 </div>
 
 <!-- ============================================== -->
 <!-- 1. APPLE PAY NATIVE IOS-STYLE BOTTOM SHEET MODAL -->
 <!-- ============================================== -->
-<div class="sim-modal" id="modal-apple_pay" style="display:none;" onclick="if(event.target===this)closeModal('modal-apple_pay')">
+<div class="sim-modal" id="applePayModal" style="display:none;" onclick="if(event.target===this)closeModal('applePayModal')">
   <div class="sim-sheet" style="background:#1c1c1e; color:#ffffff;">
     <div class="sheet-grabber" style="background:#3a3a3c;"></div>
     <div style="display:flex; align-items:center; justify-content:space-between; padding:4px 22px 14px 22px; border-bottom:1px solid #2c2c2e;">
       <div style="display:flex; align-items:center; gap:6px; font-size:20px; font-weight:700;">
         <span style="font-size:22px;"></span><span>Pay</span>
       </div>
-      <button type="button" onclick="closeModal('modal-apple_pay')" style="background:transparent; border:none; color:#0a84ff; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+      <button type="button" onclick="closeModal('applePayModal')" style="background:transparent; border:none; color:#0a84ff; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
 
     <div style="padding:18px 22px 28px 22px;">
@@ -613,9 +611,10 @@ $delivery_fee = 30.00;
           </div>
           <div class="face-id-scan-line" id="appleFaceIdScanLine" style="display:none;"></div>
         </div>
-        <div id="appleFaceIdStatusText" style="font-size:14px; font-weight:700; color:#8e8e93; margin-top:12px;">
+        <div id="faceIdStatus" style="font-size:14px; font-weight:700; color:#8e8e93; margin-top:12px;">
           Scanning Face...
         </div>
+        <div id="appleFaceIdStatusText" style="display:none;"></div>
       </div>
 
       <button type="button" class="btn-submit-order checkout-btn" id="btnApplePayTrigger" onclick="startApplePayScan()" style="background:#333336; color:#8e8e93; margin-top:16px;" disabled>
@@ -624,9 +623,55 @@ $delivery_fee = 30.00;
     </div>
   </div>
 </div>
+<div id="modal-apple_pay" style="display:none;"></div>
 
 <!-- ============================================== -->
-<!-- 2. BRANDED GCASH MODAL                         -->
+<!-- 2. GENERIC WALLET PIN MODAL                    -->
+<!-- ============================================== -->
+<div class="sim-modal" id="walletModal" style="display:none;" onclick="if(event.target===this)closeModal('walletModal')">
+  <div class="sim-sheet" style="background:#ffffff;">
+    <div id="walletHeader" style="background:#007DFE; color:#ffffff; padding:16px 20px 18px 20px;">
+      <div class="sheet-grabber"></div>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <img id="walletLogo" src="assets/logos/gcash.svg" alt="Wallet" style="height:26px; border-radius:6px; background:#fff; padding:2px;">
+          <div>
+            <div id="walletTitle" style="font-size:16px; font-weight:800; line-height:1.2;">GCash QuickPay</div>
+            <small id="walletSub" style="font-size:11px; opacity:0.85;">Official Digital Payment</small>
+          </div>
+        </div>
+        <button type="button" onclick="closeModal('walletModal')" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:20px; cursor:pointer;">Cancel</button>
+      </div>
+    </div>
+    <div style="padding:22px; background:#ffffff;">
+      <div style="text-align:center; margin-bottom:16px;">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Payment Authorization</div>
+        <h2 style="font-size:22px; font-weight:800; color:#111827;">Total: <span id="walletTotal" style="color:#007DFE;">₱200.00</span></h2>
+      </div>
+      <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:16px; padding:12px 16px; margin-bottom:14px;">
+        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+          <i class="fa-solid fa-location-dot" style="color:#ef4444;"></i> Delivery Destination:
+        </div>
+        <div style="font-size:14px; font-weight:700; color:#1e293b;">Western Leyte College</div>
+      </div>
+      <div style="background:#fdfbf7; border:1px solid #e8decb; border-radius:16px; padding:16px; margin-bottom:18px; text-align:center;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#374151; margin-bottom:8px;">
+          <i class="fa-solid fa-lock" style="color:#007DFE;"></i> Enter 4-Digit MPIN / Security OTP:
+        </label>
+        <div style="display:flex; justify-content:center; margin-bottom:6px;">
+          <input type="password" id="walletPinInput" maxlength="4" value="1234" autocomplete="off" style="width:170px; height:46px; text-align:center; font-size:24px; letter-spacing:10px; border-radius:12px; border:2px solid #007DFE; font-family:monospace; font-weight:800; outline:none; background:#ffffff; color:#1e293b;">
+        </div>
+        <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Demo Auto-Filled</small>
+      </div>
+      <button type="button" class="btn-submit-order checkout-btn" id="walletSubmitBtn" onclick="submitOrderToBackend(activeMethod)" style="background:#007DFE; color:#ffffff; margin-top:0;">
+        <i class="fa-solid fa-shield-halved"></i> Pay ₱200.00
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- 3. BRANDED GCASH MODAL                         -->
 <!-- ============================================== -->
 <div class="sim-modal" id="modal-gcash" style="display:none;" onclick="if(event.target===this)closeModal('modal-gcash')">
   <div class="sim-sheet" style="background:#ffffff;">
@@ -663,7 +708,7 @@ $delivery_fee = 30.00;
         </div>
         <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Demo Auto-Filled</small>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="processOrderAJAX('gcash')" style="background:#007DFE; color:#ffffff; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" onclick="submitOrderToBackend('gcash')" style="background:#007DFE; color:#ffffff; margin-top:0;">
         <i class="fa-solid fa-shield-halved"></i> Pay ₱200.00
       </button>
     </div>
@@ -671,7 +716,7 @@ $delivery_fee = 30.00;
 </div>
 
 <!-- ============================================== -->
-<!-- 3. BRANDED MAYA MODAL                          -->
+<!-- 4. BRANDED MAYA MODAL                          -->
 <!-- ============================================== -->
 <div class="sim-modal" id="modal-maya" style="display:none;" onclick="if(event.target===this)closeModal('modal-maya')">
   <div class="sim-sheet" style="background:#ffffff;">
@@ -708,7 +753,7 @@ $delivery_fee = 30.00;
         </div>
         <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Demo Auto-Filled</small>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="processOrderAJAX('maya')" style="background:#023a2b; color:#05B851; border:1.5px solid #05B851; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" onclick="submitOrderToBackend('maya')" style="background:#023a2b; color:#05B851; border:1.5px solid #05B851; margin-top:0;">
         <i class="fa-solid fa-shield-halved"></i> Pay ₱200.00
       </button>
     </div>
@@ -716,7 +761,7 @@ $delivery_fee = 30.00;
 </div>
 
 <!-- ============================================== -->
-<!-- 4. BRANDED GOTYME BANK MODAL                   -->
+<!-- 5. BRANDED GOTYME BANK MODAL                   -->
 <!-- ============================================== -->
 <div class="sim-modal" id="modal-gotyme" style="display:none;" onclick="if(event.target===this)closeModal('modal-gotyme')">
   <div class="sim-sheet" style="background:#ffffff;">
@@ -744,7 +789,7 @@ $delivery_fee = 30.00;
         </div>
         <div style="font-size:14px; font-weight:700; color:#1e293b;">Western Leyte College</div>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="processOrderAJAX('gotyme')" style="background:#0a2540; color:#00d2ff; border:1.5px solid #00d2ff; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" onclick="submitOrderToBackend('gotyme')" style="background:#0a2540; color:#00d2ff; border:1.5px solid #00d2ff; margin-top:0;">
         <i class="fa-solid fa-building-columns"></i> Transfer & Pay
       </button>
     </div>
@@ -752,7 +797,7 @@ $delivery_fee = 30.00;
 </div>
 
 <!-- ============================================== -->
-<!-- 5. CASH ON DELIVERY (COD) ORDER REVIEW MODAL   -->
+<!-- 6. CASH ON DELIVERY (COD) ORDER REVIEW MODAL   -->
 <!-- ============================================== -->
 <div class="sim-modal" id="modal-cod" style="display:none;" onclick="if(event.target===this)closeModal('modal-cod')">
   <div class="sim-sheet" style="background:#ffffff;">
@@ -784,7 +829,7 @@ $delivery_fee = 30.00;
         <i class="fa-solid fa-money-bill-wave" style="font-size:20px; color:#15803d;"></i>
         <span>Please prepare exact cash of <b>₱200.00</b> upon arrival for swift handover.</span>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="processOrderAJAX('cod')" style="background:#283d23; color:#ffffff; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" onclick="submitOrderToBackend('cod')" style="background:#283d23; color:#ffffff; margin-top:0;">
         <i class="fa-solid fa-check"></i> Confirm COD Order
       </button>
     </div>
@@ -797,101 +842,148 @@ $delivery_fee = 30.00;
 <!-- BULLETPROOF INLINE JAVASCRIPT CONTROLLER       -->
 <!-- ============================================== -->
 <script>
-var currentPayment = 'cod';
-var totalFormatted = '₱200.00';
+let activeMethod = 'gcash';
+const formattedTotal = '₱200.00';
 
-function setPayment(method) {
-    currentPayment = method;
-    var btn = document.getElementById('payActionBtn');
+function selectMethod(method) {
+    activeMethod = method;
+    const btn = document.getElementById('payActionBtn');
     if (!btn) return;
 
-    var methods = ['cod', 'gcash', 'maya', 'gotyme', 'apple_pay'];
-    for (var i = 0; i < methods.length; i++) {
-        var m = methods[i];
-        var isCurrent = (m === method);
-        var card = document.getElementById('card-' + m);
+    // Sync radio checkmarks
+    document.querySelectorAll('input[name="payment_method"]').forEach(r => r.checked = false);
+    const radio = document.querySelector('input[value="' + method + '"]');
+    if (radio) radio.checked = true;
+
+    // Sync card active states
+    const methods = ['cod', 'gcash', 'maya', 'gotyme', 'apple_pay'];
+    for (let i = 0; i < methods.length; i++) {
+        const m = methods[i];
+        const card = document.getElementById('card-' + m);
         if (card) {
-            if (isCurrent) {
-                card.className = 'payment-card pay-option active';
-            } else {
-                card.className = 'payment-card pay-option';
-            }
+            if (m === method) card.classList.add('active');
+            else card.classList.remove('active');
         }
-        var r = document.getElementById('radio-' + m);
-        if (r) r.checked = isCurrent;
-        var icon = document.getElementById('icon-' + m);
+        const icon = document.getElementById('icon-' + m);
         if (icon) {
-            icon.className = isCurrent ? 'fa-solid fa-circle-check pay-radio' : 'fa-regular fa-circle pay-radio';
+            icon.className = (m === method) ? 'fa-solid fa-circle-check pay-radio' : 'fa-regular fa-circle pay-radio';
         }
     }
 
-    var hiddenMethod = document.getElementById('selectedPaymentMethod');
-    if (hiddenMethod) hiddenMethod.value = method;
+    const hidden = document.getElementById('selectedPaymentMethod');
+    if (hidden) hidden.value = method;
 
     if (method === 'cod') {
-        btn.style.cssText = 'background-color: #283d23 !important; color: #fff !important; width: 100%; border: none; border-radius: 12px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer;';
-        btn.innerHTML = '<i class="fa-solid fa-money-bill-wave"></i> Place Order • ' + totalFormatted;
+        btn.style.cssText = 'background:#283d23 !important; color:#fff !important; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;';
+        btn.innerHTML = '<i class="fa-solid fa-money-bill-wave"></i> Place Order • ' + formattedTotal;
     } else if (method === 'gcash') {
-        btn.style.cssText = 'background-color: #007DFE !important; color: #fff !important; width: 100%; border: none; border-radius: 12px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer;';
-        btn.innerHTML = '<span style="background:#fff; color:#007DFE; font-weight:bold; border-radius:4px; padding:2px 6px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ' + totalFormatted;
+        btn.style.cssText = 'background:#007DFE !important; color:#fff !important; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;';
+        btn.innerHTML = '<span style="background:#fff; color:#007DFE; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ' + formattedTotal;
     } else if (method === 'maya') {
-        btn.style.cssText = 'background-color: #023a2b !important; color: #05B851 !important; width: 100%; border: none; border-radius: 12px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer;';
-        btn.innerHTML = '<span style="background:#05B851; color:#023a2b; font-weight:bold; border-radius:4px; padding:2px 6px; margin-right:6px; font-size:12px;">M</span> Pay with Maya • ' + totalFormatted;
+        btn.style.cssText = 'background:#023a2b !important; color:#05B851 !important; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;';
+        btn.innerHTML = '<span style="background:#05B851; color:#023a2b; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">M</span> Pay with Maya • ' + formattedTotal;
     } else if (method === 'gotyme') {
-        btn.style.cssText = 'background-color: #0a2540 !important; color: #00d2ff !important; width: 100%; border: none; border-radius: 12px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer;';
-        btn.innerHTML = '<span style="background:#00d2ff; color:#0a2540; font-weight:bold; border-radius:4px; padding:2px 6px; margin-right:6px; font-size:12px;">GT</span> Pay with GoTyme • ' + totalFormatted;
+        btn.style.cssText = 'background:#0a2540 !important; color:#00d2ff !important; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;';
+        btn.innerHTML = '<span style="background:#00d2ff; color:#0a2540; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">GT</span> Pay with GoTyme • ' + formattedTotal;
     } else if (method === 'apple_pay') {
-        btn.style.cssText = 'background-color: #000000 !important; color: #fff !important; width: 100%; border: none; border-radius: 12px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer;';
-        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + totalFormatted;
+        btn.style.cssText = 'background:#000000 !important; color:#fff !important; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;';
+        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + formattedTotal;
     }
+
+    updateWalletModalTheme(method);
 }
 
-function onCheckoutButtonClick(e) {
-    if (e && e.preventDefault) e.preventDefault();
-    try {
-        if (currentPayment === 'apple_pay') {
-            showApplePayModal();
-        } else if (currentPayment === 'gcash' || currentPayment === 'maya' || currentPayment === 'gotyme') {
-            showWalletModal(currentPayment);
-        } else {
-            processOrderAJAX('cod');
-        }
-    } catch (err) {
-        console.log('Error suppressed:', err);
-        processOrderAJAX(currentPayment);
-    }
-    return false;
-}
-
-function showApplePayModal() {
-    var modal = document.getElementById('modal-apple_pay');
-    if (modal) modal.style.display = 'flex';
-    startApplePayScan();
-}
-
-function showWalletModal(method) {
+function updateWalletModalTheme(method) {
+    const wm = document.getElementById('walletModal');
+    if (!wm) return;
+    const header = document.getElementById('walletHeader');
+    const title = document.getElementById('walletTitle');
+    const sub = document.getElementById('walletSub');
+    const btn = document.getElementById('walletSubmitBtn');
+    const logo = document.getElementById('walletLogo');
     if (method === 'gcash') {
-        var mG = document.getElementById('modal-gcash');
-        if (mG) mG.style.display = 'flex';
+        if (header) header.style.background = '#007DFE';
+        if (title) title.textContent = 'GCash QuickPay';
+        if (sub) sub.textContent = 'Official Digital Payment';
+        if (logo) logo.src = 'assets/logos/gcash.svg';
+        if (btn) { btn.style.background = '#007DFE'; btn.style.color = '#fff'; btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Pay ₱200.00'; }
     } else if (method === 'maya') {
-        var mM = document.getElementById('modal-maya');
-        if (mM) mM.style.display = 'flex';
+        if (header) header.style.background = '#023a2b';
+        if (title) title.textContent = 'Maya Checkout';
+        if (sub) sub.textContent = 'Maya Wallet & Digital Card';
+        if (logo) logo.src = 'assets/logos/maya.svg';
+        if (btn) { btn.style.background = '#023a2b'; btn.style.color = '#05B851'; btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Pay ₱200.00'; }
     } else if (method === 'gotyme') {
-        var mT = document.getElementById('modal-gotyme');
-        if (mT) mT.style.display = 'flex';
-    } else {
-        var mC = document.getElementById('modal-cod');
-        if (mC) mC.style.display = 'flex';
+        if (header) header.style.background = '#0a2540';
+        if (title) title.textContent = 'GoTyme Bank Transfer';
+        if (sub) sub.textContent = 'Everyday Account (•••• 4920)';
+        if (logo) logo.src = 'assets/logos/gotyme.svg';
+        if (btn) { btn.style.background = '#0a2540'; btn.style.color = '#00d2ff'; btn.innerHTML = '<i class="fa-solid fa-building-columns"></i> Transfer & Pay'; }
     }
 }
 
-function showCodModal() {
-    var m = document.getElementById('modal-cod');
-    if (m) m.style.display = 'flex';
+function triggerCheckoutFlow() {
+    if (activeMethod === 'apple_pay') {
+        // Display Apple Pay Face ID sheet
+        const sheet = document.getElementById('applePayModal') || document.getElementById('modal-apple_pay');
+        if (sheet) sheet.style.display = 'flex';
+        if (typeof startApplePayScan === 'function') startApplePayScan();
+        setTimeout(() => {
+            const scanStatus = document.getElementById('faceIdStatus') || document.getElementById('appleFaceIdStatusText');
+            if (scanStatus) scanStatus.innerHTML = '✔ Done';
+            setTimeout(() => submitOrderToBackend('apple_pay'), 700);
+        }, 1400);
+    } else if (['gcash', 'maya', 'gotyme'].includes(activeMethod)) {
+        // Open wallet PIN modal
+        const walletModal = document.getElementById('walletModal') || document.getElementById('modal-' + activeMethod);
+        if (walletModal) walletModal.style.display = 'flex';
+    } else {
+        submitOrderToBackend('cod');
+    }
+}
+
+function submitOrderToBackend(method) {
+    const submitBtn = document.getElementById('payActionBtn');
+    if (submitBtn) submitBtn.disabled = true;
+
+    const chosenMethod = method || activeMethod || 'gcash';
+    const addrInput = document.getElementById('deliveryAddressInput');
+    const addressVal = (addrInput && addrInput.value ? addrInput.value.trim() : '') || 'Western Leyte College';
+
+    const formData = new FormData();
+    formData.append('action', 'create_order');
+    formData.append('payment_method', chosenMethod);
+    formData.append('address', addressVal);
+    formData.append('delivery_address', addressVal);
+    formData.append('lat_lng', '11.01031, 124.61791');
+    formData.append('delivery_lat', '11.01031');
+    formData.append('delivery_lng', '124.61791');
+    formData.append('customer_lat', '11.01031');
+    formData.append('customer_lng', '124.61791');
+    formData.append('total', '200.00');
+    formData.append('total_amount', '200.00');
+    formData.append('subtotal', '170.00');
+    formData.append('delivery_fee', '30.00');
+    formData.append('cart', JSON.stringify([
+        { name: 'Signature Meal Combo', store: 'Food Dash Grill', price: 170.00, qty: 1, icon: '🍱' }
+    ]));
+
+    fetch('api_orders.php', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        window.location.href = 'customer_dashboard.php?order_placed=1';
+    })
+    .catch(() => {
+        window.location.href = 'customer_dashboard.php?order_placed=1';
+    });
 }
 
 function closeModal(id) {
-    var el = document.getElementById(id);
+    const el = document.getElementById(id);
     if (el) el.style.display = 'none';
 }
 
@@ -900,7 +992,7 @@ function startApplePayScan() {
     var svg = document.getElementById('appleFaceIdSvg');
     var check = document.getElementById('appleFaceIdCheck');
     var box = document.getElementById('appleFaceIdBox');
-    var status = document.getElementById('appleFaceIdStatusText');
+    var status = document.getElementById('faceIdStatus') || document.getElementById('appleFaceIdStatusText');
     var btn = document.getElementById('btnApplePayTrigger');
 
     if (btn) {
@@ -940,70 +1032,20 @@ function startApplePayScan() {
         try {
             if (navigator.vibrate) navigator.vibrate([35, 45, 35]);
         } catch(e) {}
-
-        setTimeout(function() {
-            processOrderAJAX('apple_pay');
-        }, 400);
     }, 1200);
 }
 
-function processOrderAJAX(method) {
-    var submitBtn = document.getElementById('payActionBtn');
-    if (submitBtn) submitBtn.disabled = true;
+// Aliases for complete backwards compatibility
+const setPayment = selectMethod;
+const updatePaymentTheme = selectMethod;
+const onCheckoutButtonClick = triggerCheckoutFlow;
+const handlePayAction = triggerCheckoutFlow;
+const processOrderAJAX = submitOrderToBackend;
+const confirmAndPlaceOrder = submitOrderToBackend;
+const currentPayment = activeMethod;
 
-    var chosenMethod = method || currentPayment || 'cod';
-    var addrInput = document.getElementById('deliveryAddressInput');
-    var deliveryAddr = (addrInput && addrInput.value ? addrInput.value.trim() : '') || 'Western Leyte College';
-
-    var formData = new FormData();
-    formData.append('action', 'create_order');
-    formData.append('payment_method', chosenMethod);
-    formData.append('address', deliveryAddr);
-    formData.append('delivery_address', deliveryAddr);
-    formData.append('lat_lng', '11.01030, 124.61789');
-    formData.append('delivery_lat', '11.01030');
-    formData.append('delivery_lng', '124.61789');
-    formData.append('customer_lat', '11.01030');
-    formData.append('customer_lng', '124.61789');
-    formData.append('total', '200.00');
-    formData.append('total_amount', '200.00');
-    formData.append('subtotal', '170.00');
-    formData.append('delivery_fee', '30.00');
-    formData.append('cart', JSON.stringify([
-        { name: 'Signature Meal Combo', store: 'Food Dash Grill', price: 170.00, qty: 1, icon: '🍱' }
-    ]));
-
-    fetch('api_orders.php', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData
-    })
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-        if (data.success || data.order_id) {
-            window.location.href = 'customer_dashboard.php?order_placed=1';
-        } else {
-            alert(data.message || 'Order placed!');
-            window.location.href = 'customer_dashboard.php';
-        }
-    })
-    .catch(function() {
-        // Fallback on network delay
-        window.location.href = 'customer_dashboard.php?order_placed=1';
-    });
-}
-
-// Full compatibility aliases
-var updatePaymentTheme = setPayment;
-var handlePayAction = onCheckoutButtonClick;
-var openApplePaySheet = showApplePayModal;
-var openWalletSheet = showWalletModal;
-var confirmAndPlaceOrder = processOrderAJAX;
-var selectedMethod = currentPayment;
-
-// Initial theme initialization without pattern validations
 document.addEventListener('DOMContentLoaded', function() {
-    setPayment('cod');
+    selectMethod('gcash');
 });
 </script>
 </body>
