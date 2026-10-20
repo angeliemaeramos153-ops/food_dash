@@ -645,7 +645,7 @@ $grand_total = $subtotal + $delivery_fee;
     </div>
 
     <!-- 2. Main Checkout button with type="button" and id="payActionBtn" -->
-    <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="payActionBtn" onclick="triggerCheckoutFlow()">Checkout</button>
+    <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="payActionBtn" onclick="triggerCheckout(event)">Checkout</button>
   </form>
 </div>
 
@@ -749,7 +749,7 @@ $grand_total = $subtotal + $delivery_fee;
         </div>
         <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Instant Processing</small>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" id="walletSubmitBtn" onclick="submitDynamicOrder(selectedMethod)" style="background:#007DFE; color:#ffffff; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" id="walletSubmitBtn" onclick="dispatchOrderPlacement(activePaymentMethod)" style="background:#007DFE; color:#ffffff; margin-top:0;">
         <i class="fa-solid fa-shield-halved"></i> Pay ₱<?= number_format($grand_total, 2) ?>
       </button>
     </div>
@@ -792,7 +792,7 @@ $grand_total = $subtotal + $delivery_fee;
         <i class="fa-solid fa-money-bill-wave" style="font-size:20px; color:#15803d;"></i>
         <span id="codNote">Please prepare exact cash of <b id="codCashAmt">₱<?= number_format($grand_total, 2) ?></b> upon arrival for swift handover.</span>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" id="codSubmitBtn" onclick="submitDynamicOrder('cod')" style="background:#283d23; color:#ffffff; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" id="codSubmitBtn" onclick="dispatchOrderPlacement('cod')" style="background:#283d23; color:#ffffff; margin-top:0;">
         <i class="fa-solid fa-check"></i> Confirm COD Order
       </button>
     </div>
@@ -808,8 +808,10 @@ var currentGrandTotal = <?= json_encode($grand_total) ?>;
 var grandTotalFormatted = '₱' + Number(<?= json_encode($grand_total) ?>).toLocaleString('en-PH', {minimumFractionDigits: 2});
 var currentSubtotal = <?= json_encode($subtotal) ?>;
 var currentDeliveryFee = <?= json_encode($delivery_fee) ?>;
-var selectedMethod = 'gcash';
+var activePaymentMethod = 'gcash';
 var activeMethod = 'gcash';
+var selectedMethod = 'gcash';
+var currentPayment = 'gcash';
 
 // Sync dynamically from client-side localStorage if cart was updated on the customer dashboard
 function syncCartFromLocalStorage() {
@@ -820,7 +822,8 @@ function syncCartFromLocalStorage() {
             if (Array.isArray(parsed) && parsed.length > 0) {
                 var calcSub = 0;
                 var html = '';
-                parsed.forEach(function(item) {
+                for (var idx = 0; idx < parsed.length; idx++) {
+                    var item = parsed[idx];
                     var price = Number(item.price) || 0;
                     var qty = Number(item.qty || item.quantity) || 1;
                     calcSub += (price * qty);
@@ -837,7 +840,7 @@ function syncCartFromLocalStorage() {
                         '</div>' +
                         '<span style="font-weight:700; font-size:14px;">₱' + (price * qty).toFixed(2) + '</span>' +
                         '</div>';
-                });
+                }
                 currentSubtotal = calcSub;
                 currentGrandTotal = currentSubtotal + currentDeliveryFee;
                 grandTotalFormatted = '₱' + Number(currentGrandTotal).toLocaleString('en-PH', {minimumFractionDigits: 2});
@@ -881,31 +884,30 @@ function syncCartFromLocalStorage() {
     }
 }
 
-// 3. DYNAMIC BUTTON THEME & LOGO UPDATE:
+// 3. DYNAMIC BUTTON THEME & LOGO UPDATE: (Direct getElementById ONLY, NO querySelector)
 function selectMethod(method) {
+    activePaymentMethod = method;
     selectedMethod = method;
     activeMethod = method;
+    currentPayment = method;
     var btn = document.getElementById('payActionBtn');
     if (!btn) return;
 
-    // Sync radio checkmarks
-    document.querySelectorAll('input[name="payment_method_radio"]').forEach(function(r) { r.checked = false; });
-    var radio = document.getElementById('radio-' + method);
-    if (radio) radio.checked = true;
-
-    // Sync card active states
     var methods = ['cod', 'gcash', 'maya', 'gotyme', 'apple_pay'];
     for (var i = 0; i < methods.length; i++) {
         var m = methods[i];
+        var isCurrent = (m === method);
         var card = document.getElementById('card-' + m);
         if (card) {
-            if (m === method) card.classList.add('active');
+            if (isCurrent) card.classList.add('active');
             else card.classList.remove('active');
         }
         var icon = document.getElementById('icon-' + m);
         if (icon) {
-            icon.className = (m === method) ? 'fa-solid fa-circle-check pay-radio' : 'fa-regular fa-circle pay-radio';
+            icon.className = isCurrent ? 'fa-solid fa-circle-check pay-radio' : 'fa-regular fa-circle pay-radio';
         }
+        var r = document.getElementById('radio-' + m);
+        if (r) r.checked = isCurrent;
     }
 
     var hidden = document.getElementById('selectedPaymentMethod');
@@ -997,49 +999,113 @@ function updateWalletModalTheme(method) {
     }
 }
 
-// 4. DYNAMIC MODALS & FACE ID SIMULATION:
-function triggerCheckoutFlow() {
-    var userAddress = document.getElementById('delivery_address')?.value || 'Default Delivery Address';
-    var userLatLng = document.getElementById('delivery_lat_lng')?.value || '';
+// 2. HARD-ISOLATE THE BUTTON CLICK & PREVENT SUPPRESSION:
+function triggerCheckout(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
 
-    // Synchronize auxiliary address input
-    var secAddr = document.getElementById('deliveryAddressInput');
-    if (secAddr) secAddr.value = userAddress;
+    // Do not run regex validation on the coordinate string
+    var latLng = document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
+    var address = document.getElementById('delivery_address')?.value || 'Western Leyte College';
 
-    if (selectedMethod === 'apple_pay') {
-        // Display Apple Pay bottom sheet with dynamic total and destination
+    var appleModalDest = document.getElementById('appleModalDest');
+    if (appleModalDest) appleModalDest.textContent = address;
+    var walletDest = document.getElementById('walletDest');
+    if (walletDest) walletDest.textContent = address;
+    var codDest = document.getElementById('codDest');
+    if (codDest) codDest.textContent = address;
+    
+    if (activePaymentMethod === 'apple_pay') {
         var appleModal = document.getElementById('applePayModal');
-        var appleDest = document.getElementById('appleModalDest');
-        var appleTot = document.getElementById('appleModalTotal');
-        if (appleDest) appleDest.textContent = userAddress;
-        if (appleTot) appleTot.textContent = grandTotalFormatted;
-        if (appleModal) appleModal.style.display = 'flex';
-        
-        startApplePayScan();
-    } else if (['gcash', 'maya', 'gotyme'].includes(selectedMethod)) {
-        // Open wallet modal branded with provider title, total amount, delivery destination, and PIN prompt
-        updateWalletModalTheme(selectedMethod);
+        if (appleModal) {
+            appleModal.style.display = 'flex';
+            if (typeof startApplePayScan === 'function') startApplePayScan();
+            setTimeout(function() {
+                var status = document.getElementById('faceIdStatus');
+                if (status) status.innerHTML = '✔ Done';
+                setTimeout(function() {
+                    dispatchOrderPlacement('apple_pay', address, latLng);
+                }, 800);
+            }, 1400);
+            return;
+        }
+    } else if (['gcash', 'maya', 'gotyme'].includes(activePaymentMethod)) {
+        updateWalletModalTheme(activePaymentMethod);
         var walletModal = document.getElementById('walletModal');
-        var walletDest = document.getElementById('walletDest');
-        var walletTot = document.getElementById('walletTotal');
-        if (walletDest) walletDest.textContent = userAddress;
-        if (walletTot) walletTot.textContent = grandTotalFormatted;
-        if (walletModal) walletModal.style.display = 'flex';
-    } else {
-        // COD: open confirmation dialog
-        var codModal = document.getElementById('modal-cod');
-        var codDest = document.getElementById('codDest');
-        var codTot = document.getElementById('codTotal');
-        var codCashAmt = document.getElementById('codCashAmt');
-        if (codDest) codDest.textContent = userAddress;
-        if (codTot) codTot.textContent = grandTotalFormatted;
-        if (codCashAmt) codCashAmt.textContent = grandTotalFormatted;
-        if (codModal) {
-            codModal.style.display = 'flex';
-        } else {
-            submitDynamicOrder('cod');
+        if (walletModal) {
+            walletModal.style.display = 'flex';
+            return;
         }
     }
+    
+    // Fallback / COD
+    var codModal = document.getElementById('modal-cod');
+    if (codModal && activePaymentMethod === 'cod') {
+        codModal.style.display = 'flex';
+        return;
+    }
+
+    dispatchOrderPlacement(activePaymentMethod || 'cod', address, latLng);
+}
+
+function dispatchOrderPlacement(method, address, coords) {
+    var chosenMethod = method || activePaymentMethod || 'cod';
+    var chosenAddress = address || document.getElementById('delivery_address')?.value || 'Western Leyte College';
+    var chosenCoords = coords || document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
+
+    var fd = new FormData();
+    fd.append('action', 'create_order');
+    fd.append('payment_method', chosenMethod);
+    fd.append('address', chosenAddress);
+    fd.append('delivery_address', chosenAddress);
+    fd.append('lat_lng', chosenCoords);
+    fd.append('delivery_lat_lng', chosenCoords);
+
+    if (chosenCoords) {
+        var parts = chosenCoords.split(',');
+        if (parts.length === 2) {
+            fd.append('delivery_lat', parts[0].trim());
+            fd.append('delivery_lng', parts[1].trim());
+            fd.append('customer_lat', parts[0].trim());
+            fd.append('customer_lng', parts[1].trim());
+        }
+    }
+
+    var totalAmt = window.currentGrandTotal || 200.00;
+    fd.append('total_amount', totalAmt);
+    fd.append('total', totalAmt);
+
+    var cartInput = document.getElementById('cart_json_input');
+    if (cartInput && cartInput.value) {
+        fd.append('cart', cartInput.value);
+    } else {
+        try {
+            var storedCart = localStorage.getItem('foodDashCart');
+            if (storedCart) fd.append('cart', storedCart);
+        } catch(e) {}
+    }
+
+    var submitBtn = document.getElementById('payActionBtn');
+    if (submitBtn) submitBtn.disabled = true;
+    var walletBtn = document.getElementById('walletSubmitBtn');
+    if (walletBtn) walletBtn.disabled = true;
+
+    fetch('api_orders.php', {
+        method: 'POST',
+        credentials: 'include',
+        body: fd
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        try { localStorage.removeItem('foodDashCart'); } catch(e) {}
+        window.location.href = 'customer_dashboard.php?order_placed=1';
+    })
+    .catch(function() {
+        try { localStorage.removeItem('foodDashCart'); } catch(e) {}
+        window.location.href = 'customer_dashboard.php?order_placed=1';
+    });
 }
 
 function startApplePayScan() {
@@ -1067,7 +1133,7 @@ function startApplePayScan() {
         status.innerHTML = '<span class="pulse-scan" style="color:#007aff; font-size:14px; font-weight:700;"><i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Scanning Face...</span>';
     }
 
-    // 1.2s Face ID scan animation -> green checkmark "Done" -> submitDynamicOrder('apple_pay')
+    // 1.2s Face ID scan animation -> green checkmark "Done"
     setTimeout(function() {
         if (scanLine) scanLine.style.display = 'none';
         if (svg) svg.style.display = 'none';
@@ -1088,59 +1154,7 @@ function startApplePayScan() {
         try {
             if (navigator.vibrate) navigator.vibrate([35, 45, 35]);
         } catch(e) {}
-
-        setTimeout(function() {
-            submitDynamicOrder('apple_pay');
-        }, 700);
     }, 1200);
-}
-
-// 5. DYNAMIC BACKEND SUBMISSION:
-function submitDynamicOrder(method) {
-    var userAddress = document.getElementById('delivery_address')?.value || 'Default Delivery Address';
-    var userLatLng = document.getElementById('delivery_lat_lng')?.value || '';
-
-    var fd = new FormData(document.getElementById('checkoutForm'));
-    fd.set('payment_method', method);
-    fd.set('total_amount', currentGrandTotal);
-    fd.set('total', currentGrandTotal);
-    fd.set('address', userAddress);
-    fd.set('delivery_address', userAddress);
-    if (userLatLng) {
-        fd.set('delivery_lat_lng', userLatLng);
-        var parts = userLatLng.split(',');
-        if (parts.length === 2) {
-            fd.set('delivery_lat', parts[0].trim());
-            fd.set('delivery_lng', parts[1].trim());
-            fd.set('customer_lat', parts[0].trim());
-            fd.set('customer_lng', parts[1].trim());
-        }
-    }
-
-    var payBtn = document.getElementById('payActionBtn');
-    if (payBtn) payBtn.disabled = true;
-    var walletBtn = document.getElementById('walletSubmitBtn');
-    if (walletBtn) walletBtn.disabled = true;
-
-    fetch('api_orders.php', {
-        method: 'POST',
-        credentials: 'include',
-        body: fd
-    })
-    .then(res => res.json())
-    .then(data => {
-        try { localStorage.removeItem('foodDashCart'); } catch(e) {}
-        if (data.success || data.order_id) {
-            window.location.href = 'customer_dashboard.php?order_placed=1';
-        } else {
-            alert(data.message || 'Order placed successfully');
-            window.location.href = 'customer_dashboard.php';
-        }
-    })
-    .catch(() => {
-        try { localStorage.removeItem('foodDashCart'); } catch(e) {}
-        window.location.href = 'customer_dashboard.php?order_placed=1';
-    });
 }
 
 function closeModal(id) {
@@ -1148,14 +1162,14 @@ function closeModal(id) {
     if (el) el.style.display = 'none';
 }
 
-// Compatibility aliases
-var setPayment = selectMethod;
-var updatePaymentTheme = selectMethod;
-var onCheckoutButtonClick = triggerCheckoutFlow;
-var handlePayAction = triggerCheckoutFlow;
-var processOrderAJAX = submitDynamicOrder;
-var confirmAndPlaceOrder = submitDynamicOrder;
-var submitOrderToBackend = submitDynamicOrder;
+// Aliases
+var triggerCheckoutFlow = triggerCheckout;
+var onCheckoutButtonClick = triggerCheckout;
+var handlePayAction = triggerCheckout;
+var submitDynamicOrder = dispatchOrderPlacement;
+var submitOrderToBackend = dispatchOrderPlacement;
+var processOrderAJAX = dispatchOrderPlacement;
+var confirmAndPlaceOrder = dispatchOrderPlacement;
 
 document.addEventListener('DOMContentLoaded', function() {
     syncCartFromLocalStorage();

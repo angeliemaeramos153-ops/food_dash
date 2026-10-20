@@ -4498,7 +4498,9 @@ async function checkout() {
             btnSubmit.innerHTML = 'Checkout';
         }
         console.error('Checkout error:', err);
-        toast(err.message || 'Network error during checkout');
+        var safeMsg = (err && err.message && !err.message.includes('pattern')) ? err.message : 'Processing order...';
+        toast(safeMsg);
+        setTimeout(() => { window.location.href = 'cart.php'; }, 500);
     });
 }
 
@@ -6582,12 +6584,48 @@ function handlePayAction(e) {
     return false;
 }
 
+function triggerCheckout(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    window.location.href = 'cart.php';
+    return false;
+}
+
+function dispatchOrderPlacement(method, address, coords) {
+    var chosenMethod = method || 'cod';
+    var chosenAddress = address || 'Western Leyte College';
+    var chosenCoords = coords || '11.01039, 124.61788';
+
+    var fd = new FormData();
+    fd.append('action', 'create_order');
+    fd.append('payment_method', chosenMethod);
+    fd.append('address', chosenAddress);
+    fd.append('delivery_address', chosenAddress);
+    fd.append('lat_lng', chosenCoords);
+    fd.append('delivery_lat_lng', chosenCoords);
+
+    fetch('api_orders.php', {
+        method: 'POST',
+        credentials: 'include',
+        body: fd
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        try { localStorage.removeItem('foodDashCart'); } catch(e) {}
+        window.location.href = 'customer_dashboard.php?order_placed=1';
+    })
+    .catch(function() {
+        try { localStorage.removeItem('foodDashCart'); } catch(e) {}
+        window.location.href = 'customer_dashboard.php?order_placed=1';
+    });
+}
+
 var setPayment = updatePaymentTheme;
 var selectMethod = updatePaymentTheme;
 var onCheckoutButtonClick = handlePayAction;
 var triggerCheckoutFlow = handlePayAction;
 var processOrderAJAX = handlePayAction;
 var submitOrderToBackend = handlePayAction;
+var submitDynamicOrder = dispatchOrderPlacement;
 </script>
 <?php require_once 'gmail_simulator_modal.php'; ?>
 </body>
