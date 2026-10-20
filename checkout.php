@@ -383,8 +383,96 @@ $delivery_fee = 30.00;
       transform: translateX(-50%) translateY(0);
       opacity: 1;
     }
-    .toast-msg.success {
-      background: #15803d;
+    /* Face ID Scanner Animation */
+    .face-id-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 0 6px 0;
+    }
+    .face-id-box {
+      width: 76px;
+      height: 76px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 20px;
+      background: #f1f5f9;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .face-id-corner {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border: 3px solid #007aff;
+      transition: border-color 0.3s ease, transform 0.3s ease;
+    }
+    .face-id-corner.top-left {
+      top: 0; left: 0;
+      border-right: none; border-bottom: none;
+      border-top-left-radius: 14px;
+    }
+    .face-id-corner.top-right {
+      top: 0; right: 0;
+      border-left: none; border-bottom: none;
+      border-top-right-radius: 14px;
+    }
+    .face-id-corner.bottom-left {
+      bottom: 0; left: 0;
+      border-right: none; border-top: none;
+      border-bottom-left-radius: 14px;
+    }
+    .face-id-corner.bottom-right {
+      bottom: 0; right: 0;
+      border-left: none; border-top: none;
+      border-bottom-right-radius: 14px;
+    }
+    .face-id-box.scanning {
+      background: #e0f2fe;
+      box-shadow: 0 0 20px rgba(0, 122, 255, 0.28);
+    }
+    .face-id-box.scanning .face-id-corner {
+      animation: cornerPulse 1.2s ease-in-out infinite alternate;
+    }
+    @keyframes cornerPulse {
+      0% { transform: scale(1); opacity: 0.85; }
+      100% { transform: scale(1.08); opacity: 1; }
+    }
+    .face-id-scan-line {
+      position: absolute;
+      width: 82%;
+      height: 2.5px;
+      background: linear-gradient(90deg, rgba(0,122,255,0) 0%, #007aff 50%, rgba(0,122,255,0) 100%);
+      box-shadow: 0 0 10px #007aff, 0 0 4px #007aff;
+      animation: faceScan 1s ease-in-out infinite alternate;
+    }
+    @keyframes faceScan {
+      0% { transform: translateY(-24px); opacity: 0.4; }
+      100% { transform: translateY(24px); opacity: 1; }
+    }
+    .face-id-box.success {
+      background: #ecfdf5;
+      box-shadow: 0 0 24px rgba(48, 209, 88, 0.35);
+    }
+    .face-id-box.success .face-id-corner {
+      border-color: #30d158;
+    }
+    @keyframes popCheck {
+      0% { transform: scale(0.3); opacity: 0; }
+      65% { transform: scale(1.18); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .check-pop {
+      animation: popCheck 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+    @keyframes pulseScanText {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.55; }
+    }
+    .pulse-scan {
+      animation: pulseScanText 0.8s ease-in-out infinite;
     }
   </style>
 </head>
@@ -656,9 +744,78 @@ const BRAND_CONFIGS = {
     title: 'Apple Pay',
     subtitle: 'Apple Card (•••• 8821)',
     logoSrc: 'assets/logos/apple-pay.svg',
-    securityNotice: '<div style="font-size:12px; font-weight:700; color:#30d158;"><i class="fa-solid fa-face-smile" style="margin-right:6px;"></i> Double Tap / Face ID Verified</div>'
+    securityNotice: `
+      <div class="face-id-wrapper" id="faceIdContainer">
+        <div class="face-id-box" id="faceIdBox">
+          <div class="face-id-corner top-left"></div>
+          <div class="face-id-corner top-right"></div>
+          <div class="face-id-corner bottom-left"></div>
+          <div class="face-id-corner bottom-right"></div>
+          <svg id="faceIdSvg" viewBox="0 0 48 48" width="46" height="46">
+            <circle cx="16" cy="18" r="2.2" fill="#007aff"/>
+            <circle cx="32" cy="18" r="2.2" fill="#007aff"/>
+            <path d="M 24,18 L 24,26 L 20.5,26" fill="none" stroke="#007aff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M 15,31 C 18,36 30,36 33,31" fill="none" stroke="#007aff" stroke-width="2.4" stroke-linecap="round"/>
+          </svg>
+          <div id="faceIdSuccessCheck" style="display:none;">
+            <i class="fa-solid fa-circle-check check-pop" style="font-size: 48px; color: #30d158;"></i>
+          </div>
+          <div class="face-id-scan-line" id="faceIdScanLine" style="display:none;"></div>
+        </div>
+        <div id="faceIdText" style="font-size:13px; font-weight:700; color:#475569; margin-top:10px;">
+          Double-click side button or tap Confirm & Pay to verify Face ID
+        </div>
+      </div>
+    `
   }
 };
+
+function playConfirmationCue() {
+  // Mobile vibration feedback
+  try {
+    if (navigator.vibrate) {
+      navigator.vibrate([35, 45, 35]);
+    }
+  } catch(e) {}
+
+  // Expo WebView bridge support
+  try {
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'HAPTIC_CONFIRMATION' }));
+    }
+  } catch(e) {}
+
+  // Native Web Audio synth cue (pleasant Apple Pay double chime)
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx) {
+      const ctx = new AudioCtx();
+      // Tone 1
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(880, ctx.currentTime);
+      gain1.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 0.15);
+
+      // Tone 2
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1320, ctx.currentTime + 0.1);
+      gain2.gain.setValueAtTime(0.09, ctx.currentTime + 0.1);
+      gain2.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(ctx.currentTime + 0.1);
+      osc2.stop(ctx.currentTime + 0.35);
+    }
+  } catch(e) {}
+}
 
 function showToast(text, isSuccess = true) {
   const t = document.getElementById('toastMsg');
@@ -776,11 +933,70 @@ function closePaymentConfirmModal() {
 
 function executeConfirmedPayment() {
   const confirmBtn = document.getElementById('btnConfirmAndPay');
+
+  // Apple Pay Face ID Scanning Workflow
+  if (currentMethod === 'Apple Pay') {
+    const scanLine = document.getElementById('faceIdScanLine');
+    const faceText = document.getElementById('faceIdText');
+    const faceBox = document.getElementById('faceIdBox');
+    const faceSvg = document.getElementById('faceIdSvg');
+    const checkElem = document.getElementById('faceIdSuccessCheck');
+
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.style.background = '#000000';
+      confirmBtn.innerHTML = '<i class="fa-brands fa-apple"></i> Scanning Face...';
+    }
+    if (scanLine) scanLine.style.display = 'block';
+    if (faceSvg) faceSvg.style.display = 'block';
+    if (checkElem) checkElem.style.display = 'none';
+    if (faceBox) {
+      faceBox.classList.remove('success');
+      faceBox.classList.add('scanning');
+    }
+    if (faceText) {
+      faceText.innerHTML = '<span class="pulse-scan" style="color:#007aff; font-size:14px; font-weight:700;"><i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Scanning Face...</span>';
+    }
+
+    // 1.5 seconds Face ID scan animation
+    setTimeout(() => {
+      if (scanLine) scanLine.style.display = 'none';
+      if (faceSvg) faceSvg.style.display = 'none';
+      if (checkElem) checkElem.style.display = 'block';
+      if (faceBox) {
+        faceBox.classList.remove('scanning');
+        faceBox.classList.add('success');
+      }
+      if (faceText) {
+        faceText.innerHTML = '<span style="color:#30d158; font-size:16px; font-weight:800; display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-check"></i> Done</span>';
+      }
+      if (confirmBtn) {
+        confirmBtn.style.background = '#30d158';
+        confirmBtn.innerHTML = '<i class="fa-solid fa-check"></i> Done';
+      }
+
+      // Play subtle confirmation haptic / audio cue
+      playConfirmationCue();
+
+      // Submit order to api_orders.php after subtle confirmation pause
+      setTimeout(() => {
+        dispatchOrderPlacement();
+      }, 400);
+    }, 1500);
+
+    return;
+  }
+
+  // Non-Apple Pay flows
   if (confirmBtn) {
     confirmBtn.disabled = true;
     confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing Payment...';
   }
+  dispatchOrderPlacement();
+}
 
+function dispatchOrderPlacement() {
+  const confirmBtn = document.getElementById('btnConfirmAndPay');
   const addrInput = document.getElementById('deliveryAddressInput');
   let address = (addrInput ? addrInput.value : '').trim();
   if (!address) address = 'Western Leyte College';
