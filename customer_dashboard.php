@@ -6574,12 +6574,29 @@ function updatePaymentTheme(method) {
 
 function handlePayAction(e) {
     if (e && e.preventDefault) e.preventDefault();
-    try {
-        if (typeof checkout === 'function') {
-            checkout();
+    if (e && e.stopPropagation) e.stopPropagation();
+
+    var selectedRadio = document.querySelector('input[name="payment_method"]:checked') || 
+                        document.querySelector('input[name="payment_option"]:checked');
+    var method = selectedRadio ? selectedRadio.value : (window.selectedPaymentMethod || 'maya');
+
+    var walletModal = document.getElementById('walletModal');
+    var appleModal = document.getElementById('applePayModal');
+
+    if (method === 'apple_pay') {
+        if (appleModal) {
+            appleModal.style.cssText = 'display:flex !important; position:fixed; inset:0; z-index:999999; justify-content:center; align-items:flex-end; background:rgba(0,0,0,0.6);';
         }
-    } catch(err) {
-        console.error('Pay action error:', err);
+    } else if (method === 'cod') {
+        if (confirm("Confirm Cash on Delivery order for ₱200.00?")) {
+            if (typeof finalizeOrder === 'function') finalizeOrder();
+        }
+    } else {
+        if (walletModal) {
+            walletModal.style.cssText = 'display:flex !important; position:fixed; inset:0; z-index:999999; justify-content:center; align-items:center; background:rgba(0,0,0,0.6);';
+            var titleElem = document.getElementById('walletModalTitle') || document.getElementById('walletTitle');
+            if (titleElem) titleElem.innerText = method.toUpperCase() + ' Verification';
+        }
     }
     return false;
 }
