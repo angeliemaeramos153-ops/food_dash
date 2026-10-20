@@ -6586,7 +6586,11 @@ function handlePayAction(e) {
 
 function triggerCheckout(event) {
     if (event && event.preventDefault) event.preventDefault();
-    window.location.href = 'cart.php';
+   // window.location.href = 'cart.php';
+if (typeof window.openPaymentPopup === 'function') {
+    window.openPaymentPopup();
+}
+
     return false;
 }
 
