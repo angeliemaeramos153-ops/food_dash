@@ -6544,13 +6544,8 @@ const orderTotal = '₱200.00';
 
 function updatePaymentTheme(method) {
     selectedMethod = method;
-    const btn = document.getElementById('payActionBtn') || document.getElementById('btnCheckoutSubmit') || document.querySelector('.btn-checkout');
+    const btn = document.getElementById('payActionBtn') || document.getElementById('btnCheckoutSubmit');
     if (!btn) return;
-
-    // Sync radio buttons
-    document.querySelectorAll('input[name="payment_method"]').forEach(r => r.checked = false);
-    const targetRadio = document.querySelector(`input[value="${method}"]`);
-    if (targetRadio) targetRadio.checked = true;
 
     if (method === 'cod') {
         btn.style.setProperty('background-color', '#283d23', 'important');
@@ -6576,8 +6571,12 @@ function updatePaymentTheme(method) {
 }
 
 function handlePayAction() {
-    if (typeof checkout === 'function') {
-        checkout();
+    try {
+        if (typeof checkout === 'function') {
+            checkout();
+        }
+    } catch(err) {
+        console.error('Pay action error:', err);
     }
 }
 </script>

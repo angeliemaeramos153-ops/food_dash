@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($payload)) {
     $subtotal = round(max(0, $total - $delivery_fee), 2);
 
     // Delivery location
-    $delivery_address = trim((string)($payload['delivery_address'] ?? 'Western Leyte College'));
+    $delivery_address = trim((string)($payload['delivery_address'] ?? $payload['address'] ?? 'Western Leyte College'));
     if ($delivery_address === '') {
         $delivery_address = 'Western Leyte College';
     }
