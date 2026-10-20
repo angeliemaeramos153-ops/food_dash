@@ -478,13 +478,13 @@ $delivery_fee = 30.00;
     <span style="font-size:12px; font-weight:700; color:var(--olive);">1 Item</span>
   </header>
 
-  <!-- Strict novalidate form stripped of pattern attributes -->
-  <form id="checkoutForm" novalidate method="POST" action="api_orders.php" class="checkout-content">
-    <input type="hidden" name="action" value="create_order">
-    <input type="hidden" name="total" value="200.00">
-    <input type="hidden" name="total_amount" value="200.00">
-    <input type="hidden" name="delivery_fee" value="30.00">
-    <input type="hidden" name="cart" value='[{"name":"Signature Meal Combo","store":"Food Dash Grill","price":170.00,"qty":1,"icon":"🍱"}]'>
+  <!-- 1. Form with novalidate and onsubmit="return false;" to prevent WebKit validation -->
+  <form id="checkoutForm" novalidate onsubmit="return false;" class="checkout-content">
+    <input type="text" style="display:none;" name="action" value="create_order">
+    <input type="text" style="display:none;" name="total" value="200.00">
+    <input type="text" style="display:none;" name="total_amount" value="200.00">
+    <input type="text" style="display:none;" name="delivery_fee" value="30.00">
+    <input type="text" style="display:none;" name="cart" value='[{"name":"Signature Meal Combo","store":"Food Dash Grill","price":170.00,"qty":1,"icon":"🍱"}]'>
 
     <!-- Order Summary -->
     <div class="checkout-card">
@@ -511,9 +511,9 @@ $delivery_fee = 30.00;
         <span>Exact Live GPS Pin: <b id="coordsDisplay">11.01020, 124.61779</b></span>
       </div>
 
-      <!-- Clean parsed coordinate hidden fields -->
-      <input type="hidden" name="delivery_lat" id="delivery_lat" value="11.01020">
-      <input type="hidden" name="delivery_lng" id="delivery_lng" value="124.61779">
+      <!-- Clean parsed coordinate text fields (no strict patterns) -->
+      <input type="text" style="display:none;" name="delivery_lat" id="delivery_lat" value="11.01020">
+      <input type="text" style="display:none;" name="delivery_lng" id="delivery_lng" value="124.61779">
     </div>
 
     <!-- Payment Methods: 5 Options with active classes and radio inputs -->
@@ -585,7 +585,7 @@ $delivery_fee = 30.00;
           <i class="fa-regular fa-circle pay-radio"></i>
         </div>
       </div>
-      <input type="hidden" id="selectedPaymentMethod" name="payment_method_val" value="Cash on Delivery (COD)">
+      <input type="text" style="display:none;" id="selectedPaymentMethod" name="payment_method_val" value="Cash on Delivery (COD)">
     </div>
 
     <!-- Payment Totals -->
@@ -595,8 +595,8 @@ $delivery_fee = 30.00;
       <div class="summary-row total"><span>Total Amount</span><span id="displayTotal">₱200.00</span></div>
     </div>
 
-    <!-- Branded Dynamic Submit Button -->
-    <button type="submit" class="btn-submit-order" id="btnSubmitOrder">
+    <!-- 1. Place Order button with type="button" and id="placeOrderBtn" -->
+    <button type="button" class="btn-submit-order" id="placeOrderBtn" onclick="handlePlaceOrderClick(event)">
       <i class="fa-solid fa-money-bill-wave"></i> Place Order • ₱200.00
     </button>
   </form>
@@ -657,7 +657,7 @@ $delivery_fee = 30.00;
         </div>
       </div>
 
-      <button type="button" class="btn-submit-order" id="btnApplePayTrigger" onclick="startApplePayFaceIdScan()" style="background:#ffffff; color:#000000; margin-top:16px;">
+      <button type="button" class="btn-submit-order" id="btnApplePayTrigger" onclick="openApplePayModal()" style="background:#ffffff; color:#000000; margin-top:16px;">
         <span style="font-size:18px;"></span> Confirm with Face ID
       </button>
     </div>
@@ -675,7 +675,7 @@ $delivery_fee = 30.00;
         <div style="display:flex; align-items:center; gap:10px;">
           <img id="walletBrandLogo" src="assets/logos/gcash.svg" alt="Provider" style="height:26px; border-radius:6px; background:#fff; padding:2px;">
           <div>
-            <div id="walletBrandTitle" style="font-size:16px; font-weight:800; line-height:1.2;">GCash Express Checkout</div>
+            <div id="walletBrandTitle" style="font-size:16px; font-weight:800; line-height:1.2;">GCash QuickPay</div>
             <small id="walletBrandSub" style="font-size:11px; opacity:0.85;">Official Digital Payment</small>
           </div>
         </div>
@@ -697,7 +697,7 @@ $delivery_fee = 30.00;
         <div id="walletDestDisplay" style="font-size:14px; font-weight:700; color:#1e293b;">Western Leyte College</div>
       </div>
 
-      <!-- 4-Digit PIN / OTP Field -->
+      <!-- 4-Digit PIN / OTP Simulator Field -->
       <div style="background:#fdfbf7; border:1px solid #e8decb; border-radius:16px; padding:16px; margin-bottom:18px; text-align:center;">
         <label for="walletPinInput" style="display:block; font-size:12px; font-weight:700; color:#374151; margin-bottom:8px;">
           <i class="fa-solid fa-lock" style="color:#007dfe;"></i> Enter 4-Digit MPIN / Security OTP:
@@ -708,9 +708,9 @@ $delivery_fee = 30.00;
         <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Demo Auto-Filled</small>
       </div>
 
-      <!-- Confirm & Authorize Button -->
+      <!-- Authorize & Pay Button -->
       <button type="button" class="btn-submit-order" id="btnWalletConfirm" onclick="submitWalletOrder()" style="background:#007dfe; margin-top:0;">
-        <i class="fa-solid fa-shield-halved"></i> Confirm & Authorize
+        <i class="fa-solid fa-shield-halved"></i> Authorize & Pay
       </button>
 
       <div style="text-align:center; margin-top:12px;">
@@ -773,439 +773,8 @@ $delivery_fee = 30.00;
 
 <div class="toast-msg" id="toastMsg"><i class="fa-solid fa-circle-check"></i> <span id="toastText"></span></div>
 
-<script>
-let currentMethod = 'Cash on Delivery (COD)';
-
-function showToast(text, isSuccess = true) {
-  const t = document.getElementById('toastMsg');
-  const txt = document.getElementById('toastText');
-  if (t && txt) {
-    txt.textContent = text;
-    t.className = isSuccess ? 'toast-msg show success' : 'toast-msg show';
-    clearTimeout(window._toastTimer);
-    window._toastTimer = setTimeout(() => { t.className = 'toast-msg'; }, 3500);
-  }
-}
-
-function parseCoordinate(val, fallback) {
-  if (val === null || val === undefined) return fallback;
-  if (typeof val === 'number' && !isNaN(val)) return val;
-  const str = String(val).trim();
-  const match = str.match(/-?\d+(?:\.\d+)?/);
-  if (match) {
-    const parsed = parseFloat(match[0]);
-    if (!isNaN(parsed)) return parsed;
-  }
-  return fallback;
-}
-
-// 2. INSTANT BUTTON BRANDING (COLOR, LOGO, & TEXT)
-function selectPaymentMethod(method) {
-  currentMethod = method;
-  const inputMethod = document.getElementById('selectedPaymentMethod');
-  if (inputMethod) inputMethod.value = method;
-
-  // Update card active classes & radio checks
-  document.querySelectorAll('.payment-card, .pay-option').forEach(card => {
-    const cardMethod = card.getAttribute('data-method') || '';
-    const isSelected = (cardMethod === method || 
-      (method.startsWith('Maya') && cardMethod.includes('Maya')) || 
-      (method.startsWith('Cash') && cardMethod.includes('COD')) ||
-      (method.startsWith('GoTyme') && cardMethod.includes('GoTyme')));
-    const radio = card.querySelector('input[type="radio"]');
-    const iconRadio = card.querySelector('.pay-radio');
-
-    if (isSelected) {
-      card.classList.add('active');
-      if (radio) radio.checked = true;
-      if (iconRadio) iconRadio.className = 'fa-solid fa-circle-check pay-radio';
-    } else {
-      card.classList.remove('active');
-      if (radio) radio.checked = false;
-      if (iconRadio) iconRadio.className = 'fa-regular fa-circle pay-radio';
-    }
-  });
-
-  const btn = document.getElementById('btnSubmitOrder');
-  if (!btn) return;
-
-  if (method === 'GCash') {
-    btn.style.background = '#007dfe';
-    btn.style.color = '#ffffff';
-    btn.innerHTML = '<img src="assets/images/gcash.png" style="height:18px; vertical-align:middle; margin-right:6px;" onerror="this.remove()"> Pay with GCash • ₱200.00';
-  } else if (method.includes('Maya')) {
-    btn.style.background = '#023a2b';
-    btn.style.color = '#ffffff';
-    btn.innerHTML = '<img src="assets/images/maya.png" style="height:18px; vertical-align:middle; margin-right:6px;" onerror="this.remove()"> Pay with Maya • ₱200.00';
-  } else if (method.includes('GoTyme') || method.includes('Tyme')) {
-    btn.style.background = '#0a2540';
-    btn.style.color = '#ffffff';
-    btn.innerHTML = '<img src="assets/images/gotyme.png" style="height:18px; vertical-align:middle; margin-right:6px;" onerror="this.remove()"> Pay with GoTyme • ₱200.00';
-  } else if (method === 'Apple Pay') {
-    btn.style.background = '#000000';
-    btn.style.color = '#ffffff';
-    btn.innerHTML = '<span style="font-size:18px;"></span> Pay • ₱200.00';
-  } else {
-    // Cash on Delivery (COD)
-    btn.style.background = '#283d23';
-    btn.style.color = '#ffffff';
-    btn.innerHTML = '<i class="fa-solid fa-money-bill-wave"></i> Place Order • ₱200.00';
-  }
-}
-
-// Audio & Haptic confirmation cue
-function playConfirmationCue() {
-  try {
-    if (navigator.vibrate) navigator.vibrate([35, 45, 35]);
-  } catch(e) {}
-
-  try {
-    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'HAPTIC_CONFIRMATION' }));
-    }
-  } catch(e) {}
-
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (AudioCtx) {
-      const ctx = new AudioCtx();
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(880, ctx.currentTime);
-      gain1.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(ctx.currentTime);
-      osc1.stop(ctx.currentTime + 0.15);
-
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(1320, ctx.currentTime + 0.1);
-      gain2.gain.setValueAtTime(0.09, ctx.currentTime + 0.1);
-      gain2.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(ctx.currentTime + 0.1);
-      osc2.stop(ctx.currentTime + 0.35);
-    }
-  } catch(e) {}
-}
-
-// Modal Openers
-function openApplePayModal(address) {
-  const dest = document.getElementById('appleModalDest');
-  if (dest) dest.textContent = address;
-
-  // Reset Face ID elements
-  const scanLine = document.getElementById('appleFaceIdScanLine');
-  const svg = document.getElementById('appleFaceIdSvg');
-  const check = document.getElementById('appleFaceIdCheck');
-  const box = document.getElementById('appleFaceIdBox');
-  const status = document.getElementById('appleFaceIdStatusText');
-  const btn = document.getElementById('btnApplePayTrigger');
-
-  if (scanLine) scanLine.style.display = 'none';
-  if (svg) svg.style.display = 'block';
-  if (check) check.style.display = 'none';
-  if (box) box.classList.remove('scanning', 'success');
-  if (status) {
-    status.style.color = '#8e8e93';
-    status.textContent = 'Double Tap to Authorize Face ID';
-  }
-  if (btn) {
-    btn.disabled = false;
-    btn.style.background = '#ffffff';
-    btn.innerHTML = '<span style="font-size:18px;"></span> Confirm with Face ID';
-  }
-
-  document.getElementById('applePayModal').style.display = 'flex';
-}
-
-function closeApplePayModal() {
-  document.getElementById('applePayModal').style.display = 'none';
-}
-
-function startApplePayFaceIdScan() {
-  const scanLine = document.getElementById('appleFaceIdScanLine');
-  const svg = document.getElementById('appleFaceIdSvg');
-  const check = document.getElementById('appleFaceIdCheck');
-  const box = document.getElementById('appleFaceIdBox');
-  const status = document.getElementById('appleFaceIdStatusText');
-  const btn = document.getElementById('btnApplePayTrigger');
-
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<span style="font-size:18px;"></span> Scanning Face...';
-  }
-  if (scanLine) scanLine.style.display = 'block';
-  if (box) {
-    box.classList.remove('success');
-    box.classList.add('scanning');
-  }
-  if (status) {
-    status.innerHTML = '<span class="pulse-scan" style="color:#007aff; font-size:14px; font-weight:700;"><i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Scanning Face...</span>';
-  }
-
-  // 1.5 seconds Face ID scan animation
-  setTimeout(() => {
-    if (scanLine) scanLine.style.display = 'none';
-    if (svg) svg.style.display = 'none';
-    if (check) check.style.display = 'block';
-    if (box) {
-      box.classList.remove('scanning');
-      box.classList.add('success');
-    }
-    if (status) {
-      status.innerHTML = '<span style="color:#30d158; font-size:16px; font-weight:800; display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-check"></i> Done</span>';
-    }
-    if (btn) {
-      btn.style.background = '#30d158';
-      btn.innerHTML = '<i class="fa-solid fa-check"></i> Done';
-    }
-
-    playConfirmationCue();
-
-    // Auto submit order
-    setTimeout(() => {
-      submitOrderPayload('Apple Pay');
-    }, 400);
-  }, 1500);
-}
-
-function openWalletModal(method, address) {
-  const dest = document.getElementById('walletDestDisplay');
-  if (dest) dest.textContent = address;
-
-  const banner = document.getElementById('walletBrandBanner');
-  const logo = document.getElementById('walletBrandLogo');
-  const title = document.getElementById('walletBrandTitle');
-  const sub = document.getElementById('walletBrandSub');
-  const total = document.getElementById('walletTotalDisplay');
-  const btn = document.getElementById('btnWalletConfirm');
-  const pinInput = document.getElementById('walletPinInput');
-
-  if (method === 'GCash') {
-    if (banner) banner.style.background = '#007dfe';
-    if (logo) logo.src = 'assets/logos/gcash.svg';
-    if (title) title.textContent = 'GCash QuickPay';
-    if (sub) sub.textContent = 'Philippines\' Leading E-Wallet';
-    if (total) total.style.color = '#007dfe';
-    if (btn) {
-      btn.style.background = '#007dfe';
-      btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Confirm & Authorize';
-      btn.disabled = false;
-    }
-    if (pinInput) pinInput.style.borderColor = '#007dfe';
-  } else if (method.includes('Maya')) {
-    if (banner) banner.style.background = '#023a2b';
-    if (logo) logo.src = 'assets/logos/maya.svg';
-    if (title) title.textContent = 'Maya Checkout';
-    if (sub) sub.textContent = 'Maya Wallet & Digital Card';
-    if (total) total.style.color = '#05b851';
-    if (btn) {
-      btn.style.background = '#023a2b';
-      btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Confirm & Authorize';
-      btn.disabled = false;
-    }
-    if (pinInput) pinInput.style.borderColor = '#05b851';
-  } else {
-    // GoTyme
-    if (banner) banner.style.background = '#0a2540';
-    if (logo) logo.src = 'assets/logos/gotyme.svg';
-    if (title) title.textContent = 'GoTyme Bank Transfer';
-    if (sub) sub.textContent = 'Everyday Account (•••• 4920)';
-    if (total) total.style.color = '#00c2cb';
-    if (btn) {
-      btn.style.background = '#0a2540';
-      btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Confirm & Authorize';
-      btn.disabled = false;
-    }
-    if (pinInput) pinInput.style.borderColor = '#00c2cb';
-  }
-
-  document.getElementById('walletModal').style.display = 'flex';
-}
-
-function closeWalletModal() {
-  document.getElementById('walletModal').style.display = 'none';
-}
-
-function submitWalletOrder() {
-  const btn = document.getElementById('btnWalletConfirm');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Authorizing...';
-  }
-  const pin = document.getElementById('walletPinInput') ? document.getElementById('walletPinInput').value : '1234';
-  submitOrderPayload(currentMethod, { pin: pin });
-}
-
-function openCodModal(address) {
-  const dest = document.getElementById('codDestDisplay');
-  if (dest) dest.textContent = address;
-  const btn = document.getElementById('btnCodConfirm');
-  if (btn) {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-check"></i> Confirm Order';
-  }
-  document.getElementById('codModal').style.display = 'flex';
-}
-
-function closeCodModal() {
-  document.getElementById('codModal').style.display = 'none';
-}
-
-function submitCodOrder() {
-  const btn = document.getElementById('btnCodConfirm');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
-  }
-  submitOrderPayload('Cash on Delivery (COD)');
-}
-
-function resetModalButtons() {
-  const btnW = document.getElementById('btnWalletConfirm');
-  if (btnW) {
-    btnW.disabled = false;
-    btnW.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Confirm & Authorize';
-  }
-  const btnC = document.getElementById('btnCodConfirm');
-  if (btnC) {
-    btnC.disabled = false;
-    btnC.innerHTML = '<i class="fa-solid fa-check"></i> Confirm Order';
-  }
-  const btnA = document.getElementById('btnApplePayTrigger');
-  if (btnA) {
-    btnA.disabled = false;
-    btnA.innerHTML = '<span style="font-size:18px;"></span> Confirm with Face ID';
-  }
-}
-
-// 4. SUBMIT TO BACKEND WITHOUT 401 ERRORS
-function submitOrderPayload(paymentMethod, extraData = {}) {
-  const addrInput = document.getElementById('deliveryAddressInput');
-  let address = (addrInput ? addrInput.value : '').trim() || 'Western Leyte College';
-
-  const latInput = document.getElementById('delivery_lat');
-  const lngInput = document.getElementById('delivery_lng');
-  const dLat = parseCoordinate(latInput ? latInput.value : null, 11.01020);
-  const dLng = parseCoordinate(lngInput ? lngInput.value : null, 124.61779);
-
-  const payload = {
-    action: 'create_order',
-    total: 200.00,
-    total_amount: 200.00,
-    subtotal: 170.00,
-    delivery_fee: 30.00,
-    delivery_address: address,
-    delivery_lat: dLat,
-    delivery_lng: dLng,
-    customer_lat: dLat,
-    customer_lng: dLng,
-    payment_method: paymentMethod,
-    cart: [
-      { name: 'Signature Meal Combo', store: 'Food Dash Grill', price: 170.00, qty: 1, icon: '🍱' }
-    ],
-    ...extraData
-  };
-
-  fetch('api_orders.php', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  })
-  .then(res => {
-    if (!res.ok) {
-      return res.text().then(t => { throw new Error('HTTP ' + res.status + ': ' + t); });
-    }
-    return res.json();
-  })
-  .then(data => {
-    if (data.success || data.order_id) {
-      showToast('Order confirmed! Redirecting...');
-      const orderId = data.order_id || 0;
-      const redirectUrl = data.redirect_url || ('customer_dashboard.php?order_placed=1&order_id=' + orderId);
-
-      try {
-        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'ORDER_PLACED',
-            orderId: orderId,
-            redirectUrl: redirectUrl
-          }));
-        }
-      } catch(e) {}
-
-      setTimeout(() => {
-        window.location.href = redirectUrl;
-      }, 350);
-    } else {
-      showToast(data.message || 'Payment authorization failed', false);
-      resetModalButtons();
-    }
-  })
-  .catch(err => {
-    console.error('Order submission error:', err);
-    showToast(err.message || 'Network error occurred', false);
-    resetModalButtons();
-  });
-}
-
-function handleCheckoutTrigger(e) {
-  if (e && e.preventDefault) e.preventDefault();
-
-  const addrInput = document.getElementById('deliveryAddressInput');
-  const address = (addrInput ? addrInput.value : '').trim() || 'Western Leyte College';
-
-  if (currentMethod === 'Apple Pay') {
-    openApplePayModal(address);
-  } else if (currentMethod === 'Cash on Delivery (COD)' || currentMethod.includes('Cash') || currentMethod.includes('COD')) {
-    openCodModal(address);
-  } else {
-    openWalletModal(currentMethod, address);
-  }
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-  // 1. Eliminate HTML5 pattern validation issues
-  document.querySelectorAll('input, textarea, select, form').forEach(el => {
-    if (el.hasAttribute('pattern')) el.removeAttribute('pattern');
-    if (el.hasAttribute('required')) el.removeAttribute('required');
-  });
-
-  const form = document.getElementById('checkoutForm');
-  if (form) {
-    form.setAttribute('novalidate', 'novalidate');
-    form.noValidate = true;
-    form.addEventListener('submit', handleCheckoutTrigger);
-  }
-
-  // 2. Attach active click listeners to every payment card container
-  document.querySelectorAll('.payment-card, .pay-option, input[name="payment_method"]').forEach(elem => {
-    elem.addEventListener('click', function(e) {
-      let method = this.getAttribute('data-method') || this.value;
-      if (!method) {
-        const parent = this.closest('.payment-card, .pay-option');
-        if (parent) method = parent.getAttribute('data-method');
-      }
-      if (method) {
-        selectPaymentMethod(method);
-      }
-    });
-  });
-
-  // Default to Cash on Delivery (COD)
-  selectPaymentMethod('Cash on Delivery (COD)');
-});
-</script>
+<!-- 5. Cache-busted script loader -->
+<script src="assets/js/checkout.js?v=<?= time() ?>"></script>
 
 </body>
 </html>
