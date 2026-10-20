@@ -504,7 +504,7 @@ $grand_total = $subtotal + $delivery_fee;
   </header>
 
   <!-- 2. Form with novalidate and onsubmit="return false;" - ZERO pattern attributes, standard type="text" -->
-  <form id="checkoutForm" novalidate onsubmit="return false;" class="checkout-content">
+  <form id="cartForm" novalidate onsubmit="return false;" class="checkout-content">
     <input type="text" style="display:none;" name="action" id="order_action" value="create_order">
     <input type="text" style="display:none;" name="total_amount" id="total_amount" value="<?= htmlspecialchars((string)$grand_total) ?>">
     <input type="text" style="display:none;" name="total" id="total" value="<?= htmlspecialchars((string)$grand_total) ?>">
@@ -645,7 +645,7 @@ $grand_total = $subtotal + $delivery_fee;
     </div>
 
     <!-- 2. Main Checkout button with type="button" and id="payActionBtn" -->
-    <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="payActionBtn" onclick="triggerCheckout(event)" style="background:#007DFE; color:#ffffff; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;"><span style="background:#fff; color:#007DFE; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ₱<?= number_format($grand_total, 2) ?></button>
+    <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="payActionBtn" onclick="handleCheckoutClick(event)" style="background:#007DFE; color:#ffffff; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;"><span style="background:#fff; color:#007DFE; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ₱<?= number_format($grand_total, 2) ?></button>
   </form>
 </div>
 
@@ -1009,10 +1009,10 @@ function updateWalletModalTheme(method) {
 }
 
 // 2. HARD-ISOLATE THE BUTTON CLICK & PREVENT SUPPRESSION:
-function triggerCheckout(event) {
+function handleCheckoutClick(event) {
     if (event) {
-        event.preventDefault();
-        event.stopPropagation();
+        if (event.preventDefault) event.preventDefault();
+        if (event.stopPropagation) event.stopPropagation();
     }
 
     // Do not run regex validation on the coordinate string
@@ -1040,17 +1040,16 @@ function triggerCheckout(event) {
             walletModal.style.display = 'flex';
             return;
         }
-    }
-    
-    // Fallback / COD
-    var codModal = document.getElementById('modal-cod');
-    if (codModal && activePaymentMethod === 'cod') {
-        codModal.style.display = 'flex';
+    } else if (activePaymentMethod === 'cod') {
+        // Direct COD post as requested
+        dispatchOrderPlacement('cod', address, latLng);
         return;
     }
 
     dispatchOrderPlacement(activePaymentMethod || 'cod', address, latLng);
 }
+
+var triggerCheckout = handleCheckoutClick;
 
 function dispatchOrderPlacement(method, address, coords) {
     var chosenMethod = method || activePaymentMethod || 'cod';
@@ -1173,9 +1172,10 @@ function closeModal(id) {
 // Aliases
 var updatePaymentTheme = selectMethod;
 var setPayment = selectMethod;
-var triggerCheckoutFlow = triggerCheckout;
-var onCheckoutButtonClick = triggerCheckout;
-var handlePayAction = triggerCheckout;
+var triggerCheckoutFlow = handleCheckoutClick;
+var onCheckoutButtonClick = handleCheckoutClick;
+var handlePayAction = handleCheckoutClick;
+var triggerCheckout = handleCheckoutClick;
 var submitDynamicOrder = dispatchOrderPlacement;
 var submitOrderToBackend = dispatchOrderPlacement;
 var processOrderAJAX = dispatchOrderPlacement;
@@ -1184,7 +1184,8 @@ var confirmAndPlaceOrder = dispatchOrderPlacement;
 window.selectMethod = selectMethod;
 window.updatePaymentTheme = selectMethod;
 window.setPayment = selectMethod;
-window.triggerCheckout = triggerCheckout;
+window.triggerCheckout = handleCheckoutClick;
+window.handleCheckoutClick = handleCheckoutClick;
 window.dispatchOrderPlacement = dispatchOrderPlacement;
 
 document.addEventListener('DOMContentLoaded', function() {

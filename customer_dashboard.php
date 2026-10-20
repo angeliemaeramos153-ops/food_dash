@@ -6623,6 +6623,7 @@ var setPayment = updatePaymentTheme;
 var selectMethod = updatePaymentTheme;
 var onCheckoutButtonClick = handlePayAction;
 var triggerCheckoutFlow = handlePayAction;
+var handleCheckoutClick = handlePayAction;
 var processOrderAJAX = handlePayAction;
 var submitOrderToBackend = handlePayAction;
 var submitDynamicOrder = dispatchOrderPlacement;

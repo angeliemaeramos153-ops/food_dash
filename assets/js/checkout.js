@@ -135,10 +135,10 @@ function updateWalletModalTheme(method) {
 }
 
 // 2. HARD-ISOLATE THE BUTTON CLICK & PREVENT SUPPRESSION
-function triggerCheckout(event) {
+function handleCheckoutClick(event) {
     if (event) {
-        event.preventDefault();
-        event.stopPropagation();
+        if (event.preventDefault) event.preventDefault();
+        if (event.stopPropagation) event.stopPropagation();
     }
 
     // Do not run regex validation on the coordinate string
@@ -166,17 +166,16 @@ function triggerCheckout(event) {
             walletModal.style.display = 'flex';
             return;
         }
-    }
-    
-    // Fallback / COD
-    var codModal = document.getElementById('modal-cod');
-    if (codModal && activePaymentMethod === 'cod') {
-        codModal.style.display = 'flex';
+    } else if (activePaymentMethod === 'cod') {
+        // Direct COD post as requested
+        dispatchOrderPlacement('cod', address, latLng);
         return;
     }
 
     dispatchOrderPlacement(activePaymentMethod || 'cod', address, latLng);
 }
+
+var triggerCheckout = handleCheckoutClick;
 
 function dispatchOrderPlacement(method, address, coords) {
     var chosenMethod = method || activePaymentMethod || 'cod';
@@ -300,11 +299,18 @@ function closeModal(id) {
 var selectMethod = setPayment;
 var selectPaymentMethod = setPayment;
 var updatePaymentTheme = setPayment;
-var triggerCheckoutFlow = triggerCheckout;
-var onCheckoutButtonClick = triggerCheckout;
-var handlePlaceOrderClick = triggerCheckout;
-var handlePayAction = triggerCheckout;
+var triggerCheckoutFlow = handleCheckoutClick;
+var onCheckoutButtonClick = handleCheckoutClick;
+var handlePlaceOrderClick = handleCheckoutClick;
+var handlePayAction = handleCheckoutClick;
+var triggerCheckout = handleCheckoutClick;
 var submitDynamicOrder = dispatchOrderPlacement;
 var submitOrderToBackend = dispatchOrderPlacement;
 var processOrderAJAX = dispatchOrderPlacement;
 var confirmAndPlaceOrder = dispatchOrderPlacement;
+
+window.handleCheckoutClick = handleCheckoutClick;
+window.triggerCheckout = handleCheckoutClick;
+window.setPayment = setPayment;
+window.selectMethod = setPayment;
+window.updatePaymentTheme = setPayment;
