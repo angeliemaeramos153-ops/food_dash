@@ -664,7 +664,9 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       z-index: 80;
     }
 
+    .demo-credentials-modal,
     .demo-accounts-popup {
+      display: none;
       position: absolute;
       top: calc(100% + 6px);
       left: 0;
@@ -675,23 +677,14 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       box-shadow: 0 16px 36px rgba(55, 65, 22, 0.22), 0 3px 10px rgba(216, 143, 42, 0.15);
       padding: 12px 12px 10px;
       z-index: 999;
-      opacity: 0;
-      visibility: hidden;
-      transform: translateY(-8px) scale(0.98);
-      pointer-events: none;
-      transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-                  transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-                  visibility 0.22s step-end;
-    }
-
-    .demo-accounts-popup.open {
       opacity: 1;
       visibility: visible;
-      transform: translateY(0) scale(1);
       pointer-events: auto;
-      transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-                  transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-                  visibility 0.22s step-start;
+    }
+
+    .demo-credentials-modal.open,
+    .demo-accounts-popup.open {
+      display: block;
     }
 
     .demo-popup-arrow {
@@ -1166,7 +1159,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       
       <!-- LOGIN FORM -->
       <div id="login-section" class="form-section <?php echo $active_tab === 'login' ? 'active' : ''; ?>">
-        <form action="login.php" method="POST" id="login-form" autocomplete="on">
+        <form action="login.php" method="POST" id="login-form" autocomplete="off">
           <div class="social-container">
             <button type="button" title="Google Login" onclick="triggerSocialLogin('Google')"><i class="fa-brands fa-google"></i></button>
             <button type="button" title="GitHub Login" onclick="triggerSocialLogin('GitHub')"><i class="fa-brands fa-github"></i></button>
@@ -1177,12 +1170,12 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
           <div class="input-box-wrapper" id="loginUserWrapper">
             <div class="input-box <?php echo ($lockout_remaining_seconds > 0) ? 'disabled' : ''; ?>" id="loginUserBox">
               <i class="fa-solid fa-user field-icon"></i>
-              <input type="text" name="username" id="login_username" autocomplete="username" value="" required <?php echo ($lockout_remaining_seconds > 0) ? 'disabled' : ''; ?>>
+              <input type="text" name="username" id="login_username" autocomplete="off" value="" required <?php echo ($lockout_remaining_seconds > 0) ? 'disabled' : ''; ?>>
               <label>Username</label>
             </div>
 
             <!-- FLOATING DEMO ACCOUNT HELPER DROPDOWN POPUP -->
-            <div class="demo-accounts-popup" id="demoAccountsPopup" role="dialog" aria-label="Demo Account Credentials Helper" aria-hidden="true">
+            <div class="demo-credentials-modal demo-accounts-popup" id="demoCredentialsModal" style="display: none;" role="dialog" aria-label="Demo Account Credentials Helper" aria-hidden="true">
               <div class="demo-popup-arrow"></div>
               <div class="demo-popup-header">
                 <div class="demo-popup-title">
@@ -1286,7 +1279,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
 
           <div class="input-box <?php echo ($lockout_remaining_seconds > 0) ? 'disabled' : ''; ?>" id="loginPassBox">
             <i class="fa-solid fa-lock field-icon"></i>
-            <input type="password" name="password" id="login_password" autocomplete="current-password" value="" required <?php echo ($lockout_remaining_seconds > 0) ? 'disabled' : ''; ?>>
+            <input type="password" name="password" id="login_password" autocomplete="off" value="" required <?php echo ($lockout_remaining_seconds > 0) ? 'disabled' : ''; ?>>
             <label>Password</label>
             <span class="toggle-pass-btn" onclick="toggleVisibility('login_password')">Show</span>
           </div>
@@ -1297,7 +1290,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
 
           <!-- DEV HELPER BADGE / TOGGLE LINK BENEATH PASSWORD ROW -->
           <div class="demo-helper-bar">
-            <button type="button" class="demo-helper-toggle" id="demoHelperToggle" title="Open demo test accounts &amp; credentials autofill" aria-haspopup="dialog" aria-expanded="false">
+            <button type="button" class="demo-helper-toggle" id="quickDemoBtn" title="Open demo test accounts &amp; credentials autofill" aria-haspopup="dialog" aria-expanded="false">
               <i class="fa-solid fa-key demo-key-icon"></i>
               <span class="demo-helper-text">Quick Demo Logins <span class="demo-helper-sub">(Forgot Password Helper)</span></span>
             </button>
@@ -1456,35 +1449,44 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     // ================================================================
     // DEMO ACCOUNT HELPER & CREDENTIAL AUTOFILL LOGIC
     // ================================================================
+    function getDemoModal() {
+      return document.getElementById('demoCredentialsModal') || document.getElementById('demoAccountsPopup');
+    }
+
     function isDemoPopupOpen() {
-      const popup = document.getElementById('demoAccountsPopup');
-      return popup && popup.classList.contains('open');
+      const modal = getDemoModal();
+      return modal && modal.style.display !== 'none' && modal.style.display !== '';
     }
 
     function openDemoPopup() {
-      const popup = document.getElementById('demoAccountsPopup');
-      const toggleBtn = document.getElementById('demoHelperToggle');
-      if (!popup) return;
-      popup.classList.add('open');
-      popup.setAttribute('aria-hidden', 'false');
+      const modal = getDemoModal();
+      const toggleBtn = document.getElementById('quickDemoBtn') || document.getElementById('demoHelperToggle');
+      if (!modal) return;
+      modal.style.display = 'block';
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
       if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
     }
 
     function closeDemoPopup() {
-      const popup = document.getElementById('demoAccountsPopup');
-      const toggleBtn = document.getElementById('demoHelperToggle');
-      if (!popup) return;
-      popup.classList.remove('open');
-      popup.setAttribute('aria-hidden', 'true');
+      const modal = getDemoModal();
+      const toggleBtn = document.getElementById('quickDemoBtn') || document.getElementById('demoHelperToggle');
+      if (!modal) return;
+      modal.style.display = 'none';
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
       if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
     }
 
     function toggleDemoPopup() {
-      if (isDemoPopupOpen()) {
-        closeDemoPopup();
-      } else {
-        openDemoPopup();
-      }
+      const modal = getDemoModal();
+      if (!modal) return;
+      modal.style.display = (modal.style.display === 'none' || !modal.style.display) ? 'block' : 'none';
+      const isOpen = modal.style.display === 'block';
+      modal.classList.toggle('open', isOpen);
+      modal.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+      const toggleBtn = document.getElementById('quickDemoBtn') || document.getElementById('demoHelperToggle');
+      if (toggleBtn) toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     }
 
     function filterDemoAccounts(query) {
@@ -1765,50 +1767,54 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       // DEMO ACCOUNT HELPER EVENT LISTENERS
       // ================================================================
       const loginUser = document.getElementById('login_username') || document.getElementById('login-user');
-      const demoPopup = document.getElementById('demoAccountsPopup');
-      const demoToggle = document.getElementById('demoHelperToggle');
+      const demoModal = document.getElementById('demoCredentialsModal') || document.getElementById('demoAccountsPopup');
+      const quickDemoBtn = document.getElementById('quickDemoBtn') || document.getElementById('demoHelperToggle');
       const demoClose = document.getElementById('demoPopupCloseBtn');
       const rolePills = document.querySelectorAll('.demo-role-pill');
       const accountItems = document.querySelectorAll('.demo-account-item');
 
-      // 1. Focus on Username opens dropdown
+      // 1. Only filter accounts when typing into Username if modal is already open (do NOT open on focus/typing)
       if (loginUser) {
-        loginUser.addEventListener('focus', function() {
-          if (!loginUser.disabled) {
-            openDemoPopup();
-          }
-        });
-
-        // 2. Typing into Username filters accounts
         loginUser.addEventListener('input', function() {
-          if (!loginUser.disabled) {
-            if (!isDemoPopupOpen()) {
-              openDemoPopup();
-            }
+          if (!loginUser.disabled && isDemoPopupOpen()) {
             filterDemoAccounts(this.value);
           }
         });
       }
 
-      // 3. Toggle button beneath password row
-      if (demoToggle) {
-        demoToggle.addEventListener('click', function(e) {
+      // 2. Trigger button (#quickDemoBtn) toggles modal on click
+      if (quickDemoBtn) {
+        quickDemoBtn.addEventListener('click', function(e) {
           e.preventDefault();
           e.stopPropagation();
-          toggleDemoPopup();
+          const modal = document.getElementById('demoCredentialsModal') || document.getElementById('demoAccountsPopup');
+          if (modal) {
+            modal.style.display = (modal.style.display === 'none' || !modal.style.display) ? 'block' : 'none';
+            const isOpen = modal.style.display === 'block';
+            modal.classList.toggle('open', isOpen);
+            modal.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+            quickDemoBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+          }
         });
       }
 
-      // 4. Close button inside popup
+      // 3. Close button ('x') inside modal hides modal
       if (demoClose) {
         demoClose.addEventListener('click', function(e) {
           e.preventDefault();
           e.stopPropagation();
-          closeDemoPopup();
+          const modal = document.getElementById('demoCredentialsModal') || document.getElementById('demoAccountsPopup');
+          if (modal) {
+            modal.style.display = 'none';
+            modal.classList.remove('open');
+            modal.setAttribute('aria-hidden', 'true');
+          }
+          const trigger = document.getElementById('quickDemoBtn') || document.getElementById('demoHelperToggle');
+          if (trigger) trigger.setAttribute('aria-expanded', 'false');
         });
       }
 
-      // 5. Role filter pills
+      // 4. Role filter pills
       rolePills.forEach(pill => {
         pill.addEventListener('click', function(e) {
           e.preventDefault();
@@ -1817,7 +1823,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
         });
       });
 
-      // 6. Click-to-fill on account rows (plus Enter / Space keyboard navigation)
+      // 5. Click-to-fill on account rows (plus Enter / Space keyboard navigation)
       accountItems.forEach(item => {
         item.addEventListener('click', function(e) {
           e.preventDefault();
@@ -1833,22 +1839,30 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
         });
       });
 
-      // 7. Click outside to close cleanly
+      // 6. Click anywhere outside modal dismisses it cleanly
       document.addEventListener('click', function(e) {
-        if (!isDemoPopupOpen()) return;
-        const isInsidePopup = demoPopup && demoPopup.contains(e.target);
-        const isOnInput = loginUser && (loginUser === e.target || loginUser.contains(e.target));
-        const isOnToggle = demoToggle && (demoToggle === e.target || demoToggle.contains(e.target));
-
-        if (!isInsidePopup && !isOnInput && !isOnToggle) {
-          closeDemoPopup();
+        const modal = document.getElementById('demoCredentialsModal') || document.getElementById('demoAccountsPopup');
+        const trigger = document.getElementById('quickDemoBtn') || document.getElementById('demoHelperToggle');
+        if (!modal || modal.style.display === 'none') return;
+        if (!modal.contains(e.target) && (!trigger || !trigger.contains(e.target))) {
+          modal.style.display = 'none';
+          modal.classList.remove('open');
+          modal.setAttribute('aria-hidden', 'true');
+          if (trigger) trigger.setAttribute('aria-expanded', 'false');
         }
       });
 
-      // 8. Escape key closes popup
+      // 7. Escape key closes modal
       document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && isDemoPopupOpen()) {
-          closeDemoPopup();
+        if (e.key === 'Escape') {
+          const modal = document.getElementById('demoCredentialsModal') || document.getElementById('demoAccountsPopup');
+          if (modal && modal.style.display !== 'none') {
+            modal.style.display = 'none';
+            modal.classList.remove('open');
+            modal.setAttribute('aria-hidden', 'true');
+            const trigger = document.getElementById('quickDemoBtn') || document.getElementById('demoHelperToggle');
+            if (trigger) trigger.setAttribute('aria-expanded', 'false');
+          }
         }
       });
 
