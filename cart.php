@@ -1126,3 +1126,34 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 </body>
 </html>
+
+
+<script>
+window.openPaymentPopup = function(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    var selectedRadio = document.querySelector('input[name="payment_method"]:checked') ||
+                        document.querySelector('input[name="payment_option"]:checked');
+    var method = selectedRadio ? selectedRadio.value : 'maya';
+
+    var walletModal = document.getElementById('walletModal');
+    var appleModal = document.getElementById('applePayModal');
+
+    if (method === 'apple_pay') {
+        if (appleModal) {
+            appleModal.style.cssText = 'display:flex !important; position:fixed; inset:0; z-index:999999; justify-content:center; align-items:flex-end; background:rgba(0,0,0,0.6);';
+        }
+    } else {
+        if (walletModal) {
+            walletModal.style.cssText = 'display:flex !important; position:fixed; inset:0; z-index:999999; justify-content:center; align-items:center; background:rgba(0,0,0,0.6);';
+            var titleElem = document.getElementById('walletModalTitle') || document.getElementById('walletTitle');
+            if (titleElem) {
+                titleElem.innerText = method.toUpperCase() + ' Verification';
+            }
+        }
+    }
+    return false;
+};
+</script>

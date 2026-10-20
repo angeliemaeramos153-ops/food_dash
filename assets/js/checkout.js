@@ -237,11 +237,11 @@ function finalizeOrder(method, address, coords) {
     .then(function(res) { return res.json(); })
     .then(function(data) {
         try { localStorage.removeItem('foodDashCart'); } catch(e) {}
-        window.location.href = 'customer_dashboard.php?order_placed=1';
+        // redirect removed
     })
     .catch(function() {
         try { localStorage.removeItem('foodDashCart'); } catch(e) {}
-        window.location.href = 'customer_dashboard.php?order_placed=1';
+        // redirect removed
     });
 }
 
@@ -331,3 +331,4 @@ window.selectMethod = setPayment;
 window.updatePaymentTheme = setPayment;
 
 } // end guard: not cart.php
+
