@@ -566,7 +566,7 @@ $grand_total  = $subtotal + $delivery_fee;
 
 <!-- SECTION 5: STICKY ACTION BUTTON -->
 <div class="sticky-pay-bar">
-  <button type="button" id="mainPayBtn" onclick="openPaymentPopup(event)">
+  <button type="button" id="mainPayBtn">
     <span style="background:#fff;color:#007DFE;font-weight:bold;padding:2px 7px;border-radius:4px;font-size:12px;">G</span>
     Pay with GCash &#183; &#8369;<?= number_format($grand_total, 2) ?>
   </button>
@@ -1058,6 +1058,43 @@ document.addEventListener('DOMContentLoaded', function() {
     initQtyMap();
     syncCartFromLocalStorage();
     selectMethod('gcash');
+
+    // ── HARD-ATTACH mainPayBtn click with useCapture so no external script can intercept ──
+    var payBtn = document.getElementById('mainPayBtn');
+    if (payBtn) {
+        // Remove any stale onclick attribute that could conflict
+        payBtn.removeAttribute('onclick');
+        payBtn.addEventListener('click', function(e) {
+            if (e && e.preventDefault)  e.preventDefault();
+            if (e && e.stopPropagation) e.stopPropagation();
+            if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
+            openPaymentPopup(e);
+            return false;
+        }, true); // useCapture = true: fires before any bubble-phase listeners
+    }
+
+    // ── Re-pin all globals AFTER DOMContentLoaded so cart.php always wins over checkout.js ──
+    window.activePaymentMethod   = activePaymentMethod;
+    window.currentGrandTotal     = currentGrandTotal;
+    window.currentSubtotal       = currentSubtotal;
+    window.currentDeliveryFee    = currentDeliveryFee;
+    window.grandTotalFormatted   = grandTotalFormatted;
+    window.selectMethod          = selectMethod;
+    window.openPaymentPopup      = openPaymentPopup;
+    window.handleCheckoutClick   = openPaymentPopup;
+    window.triggerCheckout       = openPaymentPopup;
+    window.triggerCheckoutFlow   = openPaymentPopup;
+    window.onCheckoutButtonClick = openPaymentPopup;
+    window.handlePayAction       = openPaymentPopup;
+    window.finalizeOrder         = finalizeOrder;
+    window.dispatchOrderPlacement = finalizeOrder;
+    window.confirmAndPlaceOrder  = finalizeOrder;
+    window.submitDynamicOrder    = finalizeOrder;
+    window.closeModal            = closeModal;
+    window.increaseQty           = increaseQty;
+    window.decreaseQty           = decreaseQty;
+    window.updatePaymentTheme    = selectMethod;
+    window.setPayment            = selectMethod;
 });
 </script>
 </body>
