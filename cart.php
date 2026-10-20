@@ -504,7 +504,7 @@ $grand_total = $subtotal + $delivery_fee;
   </header>
 
   <!-- 2. Form with novalidate and onsubmit="return false;" - ZERO pattern attributes, standard type="text" -->
-  <form id="cartForm" novalidate onsubmit="return false;" class="checkout-content">
+  <form id="cartCheckoutForm" novalidate onsubmit="return false;" class="checkout-content">
     <input type="text" style="display:none;" name="action" id="order_action" value="create_order">
     <input type="text" style="display:none;" name="total_amount" id="total_amount" value="<?= htmlspecialchars((string)$grand_total) ?>">
     <input type="text" style="display:none;" name="total" id="total" value="<?= htmlspecialchars((string)$grand_total) ?>">
@@ -644,8 +644,8 @@ $grand_total = $subtotal + $delivery_fee;
       <div class="summary-row total"><span>Total Amount</span><span id="displayTotal">₱<?= number_format($grand_total, 2) ?></span></div>
     </div>
 
-    <!-- 2. Main Checkout button with type="button" and id="payActionBtn" -->
-    <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="payActionBtn" onclick="handleCheckoutClick(event)" style="background:#007DFE; color:#ffffff; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;"><span style="background:#fff; color:#007DFE; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ₱<?= number_format($grand_total, 2) ?></button>
+    <!-- 2. Main Checkout button with type="button" and id="mainPayBtn" -->
+    <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="mainPayBtn" onclick="openPaymentPopup(event)" style="background:#007DFE; color:#ffffff; width:100%; border:none; border-radius:12px; padding:15px; font-weight:bold; font-size:16px; cursor:pointer;"><span style="background:#fff; color:#007DFE; font-weight:bold; padding:2px 6px; border-radius:4px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ₱<?= number_format($grand_total, 2) ?></button>
   </form>
 </div>
 
@@ -749,7 +749,7 @@ $grand_total = $subtotal + $delivery_fee;
         </div>
         <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Instant Processing</small>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" id="walletSubmitBtn" onclick="dispatchOrderPlacement(activePaymentMethod)" style="background:#007DFE; color:#ffffff; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" id="walletSubmitBtn" onclick="finalizeOrder(activePaymentMethod)" style="background:#007DFE; color:#ffffff; margin-top:0;">
         <i class="fa-solid fa-shield-halved"></i> Confirm & Pay • ₱<?= number_format($grand_total, 2) ?>
       </button>
     </div>
@@ -792,8 +792,8 @@ $grand_total = $subtotal + $delivery_fee;
         <i class="fa-solid fa-money-bill-wave" style="font-size:20px; color:#15803d;"></i>
         <span id="codNote">Please prepare exact cash of <b id="codCashAmt">₱<?= number_format($grand_total, 2) ?></b> upon arrival for swift handover.</span>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" id="codSubmitBtn" onclick="dispatchOrderPlacement('cod')" style="background:#283d23; color:#ffffff; margin-top:0;">
-        <i class="fa-solid fa-check"></i> Confirm COD Order • ₱<?= number_format($grand_total, 2) ?>
+      <button type="button" class="btn-submit-order checkout-btn" id="codSubmitBtn" onclick="finalizeOrder('cod')" style="background:#283d23; color:#ffffff; margin-top:0;">
+        <i class="fa-solid fa-check"></i> Confirm Order • ₱<?= number_format($grand_total, 2) ?>
       </button>
     </div>
   </div>
@@ -890,7 +890,7 @@ function selectMethod(method) {
     selectedMethod = method;
     activeMethod = method;
     currentPayment = method;
-    var btn = document.getElementById('payActionBtn');
+    var btn = document.getElementById('mainPayBtn') || document.getElementById('payActionBtn');
     if (!btn) return;
 
     var methods = ['cod', 'gcash', 'maya', 'gotyme', 'apple_pay'];
@@ -1003,13 +1003,13 @@ function updateWalletModalTheme(method) {
     var codCash = document.getElementById('codCashAmt');
     if (codCash) codCash.textContent = grandTotalFormatted;
     var codBtn = document.getElementById('codSubmitBtn');
-    if (codBtn) codBtn.innerHTML = '<i class="fa-solid fa-check"></i> Confirm COD Order • ' + grandTotalFormatted;
+    if (codBtn) codBtn.innerHTML = '<i class="fa-solid fa-check"></i> Confirm Order • ' + grandTotalFormatted;
     var appleTot = document.getElementById('appleModalTotal');
     if (appleTot) appleTot.textContent = grandTotalFormatted;
 }
 
 // 2. HARD-ISOLATE THE BUTTON CLICK & PREVENT SUPPRESSION:
-function handleCheckoutClick(event) {
+function openPaymentPopup(event) {
     if (event) {
         if (event.preventDefault) event.preventDefault();
         if (event.stopPropagation) event.stopPropagation();
@@ -1041,17 +1041,20 @@ function handleCheckoutClick(event) {
             return;
         }
     } else if (activePaymentMethod === 'cod') {
-        // Direct COD post as requested
-        dispatchOrderPlacement('cod', address, latLng);
-        return;
+        var codModal = document.getElementById('modal-cod');
+        if (codModal) {
+            codModal.style.display = 'flex';
+            return;
+        }
     }
 
-    dispatchOrderPlacement(activePaymentMethod || 'cod', address, latLng);
+    finalizeOrder(activePaymentMethod || 'cod', address, latLng);
 }
 
-var triggerCheckout = handleCheckoutClick;
+var handleCheckoutClick = openPaymentPopup;
+var triggerCheckout = openPaymentPopup;
 
-function dispatchOrderPlacement(method, address, coords) {
+function finalizeOrder(method, address, coords) {
     var chosenMethod = method || activePaymentMethod || 'cod';
     var chosenAddress = address || document.getElementById('delivery_address')?.value || 'Western Leyte College';
     var chosenCoords = coords || document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
@@ -1088,10 +1091,12 @@ function dispatchOrderPlacement(method, address, coords) {
         } catch(e) {}
     }
 
-    var submitBtn = document.getElementById('payActionBtn');
+    var submitBtn = document.getElementById('mainPayBtn') || document.getElementById('payActionBtn');
     if (submitBtn) submitBtn.disabled = true;
     var walletBtn = document.getElementById('walletSubmitBtn');
     if (walletBtn) walletBtn.disabled = true;
+    var codBtn = document.getElementById('codSubmitBtn');
+    if (codBtn) codBtn.disabled = true;
 
     fetch('api_orders.php', {
         method: 'POST',
@@ -1108,6 +1113,8 @@ function dispatchOrderPlacement(method, address, coords) {
         window.location.href = 'customer_dashboard.php?order_placed=1';
     });
 }
+
+var dispatchOrderPlacement = finalizeOrder;
 
 function startApplePayScan() {
     var scanLine = document.getElementById('appleFaceIdScanLine');
@@ -1159,7 +1166,7 @@ function startApplePayScan() {
         setTimeout(function() {
             var latLng = document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
             var address = document.getElementById('delivery_address')?.value || 'Western Leyte College';
-            dispatchOrderPlacement('apple_pay', address, latLng);
+            finalizeOrder('apple_pay', address, latLng);
         }, 700);
     }, 1200);
 }
@@ -1172,21 +1179,22 @@ function closeModal(id) {
 // Aliases
 var updatePaymentTheme = selectMethod;
 var setPayment = selectMethod;
-var triggerCheckoutFlow = handleCheckoutClick;
-var onCheckoutButtonClick = handleCheckoutClick;
-var handlePayAction = handleCheckoutClick;
-var triggerCheckout = handleCheckoutClick;
-var submitDynamicOrder = dispatchOrderPlacement;
-var submitOrderToBackend = dispatchOrderPlacement;
-var processOrderAJAX = dispatchOrderPlacement;
-var confirmAndPlaceOrder = dispatchOrderPlacement;
+var triggerCheckoutFlow = openPaymentPopup;
+var onCheckoutButtonClick = openPaymentPopup;
+var handlePayAction = openPaymentPopup;
+var submitDynamicOrder = finalizeOrder;
+var submitOrderToBackend = finalizeOrder;
+var processOrderAJAX = finalizeOrder;
+var confirmAndPlaceOrder = finalizeOrder;
 
 window.selectMethod = selectMethod;
 window.updatePaymentTheme = selectMethod;
 window.setPayment = selectMethod;
-window.triggerCheckout = handleCheckoutClick;
-window.handleCheckoutClick = handleCheckoutClick;
-window.dispatchOrderPlacement = dispatchOrderPlacement;
+window.openPaymentPopup = openPaymentPopup;
+window.handleCheckoutClick = openPaymentPopup;
+window.triggerCheckout = openPaymentPopup;
+window.finalizeOrder = finalizeOrder;
+window.dispatchOrderPlacement = finalizeOrder;
 
 document.addEventListener('DOMContentLoaded', function() {
     syncCartFromLocalStorage();

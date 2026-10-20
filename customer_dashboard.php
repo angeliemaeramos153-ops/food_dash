@@ -6624,9 +6624,11 @@ var selectMethod = updatePaymentTheme;
 var onCheckoutButtonClick = handlePayAction;
 var triggerCheckoutFlow = handlePayAction;
 var handleCheckoutClick = handlePayAction;
+var openPaymentPopup = handlePayAction;
 var processOrderAJAX = handlePayAction;
 var submitOrderToBackend = handlePayAction;
 var submitDynamicOrder = dispatchOrderPlacement;
+var finalizeOrder = dispatchOrderPlacement;
 
 document.addEventListener('DOMContentLoaded', function() {
     try {

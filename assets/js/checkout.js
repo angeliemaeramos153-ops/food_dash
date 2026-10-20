@@ -135,7 +135,7 @@ function updateWalletModalTheme(method) {
 }
 
 // 2. HARD-ISOLATE THE BUTTON CLICK & PREVENT SUPPRESSION
-function handleCheckoutClick(event) {
+function openPaymentPopup(event) {
     if (event) {
         if (event.preventDefault) event.preventDefault();
         if (event.stopPropagation) event.stopPropagation();
@@ -167,17 +167,20 @@ function handleCheckoutClick(event) {
             return;
         }
     } else if (activePaymentMethod === 'cod') {
-        // Direct COD post as requested
-        dispatchOrderPlacement('cod', address, latLng);
-        return;
+        var codModal = document.getElementById('modal-cod');
+        if (codModal) {
+            codModal.style.display = 'flex';
+            return;
+        }
     }
 
-    dispatchOrderPlacement(activePaymentMethod || 'cod', address, latLng);
+    finalizeOrder(activePaymentMethod || 'cod', address, latLng);
 }
 
-var triggerCheckout = handleCheckoutClick;
+var handleCheckoutClick = openPaymentPopup;
+var triggerCheckout = openPaymentPopup;
 
-function dispatchOrderPlacement(method, address, coords) {
+function finalizeOrder(method, address, coords) {
     var chosenMethod = method || activePaymentMethod || 'cod';
     var chosenAddress = address || document.getElementById('delivery_address')?.value || 'Western Leyte College';
     var chosenCoords = coords || document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
@@ -285,7 +288,7 @@ function startApplePayScan() {
         setTimeout(function() {
             var latLng = document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
             var address = document.getElementById('delivery_address')?.value || 'Western Leyte College';
-            dispatchOrderPlacement('apple_pay', address, latLng);
+            finalizeOrder('apple_pay', address, latLng);
         }, 700);
     }, 1200);
 }
@@ -299,18 +302,23 @@ function closeModal(id) {
 var selectMethod = setPayment;
 var selectPaymentMethod = setPayment;
 var updatePaymentTheme = setPayment;
-var triggerCheckoutFlow = handleCheckoutClick;
-var onCheckoutButtonClick = handleCheckoutClick;
-var handlePlaceOrderClick = handleCheckoutClick;
-var handlePayAction = handleCheckoutClick;
-var triggerCheckout = handleCheckoutClick;
-var submitDynamicOrder = dispatchOrderPlacement;
-var submitOrderToBackend = dispatchOrderPlacement;
-var processOrderAJAX = dispatchOrderPlacement;
-var confirmAndPlaceOrder = dispatchOrderPlacement;
+var triggerCheckoutFlow = openPaymentPopup;
+var onCheckoutButtonClick = openPaymentPopup;
+var handlePlaceOrderClick = openPaymentPopup;
+var handlePayAction = openPaymentPopup;
+var triggerCheckout = openPaymentPopup;
+var handleCheckoutClick = openPaymentPopup;
+var submitDynamicOrder = finalizeOrder;
+var submitOrderToBackend = finalizeOrder;
+var processOrderAJAX = finalizeOrder;
+var confirmAndPlaceOrder = finalizeOrder;
+var dispatchOrderPlacement = finalizeOrder;
 
-window.handleCheckoutClick = handleCheckoutClick;
-window.triggerCheckout = handleCheckoutClick;
+window.openPaymentPopup = openPaymentPopup;
+window.handleCheckoutClick = openPaymentPopup;
+window.triggerCheckout = openPaymentPopup;
+window.finalizeOrder = finalizeOrder;
+window.dispatchOrderPlacement = finalizeOrder;
 window.setPayment = setPayment;
 window.selectMethod = setPayment;
 window.updatePaymentTheme = setPayment;
