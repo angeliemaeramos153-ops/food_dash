@@ -6570,7 +6570,8 @@ function updatePaymentTheme(method) {
     }
 }
 
-function handlePayAction() {
+function handlePayAction(e) {
+    if (e && e.preventDefault) e.preventDefault();
     try {
         if (typeof checkout === 'function') {
             checkout();
@@ -6578,7 +6579,12 @@ function handlePayAction() {
     } catch(err) {
         console.error('Pay action error:', err);
     }
+    return false;
 }
+
+var setPayment = updatePaymentTheme;
+var onCheckoutButtonClick = handlePayAction;
+var processOrderAJAX = handlePayAction;
 </script>
 <?php require_once 'gmail_simulator_modal.php'; ?>
 </body>

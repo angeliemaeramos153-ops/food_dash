@@ -483,7 +483,7 @@ $delivery_fee = 30.00;
       <div class="card-title"><i class="fa-solid fa-credit-card"></i> Payment Method</div>
       <div class="pay-options-list">
         <!-- Cash on Delivery -->
-        <div class="payment-card pay-option active" id="card-cod" data-method="cod" onclick="updatePaymentTheme('cod')">
+        <div class="payment-card pay-option active" id="card-cod" data-method="cod" onclick="setPayment('cod')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/cod.svg" alt="COD"></div>
             <div class="pay-info">
@@ -496,7 +496,7 @@ $delivery_fee = 30.00;
         </div>
 
         <!-- GCash -->
-        <div class="payment-card pay-option" id="card-gcash" data-method="gcash" onclick="updatePaymentTheme('gcash')">
+        <div class="payment-card pay-option" id="card-gcash" data-method="gcash" onclick="setPayment('gcash')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/gcash.svg" alt="GCash"></div>
             <div class="pay-info">
@@ -509,7 +509,7 @@ $delivery_fee = 30.00;
         </div>
 
         <!-- Maya -->
-        <div class="payment-card pay-option" id="card-maya" data-method="maya" onclick="updatePaymentTheme('maya')">
+        <div class="payment-card pay-option" id="card-maya" data-method="maya" onclick="setPayment('maya')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/maya.svg" alt="Maya"></div>
             <div class="pay-info">
@@ -522,7 +522,7 @@ $delivery_fee = 30.00;
         </div>
 
         <!-- GoTyme Bank -->
-        <div class="payment-card pay-option" id="card-gotyme" data-method="gotyme" onclick="updatePaymentTheme('gotyme')">
+        <div class="payment-card pay-option" id="card-gotyme" data-method="gotyme" onclick="setPayment('gotyme')">
           <div class="pay-option-left">
             <div class="pay-logo-box"><img src="assets/logos/gotyme.svg" alt="GoTyme"></div>
             <div class="pay-info">
@@ -535,7 +535,7 @@ $delivery_fee = 30.00;
         </div>
 
         <!-- Apple Pay -->
-        <div class="payment-card pay-option" id="card-apple_pay" data-method="apple_pay" onclick="updatePaymentTheme('apple_pay')">
+        <div class="payment-card pay-option" id="card-apple_pay" data-method="apple_pay" onclick="setPayment('apple_pay')">
           <div class="pay-option-left">
             <div class="pay-logo-box" style="background:#000;"><img src="assets/logos/apple-pay.svg" alt="Apple Pay"></div>
             <div class="pay-info">
@@ -558,7 +558,7 @@ $delivery_fee = 30.00;
     </div>
 
     <!-- 1. Main Checkout button with type="button" and id="payActionBtn" -->
-    <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="payActionBtn" onclick="handlePayAction()">
+    <button type="button" class="btn-submit-order checkout-btn btn-checkout" id="payActionBtn" onclick="onCheckoutButtonClick(event); return false;">
       <i class="fa-solid fa-money-bill-wave" style="margin-right:8px;"></i> Place Order • ₱200.00
     </button>
   </form>
@@ -663,7 +663,7 @@ $delivery_fee = 30.00;
         </div>
         <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Demo Auto-Filled</small>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="confirmAndPlaceOrder('gcash')" style="background:#007DFE; color:#ffffff; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" onclick="processOrderAJAX('gcash')" style="background:#007DFE; color:#ffffff; margin-top:0;">
         <i class="fa-solid fa-shield-halved"></i> Pay ₱200.00
       </button>
     </div>
@@ -708,7 +708,7 @@ $delivery_fee = 30.00;
         </div>
         <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Demo Auto-Filled</small>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="confirmAndPlaceOrder('maya')" style="background:#023a2b; color:#05B851; border:1.5px solid #05B851; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" onclick="processOrderAJAX('maya')" style="background:#023a2b; color:#05B851; border:1.5px solid #05B851; margin-top:0;">
         <i class="fa-solid fa-shield-halved"></i> Pay ₱200.00
       </button>
     </div>
@@ -744,7 +744,7 @@ $delivery_fee = 30.00;
         </div>
         <div style="font-size:14px; font-weight:700; color:#1e293b;">Western Leyte College</div>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="confirmAndPlaceOrder('gotyme')" style="background:#0a2540; color:#00d2ff; border:1.5px solid #00d2ff; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" onclick="processOrderAJAX('gotyme')" style="background:#0a2540; color:#00d2ff; border:1.5px solid #00d2ff; margin-top:0;">
         <i class="fa-solid fa-building-columns"></i> Transfer & Pay
       </button>
     </div>
@@ -784,7 +784,7 @@ $delivery_fee = 30.00;
         <i class="fa-solid fa-money-bill-wave" style="font-size:20px; color:#15803d;"></i>
         <span>Please prepare exact cash of <b>₱200.00</b> upon arrival for swift handover.</span>
       </div>
-      <button type="button" class="btn-submit-order checkout-btn" onclick="confirmAndPlaceOrder('cod')" style="background:#283d23; color:#ffffff; margin-top:0;">
+      <button type="button" class="btn-submit-order checkout-btn" onclick="processOrderAJAX('cod')" style="background:#283d23; color:#ffffff; margin-top:0;">
         <i class="fa-solid fa-check"></i> Confirm COD Order
       </button>
     </div>
@@ -797,103 +797,111 @@ $delivery_fee = 30.00;
 <!-- BULLETPROOF INLINE JAVASCRIPT CONTROLLER       -->
 <!-- ============================================== -->
 <script>
-let selectedMethod = 'cod';
-const orderTotal = '₱200.00';
+var currentPayment = 'cod';
+var totalFormatted = '₱200.00';
 
-function updatePaymentTheme(method) {
-    selectedMethod = method;
-    const btn = document.getElementById('payActionBtn');
+function setPayment(method) {
+    currentPayment = method;
+    var btn = document.getElementById('payActionBtn');
     if (!btn) return;
 
-    // Standard document.getElementById lookups - zero unvalidated querySelector strings
-    const methods = ['cod', 'gcash', 'maya', 'gotyme', 'apple_pay'];
-    for (let i = 0; i < methods.length; i++) {
-        const m = methods[i];
-        const isCurrent = (m === method);
-        const r = document.getElementById('radio-' + m);
-        if (r) r.checked = isCurrent;
-        const card = document.getElementById('card-' + m);
+    var methods = ['cod', 'gcash', 'maya', 'gotyme', 'apple_pay'];
+    for (var i = 0; i < methods.length; i++) {
+        var m = methods[i];
+        var isCurrent = (m === method);
+        var card = document.getElementById('card-' + m);
         if (card) {
-            if (isCurrent) card.classList.add('active');
-            else card.classList.remove('active');
+            if (isCurrent) {
+                card.className = 'payment-card pay-option active';
+            } else {
+                card.className = 'payment-card pay-option';
+            }
         }
-        const icon = document.getElementById('icon-' + m);
+        var r = document.getElementById('radio-' + m);
+        if (r) r.checked = isCurrent;
+        var icon = document.getElementById('icon-' + m);
         if (icon) {
             icon.className = isCurrent ? 'fa-solid fa-circle-check pay-radio' : 'fa-regular fa-circle pay-radio';
         }
     }
 
-    const hiddenMethod = document.getElementById('selectedPaymentMethod');
+    var hiddenMethod = document.getElementById('selectedPaymentMethod');
     if (hiddenMethod) hiddenMethod.value = method;
 
     if (method === 'cod') {
-        btn.style.setProperty('background-color', '#283d23', 'important');
-        btn.style.setProperty('color', '#ffffff', 'important');
-        btn.innerHTML = '<i class="fa-solid fa-money-bill-wave" style="margin-right:8px;"></i> Place Order • ' + orderTotal;
+        btn.style.cssText = 'background-color: #283d23 !important; color: #fff !important; width: 100%; border: none; border-radius: 12px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer;';
+        btn.innerHTML = '<i class="fa-solid fa-money-bill-wave"></i> Place Order • ' + totalFormatted;
     } else if (method === 'gcash') {
-        btn.style.setProperty('background-color', '#007DFE', 'important');
-        btn.style.setProperty('color', '#ffffff', 'important');
-        btn.innerHTML = '<span style="background:#fff; color:#007DFE; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ' + orderTotal;
+        btn.style.cssText = 'background-color: #007DFE !important; color: #fff !important; width: 100%; border: none; border-radius: 12px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer;';
+        btn.innerHTML = '<span style="background:#fff; color:#007DFE; font-weight:bold; border-radius:4px; padding:2px 6px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ' + totalFormatted;
     } else if (method === 'maya') {
-        btn.style.setProperty('background-color', '#023a2b', 'important');
-        btn.style.setProperty('color', '#05B851', 'important');
-        btn.innerHTML = '<span style="background:#05B851; color:#023a2b; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">M</span> Pay with Maya • ' + orderTotal;
+        btn.style.cssText = 'background-color: #023a2b !important; color: #05B851 !important; width: 100%; border: none; border-radius: 12px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer;';
+        btn.innerHTML = '<span style="background:#05B851; color:#023a2b; font-weight:bold; border-radius:4px; padding:2px 6px; margin-right:6px; font-size:12px;">M</span> Pay with Maya • ' + totalFormatted;
     } else if (method === 'gotyme') {
-        btn.style.setProperty('background-color', '#0a2540', 'important');
-        btn.style.setProperty('color', '#00d2ff', 'important');
-        btn.innerHTML = '<span style="background:#00d2ff; color:#0a2540; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">GT</span> Pay with GoTyme • ' + orderTotal;
+        btn.style.cssText = 'background-color: #0a2540 !important; color: #00d2ff !important; width: 100%; border: none; border-radius: 12px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer;';
+        btn.innerHTML = '<span style="background:#00d2ff; color:#0a2540; font-weight:bold; border-radius:4px; padding:2px 6px; margin-right:6px; font-size:12px;">GT</span> Pay with GoTyme • ' + totalFormatted;
     } else if (method === 'apple_pay') {
-        btn.style.setProperty('background-color', '#000000', 'important');
-        btn.style.setProperty('color', '#ffffff', 'important');
-        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + orderTotal;
+        btn.style.cssText = 'background-color: #000000 !important; color: #fff !important; width: 100%; border: none; border-radius: 12px; padding: 14px; font-weight: bold; font-size: 16px; cursor: pointer;';
+        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + totalFormatted;
     }
 }
 
-function handlePayAction() {
+function onCheckoutButtonClick(e) {
+    if (e && e.preventDefault) e.preventDefault();
     try {
-        if (selectedMethod === 'apple_pay') {
-            openApplePaySheet();
-        } else if (['gcash', 'maya', 'gotyme'].includes(selectedMethod)) {
-            openWalletSheet(selectedMethod);
+        if (currentPayment === 'apple_pay') {
+            showApplePayModal();
+        } else if (currentPayment === 'gcash' || currentPayment === 'maya' || currentPayment === 'gotyme') {
+            showWalletModal(currentPayment);
         } else {
-            confirmAndPlaceOrder('cod');
+            processOrderAJAX('cod');
         }
     } catch (err) {
-        console.error('Pay action error:', err);
-        // Fallback: direct order placement if modal DOM fails
-        confirmAndPlaceOrder(selectedMethod);
+        console.log('Error suppressed:', err);
+        processOrderAJAX(currentPayment);
     }
+    return false;
 }
 
-function openModal(id) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'flex';
-}
-
-function closeModal(id) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-}
-
-function openApplePaySheet() {
-    openModal('modal-apple_pay');
+function showApplePayModal() {
+    var modal = document.getElementById('modal-apple_pay');
+    if (modal) modal.style.display = 'flex';
     startApplePayScan();
 }
 
-function openWalletSheet(method) {
-    if (method === 'gcash') openModal('modal-gcash');
-    else if (method === 'maya') openModal('modal-maya');
-    else if (method === 'gotyme') openModal('modal-gotyme');
-    else openModal('modal-cod');
+function showWalletModal(method) {
+    if (method === 'gcash') {
+        var mG = document.getElementById('modal-gcash');
+        if (mG) mG.style.display = 'flex';
+    } else if (method === 'maya') {
+        var mM = document.getElementById('modal-maya');
+        if (mM) mM.style.display = 'flex';
+    } else if (method === 'gotyme') {
+        var mT = document.getElementById('modal-gotyme');
+        if (mT) mT.style.display = 'flex';
+    } else {
+        var mC = document.getElementById('modal-cod');
+        if (mC) mC.style.display = 'flex';
+    }
+}
+
+function showCodModal() {
+    var m = document.getElementById('modal-cod');
+    if (m) m.style.display = 'flex';
+}
+
+function closeModal(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
 }
 
 function startApplePayScan() {
-    const scanLine = document.getElementById('appleFaceIdScanLine');
-    const svg = document.getElementById('appleFaceIdSvg');
-    const check = document.getElementById('appleFaceIdCheck');
-    const box = document.getElementById('appleFaceIdBox');
-    const status = document.getElementById('appleFaceIdStatusText');
-    const btn = document.getElementById('btnApplePayTrigger');
+    var scanLine = document.getElementById('appleFaceIdScanLine');
+    var svg = document.getElementById('appleFaceIdSvg');
+    var check = document.getElementById('appleFaceIdCheck');
+    var box = document.getElementById('appleFaceIdBox');
+    var status = document.getElementById('appleFaceIdStatusText');
+    var btn = document.getElementById('btnApplePayTrigger');
 
     if (btn) {
         btn.disabled = true;
@@ -934,19 +942,20 @@ function startApplePayScan() {
         } catch(e) {}
 
         setTimeout(function() {
-            confirmAndPlaceOrder('apple_pay');
+            processOrderAJAX('apple_pay');
         }, 400);
     }, 1200);
 }
 
-function confirmAndPlaceOrder(method) {
-    const submitBtn = document.getElementById('payActionBtn');
+function processOrderAJAX(method) {
+    var submitBtn = document.getElementById('payActionBtn');
     if (submitBtn) submitBtn.disabled = true;
 
-    const chosenMethod = method || selectedMethod || 'cod';
-    const deliveryAddr = document.querySelector('textarea[name="address"]')?.value || document.getElementById('deliveryAddressInput')?.value || 'Western Leyte College';
+    var chosenMethod = method || currentPayment || 'cod';
+    var addrInput = document.getElementById('deliveryAddressInput');
+    var deliveryAddr = (addrInput && addrInput.value ? addrInput.value.trim() : '') || 'Western Leyte College';
 
-    const formData = new FormData();
+    var formData = new FormData();
     formData.append('action', 'create_order');
     formData.append('payment_method', chosenMethod);
     formData.append('address', deliveryAddr);
@@ -969,8 +978,8 @@ function confirmAndPlaceOrder(method) {
         credentials: 'include',
         body: formData
     })
-    .then(res => res.json())
-    .then(data => {
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
         if (data.success || data.order_id) {
             window.location.href = 'customer_dashboard.php?order_placed=1';
         } else {
@@ -978,15 +987,23 @@ function confirmAndPlaceOrder(method) {
             window.location.href = 'customer_dashboard.php';
         }
     })
-    .catch(() => {
+    .catch(function() {
         // Fallback on network delay
         window.location.href = 'customer_dashboard.php?order_placed=1';
     });
 }
 
+// Full compatibility aliases
+var updatePaymentTheme = setPayment;
+var handlePayAction = onCheckoutButtonClick;
+var openApplePaySheet = showApplePayModal;
+var openWalletSheet = showWalletModal;
+var confirmAndPlaceOrder = processOrderAJAX;
+var selectedMethod = currentPayment;
+
 // Initial theme initialization without pattern validations
 document.addEventListener('DOMContentLoaded', function() {
-    updatePaymentTheme('cod');
+    setPayment('cod');
 });
 </script>
 </body>
