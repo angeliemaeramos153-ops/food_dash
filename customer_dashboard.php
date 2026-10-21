@@ -4458,7 +4458,7 @@ async function checkout() {
     };
     
     // Pass picked coordinates directly to order_transaction.php without text geocoding guesswork
-    fetch('order_transaction.php', {
+    fetch('customer_dashboard.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
