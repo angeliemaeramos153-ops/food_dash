@@ -278,7 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 // Insert order with initial status 'PENDING'
-                $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, store_name, store_lat, store_lng, customer_id, customer_name, order_ref, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :store_name, :store_lat, :store_lng, :customer_id, :customer_name, :order_ref, :items_summary, :subtotal, :delivery_fee, :total_amount, 'PENDING', 'waiting', 'Delivery', :delivery_address, :delivery_lat, :delivery_lng, :customer_lat, :customer_lng, NOW())");
+                $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, store_name, customer_id, customer_name, order_ref, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, created_at) VALUES (:shop_id, :store_name, :customer_id, :customer_name, :order_ref, :items_summary, :subtotal, :delivery_fee, :total_amount, 'PENDING', 'waiting', 'Delivery', :delivery_address, NOW())");
                 $stmt->execute([
                     ':shop_id'          => $shop_id,
                     ':store_name'       => $store_name,
@@ -376,7 +376,7 @@ $is_demo_cust = ($user_id === 15 || $user_id === 26 || strtolower($username) ===
 // Primary query: User's own orders (excluding finished & cleared deliveries)
 try {
     $stmt = $conn->prepare("
-        SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at 
+        SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, created_at 
         FROM food_orders 
         WHERE (customer_id = :cid OR customer_name = :cname OR customer_id IN (1, 15, 26, 0))
           AND status != 'CANCELLED'
@@ -394,14 +394,14 @@ if ($stmt) {
 // Fallback: If user has zero orders and is a demo account, load demo orders
 if (empty($db_orders) && $is_demo_cust) {
     try {
-        $d_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE customer_id IN (15, 26, 0) AND COALESCE(rider_cleared, 0) = 0 ORDER BY order_id DESC LIMIT 50");
+        $d_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, created_at FROM food_orders WHERE customer_id IN (15, 26, 0) AND COALESCE(rider_cleared, 0) = 0 ORDER BY order_id DESC LIMIT 50");
         if ($d_stmt) {
             $d_stmt->execute();
             $db_orders = $d_stmt->fetchAll(PDO::FETCH_ASSOC);
         }
     } catch (Throwable $e) {
         try {
-            $d_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at FROM food_orders WHERE customer_id IN (15, 26, 0) ORDER BY order_id DESC LIMIT 50");
+            $d_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, created_at FROM food_orders WHERE customer_id IN (15, 26, 0) ORDER BY order_id DESC LIMIT 50");
             if ($d_stmt) {
                 $d_stmt->execute();
                 $db_orders = $d_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -6661,4 +6661,5 @@ document.addEventListener('DOMContentLoaded', function() {
 <?php require_once 'gmail_simulator_modal.php'; ?>
 </body>
 </html>
+
 
