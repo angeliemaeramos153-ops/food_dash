@@ -111,21 +111,21 @@ if ($method === 'POST') {
         $customer_name = !empty($_SESSION['full_name']) ? $_SESSION['full_name'] : 'Customer';
 
         $delivery_address = trim((string)($payload['delivery_address'] ?? ''));
-        $delivery_lat = isset($payload['delivery_lat']) && is_numeric($payload['delivery_lat']) ? (float)$payload['delivery_lat'] : (isset($payload['customer_lat']) && is_numeric($payload['customer_lat']) ? (float)$payload['customer_lat'] : null);
+        $id = isset($payload['id']) && is_numeric($payload['id']) ? (float)$payload['id'] : (isset($payload['customer_lat']) && is_numeric($payload['customer_lat']) ? (float)$payload['customer_lat'] : null);
         $delivery_lng = isset($payload['delivery_lng']) && is_numeric($payload['delivery_lng']) ? (float)$payload['delivery_lng'] : (isset($payload['customer_lng']) && is_numeric($payload['customer_lng']) ? (float)$payload['customer_lng'] : null);
-        if ($delivery_lat !== null && ($delivery_lat < -90 || $delivery_lat > 90)) $delivery_lat = null;
+        if ($id !== null && ($id < -90 || $id > 90)) $id = null;
         if ($delivery_lng !== null && ($delivery_lng < -180 || $delivery_lng > 180)) $delivery_lng = null;
 
         // Fallback geocoding lookup using address string instead of hardcoding downtown Ormoc coordinates
-        if (($delivery_lat === null || $delivery_lng === null) && !empty($delivery_address)) {
+        if (($id === null || $delivery_lng === null) && !empty($delivery_address)) {
             $fallback_geo = geocode_address_fallback($delivery_address);
             if ($fallback_geo && isset($fallback_geo['lat'], $fallback_geo['lng'])) {
-                $delivery_lat = $fallback_geo['lat'];
+                $id = $fallback_geo['lat'];
                 $delivery_lng = $fallback_geo['lng'];
             }
         }
 
-        $customer_lat = $delivery_lat;
+        $customer_lat = $id;
         $customer_lng = $delivery_lng;
 
         $items_summary = implode(', ', array_map(fn($x) => $x['qty'] . 'x ' . $x['name'], $clean));
@@ -220,7 +220,7 @@ if ($method === 'POST') {
 
         $conn->beginTransaction();
         try {
-            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, customer_phone, order_ref, store_name, store_lat, store_lng, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :cust_id, :cust_name, :cust_phone, :ref, :store_name, :store_lat, :store_lng, :summary, :subtotal, :fee, :total, :pm, 'PENDING', 'waiting', 'Delivery', :addr, :dlat, :dlng, :lat, :lng, NOW())");
+            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, customer_phone, order_ref, store_name, , items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, order_type, delivery_address, , , created_at) VALUES (:shop_id, :cust_id, :cust_name, :cust_phone, :ref, :store_name, :store_lat, :store_lng, :summary, :subtotal, :fee, :total, :pm, 'PENDING', 'waiting', 'Delivery', :addr, :dlat, :dlng, :lat, :lng, NOW())");
             $stmt->execute([
                 ':shop_id'    => $shop_id,
                 ':cust_id'    => $user_id,
@@ -236,7 +236,7 @@ if ($method === 'POST') {
                 ':total'      => $total_amount,
                 ':pm'         => $payment_method,
                 ':addr'       => !empty($delivery_address) ? $delivery_address : null,
-                ':dlat'       => $delivery_lat,
+                ':dlat'       => $id,
                 ':dlng'       => $delivery_lng,
                 ':lat'        => $customer_lat,
                 ':lng'        => $customer_lng,
@@ -584,7 +584,7 @@ if ($method === 'GET') {
         $scope_sql = $is_demo 
             ? "(customer_id = :cid OR user_id = :uid OR customer_id IN (15, 26, 0) OR user_id IN (15, 26, 0))" 
             : "(customer_id = :cid OR user_id = :uid)";
-        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, rider_id, delivery_address, delivery_lat, delivery_lng, rider_lat, rider_lng, customer_lat, customer_lng, {$dateSql} FROM food_orders WHERE {$scope_sql} ORDER BY order_id DESC LIMIT 40");
+        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, rider_id, delivery_address, , rider_lat, rider_lng, , {$dateSql} FROM food_orders WHERE {$scope_sql} ORDER BY order_id DESC LIMIT 40");
         $stmt->execute([':cid' => $user_id, ':uid' => $user_id]);
         $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($orders as &$ord) {
@@ -626,4 +626,5 @@ if ($method === 'GET') {
 
 respond(false, 'Invalid request.', [], 400);
 ?>
+
 

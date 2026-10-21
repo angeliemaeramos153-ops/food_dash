@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Check proximity & arrival immediately
-        $stmt = $conn->prepare("SELECT customer_id, order_ref, customer_lat, customer_lng, delivery_status, status, near_notified_at, arrived_notified_at FROM food_orders WHERE order_id = :oid LIMIT 1");
+        $stmt = $conn->prepare("SELECT customer_id, order_ref, , delivery_status, status, near_notified_at, arrived_notified_at FROM food_orders WHERE order_id = :oid LIMIT 1");
         $stmt->execute([':oid' => $order_id]);
         $fresh = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -232,7 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         $o_stmt = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.store_name, o.delivery_address,
             o.items_summary, o.total_amount, o.status AS order_status, o.delivery_status,
-            COALESCE(o.delivery_lat, o.customer_lat) AS dest_lat,
+            COALESCE(o.id, o.customer_lat) AS dest_lat,
             COALESCE(o.delivery_lng, o.customer_lng) AS dest_lng,
             COALESCE(o.store_lat, sh.lat, sh.lat, 11.0065) AS store_lat,
             COALESCE(o.store_lng, sh.lng, sh.lng, 124.6075) AS store_lng,
@@ -323,7 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         o.status, o.delivery_status, o.near_notified_at, o.location_updated_at,
         COALESCE(o.store_lat, s.lat, s.lat) AS store_lat,
         COALESCE(o.store_lng, s.lng, s.lng) AS store_lng,
-        COALESCE(o.delivery_lat, o.customer_lat) AS destination_lat,
+        COALESCE(o.id, o.customer_lat) AS destination_lat,
         COALESCE(o.delivery_lng, o.customer_lng) AS destination_lng,
         o.customer_lat, o.customer_lng,
         o.rider_id,
@@ -448,3 +448,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
 
 out(false, 'Invalid tracking request.', [], 400);
 ?>
+

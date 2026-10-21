@@ -21,7 +21,7 @@ if (!$user_id) {
 $customer_name = $_SESSION['full_name'] ?? $_SESSION['username'] ?? '';
 $customer_phone = $_SESSION['phone'] ?? '';
 $default_address = $_SESSION['address'] ?? '';
-$default_lat = isset($_SESSION['delivery_lat']) ? (float)$_SESSION['delivery_lat'] : null;
+$default_lat = isset($_SESSION['id']) ? (float)$_SESSION['id'] : null;
 $default_lng = isset($_SESSION['delivery_lng']) ? (float)$_SESSION['delivery_lng'] : null;
 
 if ($user_id) {
@@ -511,7 +511,7 @@ $grand_total = $subtotal + $delivery_fee;
     <input type="text" style="display:none;" name="subtotal" id="subtotal" value="<?= htmlspecialchars((string)$subtotal) ?>">
     <input type="text" style="display:none;" name="delivery_fee" id="delivery_fee" value="<?= htmlspecialchars((string)$delivery_fee) ?>">
     <input type="text" style="display:none;" name="delivery_lat_lng" id="delivery_lat_lng" value="<?= htmlspecialchars("{$default_lat}, {$default_lng}") ?>">
-    <input type="text" style="display:none;" name="delivery_lat" id="delivery_lat" value="<?= htmlspecialchars((string)$default_lat) ?>">
+    <input type="text" style="display:none;" name="id" id="id" value="<?= htmlspecialchars((string)$default_lat) ?>">
     <input type="text" style="display:none;" name="delivery_lng" id="delivery_lng" value="<?= htmlspecialchars((string)$default_lng) ?>">
     <input type="text" style="display:none;" name="customer_lat" id="customer_lat" value="<?= htmlspecialchars((string)$default_lat) ?>">
     <input type="text" style="display:none;" name="customer_lng" id="customer_lng" value="<?= htmlspecialchars((string)$default_lng) ?>">
@@ -1070,7 +1070,7 @@ function finalizeOrder(method, address, coords) {
     if (chosenCoords) {
         var parts = chosenCoords.split(',');
         if (parts.length === 2) {
-            fd.append('delivery_lat', parts[0].trim());
+            fd.append('id', parts[0].trim());
             fd.append('delivery_lng', parts[1].trim());
             fd.append('customer_lat', parts[0].trim());
             fd.append('customer_lng', parts[1].trim());
@@ -1203,4 +1203,5 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 </body>
 </html>
+
 

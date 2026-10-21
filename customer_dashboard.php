@@ -168,22 +168,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cart_items = $input['cart'] ?? [];
         $delivery_fee = (float)($input['delivery_fee'] ?? 30.00);
         $delivery_address = trim((string)($input['delivery_address'] ?? ''));
-        $delivery_lat = isset($input['delivery_lat']) && is_numeric($input['delivery_lat']) ? (float)$input['delivery_lat'] : (isset($input['customer_lat']) && is_numeric($input['customer_lat']) ? (float)$input['customer_lat'] : null);
+        $id = isset($input['id']) && is_numeric($input['id']) ? (float)$input['id'] : (isset($input['customer_lat']) && is_numeric($input['customer_lat']) ? (float)$input['customer_lat'] : null);
         $delivery_lng = isset($input['delivery_lng']) && is_numeric($input['delivery_lng']) ? (float)$input['delivery_lng'] : (isset($input['customer_lng']) && is_numeric($input['customer_lng']) ? (float)$input['customer_lng'] : null);
 
-        if ($delivery_lat !== null && ($delivery_lat < -90 || $delivery_lat > 90)) $delivery_lat = null;
+        if ($id !== null && ($id < -90 || $id > 90)) $id = null;
         if ($delivery_lng !== null && ($delivery_lng < -180 || $delivery_lng > 180)) $delivery_lng = null;
 
         // Fallback geocoding lookup using address string instead of hardcoding downtown Ormoc coordinates
-        if (($delivery_lat === null || $delivery_lng === null) && !empty($delivery_address)) {
+        if (($id === null || $delivery_lng === null) && !empty($delivery_address)) {
             $fallback_geo = geocode_address_fallback($delivery_address);
             if ($fallback_geo && isset($fallback_geo['lat'], $fallback_geo['lng'])) {
-                $delivery_lat = $fallback_geo['lat'];
+                $id = $fallback_geo['lat'];
                 $delivery_lng = $fallback_geo['lng'];
             }
         }
 
-        $customer_lat = $delivery_lat;
+        $customer_lat = $id;
         $customer_lng = $delivery_lng;
         
         if (empty($cart_items)) {
@@ -2525,7 +2525,7 @@ button{cursor:pointer}
       </div>
       <textarea id="deliveryAddressInput" class="delivery-textarea" placeholder="Enter complete delivery address (e.g. Unit/House No., Street, Brgy, City, Landmark)" rows="2"></textarea>
       <div id="gpsLocationStatus" class="gps-status-pill" style="display:none;"></div>
-      <input type="hidden" id="delivery_lat" name="delivery_lat" value="">
+      <input type="hidden" id="id" name="id" value="">
       <input type="hidden" id="delivery_lng" name="delivery_lng" value="">
       <input type="hidden" id="deliveryLatInput" value="">
       <input type="hidden" id="deliveryLngInput" value="">
@@ -2791,7 +2791,7 @@ button{cursor:pointer}
       </select>
     </div>
     
-    <input type="hidden" id="modal_delivery_lat" name="delivery_lat" value="">
+    <input type="hidden" id="modal_delivery_lat" name="id" value="">
     <input type="hidden" id="modal_delivery_lng" name="delivery_lng" value="">
     <input type="hidden" id="modalDeliveryLat" value="">
     <input type="hidden" id="modalDeliveryLng" value="">
@@ -3843,7 +3843,7 @@ let checkoutMarker = null;
 let map = null;
 let marker = null;
 
-// Helper to write coordinates to all delivery_lat & delivery_lng hidden inputs and status pills
+// Helper to write coordinates to all id & delivery_lng hidden inputs and status pills
 function setDeliveryCoordinates(lat, lng, source = 'nominatim') {
     if (lat == null || lng == null) return;
     const numLat = parseFloat(lat);
@@ -3857,7 +3857,7 @@ function setDeliveryCoordinates(lat, lng, source = 'nominatim') {
     const lngStr = numLng.toFixed(7);
 
     // Update hidden inputs across cart and modal
-    const latIds = ['delivery_lat', 'deliveryLatInput', 'modal_delivery_lat', 'modalDeliveryLat'];
+    const latIds = ['id', 'deliveryLatInput', 'modal_delivery_lat', 'modalDeliveryLat'];
     const lngIds = ['delivery_lng', 'deliveryLngInput', 'modal_delivery_lng', 'modalDeliveryLng'];
 
     latIds.forEach(id => {
@@ -3954,7 +3954,7 @@ async function geocodeAddressNominatim(query) {
                 if (activeMarker) {
                     activeMarker.setLatLng([lat, lon]);
                 }
-                // Update the hidden inputs delivery_lat and delivery_lng
+                // Update the hidden inputs id and delivery_lng
                 setDeliveryCoordinates(lat, lon, 'nominatim');
                 return { lat, lon, lng: lon, displayName: data[0].display_name };
             }
@@ -4135,7 +4135,7 @@ function initCheckoutMap() {
         initialLng = currentCustomerLng;
         initialZoom = 17;
     } else {
-        const latEl = document.getElementById('delivery_lat') || document.getElementById('deliveryLatInput') || document.getElementById('modal_delivery_lat');
+        const latEl = document.getElementById('id') || document.getElementById('deliveryLatInput') || document.getElementById('modal_delivery_lat');
         const lngEl = document.getElementById('delivery_lng') || document.getElementById('deliveryLngInput') || document.getElementById('modal_delivery_lng');
         if (latEl && latEl.value && lngEl && lngEl.value) {
             const pLat = parseFloat(latEl.value);
@@ -4190,7 +4190,7 @@ function initCheckoutMap() {
 
         checkoutMarker.bindPopup('<b>Delivery Pin</b><br>Drag to your exact delivery location');
 
-        // When user drags marker, automatically update hidden inputs delivery_lat and delivery_lng with marker.getLatLng()
+        // When user drags marker, automatically update hidden inputs id and delivery_lng with marker.getLatLng()
         checkoutMarker.on('drag', function() {
             const pos = checkoutMarker.getLatLng();
             setDeliveryCoordinates(pos.lat, pos.lng, 'map');
@@ -4259,7 +4259,7 @@ function useMyExactLocation() {
                 checkoutMarker.setLatLng([lat, lng]);
             }
 
-            // Sets delivery_lat and delivery_lng
+            // Sets id and delivery_lng
             setDeliveryCoordinates(lat, lng, 'gps');
 
             // Reverse-geocode to address input
@@ -4425,7 +4425,7 @@ async function checkout() {
         btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Placing Order...';
     }
 
-    const latInput = document.getElementById('delivery_lat') || document.getElementById('deliveryLatInput') || document.getElementById('modal_delivery_lat');
+    const latInput = document.getElementById('id') || document.getElementById('deliveryLatInput') || document.getElementById('modal_delivery_lat');
     const lngInput = document.getElementById('delivery_lng') || document.getElementById('deliveryLngInput') || document.getElementById('modal_delivery_lng');
 
     let dLat = (latInput && latInput.value) ? parseFloat(latInput.value) : currentCustomerLat;
@@ -4454,7 +4454,7 @@ async function checkout() {
         delivery_fee: deliveryFee,
         delivery_address: address,
         payment_method: chosenPaymentMethod,
-        delivery_lat: (dLat !== null && !isNaN(dLat)) ? dLat : null,
+        id: (dLat !== null && !isNaN(dLat)) ? dLat : null,
         delivery_lng: (dLng !== null && !isNaN(dLng)) ? dLng : null,
         customer_lat: (dLat !== null && !isNaN(dLat)) ? dLat : null,
         customer_lng: (dLng !== null && !isNaN(dLng)) ? dLng : null
@@ -6664,5 +6664,6 @@ document.addEventListener('DOMContentLoaded', function() {
 <?php require_once 'gmail_simulator_modal.php'; ?>
 </body>
 </html>
+
 
 

@@ -130,7 +130,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
         $delivery_address = 'Western Leyte College';
     }
 
-    $delivery_lat = null;
+    $id = null;
     $delivery_lng = null;
 
     if (!empty($payload['delivery_lat_lng']) && is_string($payload['delivery_lat_lng'])) {
@@ -139,20 +139,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
             $plat = trim($coords_parts[0]);
             $plng = trim($coords_parts[1]);
             if (is_numeric($plat) && is_numeric($plng)) {
-                $delivery_lat = (float)$plat;
+                $id = (float)$plat;
                 $delivery_lng = (float)$plng;
             }
         }
     }
-    if ($delivery_lat === null && isset($payload['delivery_lat']) && is_numeric($payload['delivery_lat'])) {
-        $delivery_lat = (float)$payload['delivery_lat'];
+    if ($id === null && isset($payload['id']) && is_numeric($payload['id'])) {
+        $id = (float)$payload['id'];
     }
     if ($delivery_lng === null && isset($payload['delivery_lng']) && is_numeric($payload['delivery_lng'])) {
         $delivery_lng = (float)$payload['delivery_lng'];
     }
-    if ($delivery_lat === null) $delivery_lat = 11.01039;
+    if ($id === null) $id = 11.01039;
     if ($delivery_lng === null) $delivery_lng = 124.61788;
-    $customer_lat = $delivery_lat;
+    $customer_lat = $id;
     $customer_lng = $delivery_lng;
 
     // Dynamic Cart / Items Summary
@@ -191,7 +191,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
 
     try {
         $stmt = $conn->prepare("INSERT INTO food_orders 
-            (shop_id, customer_id, user_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, payment_status, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, status, delivery_status, order_type, created_at) 
+            (shop_id, customer_id, user_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, payment_status, delivery_address, , , status, delivery_status, order_type, created_at) 
             VALUES 
             (:shop_id, :cust_id, :uid, :cust_name, :ref, :store, :summary, :subtotal, :fee, :total, :pm, :pstatus, :addr, :dlat, :dlng, :clat, :clng, :status, 'waiting', 'Delivery', NOW())");
 
@@ -209,7 +209,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
             ':pm'        => $payment_method,
             ':pstatus'   => $payment_status,
             ':addr'      => $delivery_address,
-            ':dlat'      => $delivery_lat,
+            ':dlat'      => $id,
             ':dlng'      => $delivery_lng,
             ':clat'      => $customer_lat,
             ':clng'      => $customer_lng,
@@ -222,9 +222,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
         try {
             $is_pgsql = ($conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql');
             if ($is_pgsql) {
-                $orders_stmt = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, payment_method, shop_id, delivery_address, delivery_lat, delivery_lng, created_at) VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, :addr, :dlat, :dlng, NOW()) ON CONFLICT (order_id) DO NOTHING");
+                $orders_stmt = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, payment_method, shop_id, delivery_address, , created_at) VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, :addr, :dlat, :dlng, NOW()) ON CONFLICT (order_id) DO NOTHING");
             } else {
-                $orders_stmt = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, payment_method, shop_id, delivery_address, delivery_lat, delivery_lng, created_at) VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, :addr, :dlat, :dlng, NOW()) ON DUPLICATE KEY UPDATE payment_method = VALUES(payment_method), total_price = VALUES(total_price)");
+                $orders_stmt = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, payment_method, shop_id, delivery_address, , created_at) VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, :addr, :dlat, :dlng, NOW()) ON DUPLICATE KEY UPDATE payment_method = VALUES(payment_method), total_price = VALUES(total_price)");
             }
             $orders_stmt->execute([
                 ':oid'     => $order_id,
@@ -233,7 +233,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
                 ':pm'      => $payment_method,
                 ':shop_id' => $shop_id,
                 ':addr'    => $delivery_address,
-                ':dlat'    => $delivery_lat,
+                ':dlat'    => $id,
                 ':dlng'    => $delivery_lng
             ]);
         } catch (Throwable $e) {}
@@ -271,3 +271,4 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
 
 echo json_encode(['status' => 'online', 'service' => 'api_orders']);
 exit;
+

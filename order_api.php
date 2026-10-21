@@ -277,7 +277,7 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
         o.status, o.delivery_status, o.near_notified_at, o.location_updated_at,
         COALESCE(o.store_lat, s.lat, s.lat, 11.006500) AS store_lat,
         COALESCE(o.store_lng, s.lng, s.lng, 124.607500) AS store_lng,
-        COALESCE(o.delivery_lat, o.customer_lat, 11.004200) AS destination_lat,
+        COALESCE(o.id, o.customer_lat, 11.004200) AS destination_lat,
         COALESCE(o.delivery_lng, o.customer_lng, 124.605000) AS destination_lng,
         o.customer_lat, o.customer_lng,
         o.rider_id,
@@ -361,4 +361,5 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
 }
 
 order_api_out(false, 'Invalid order API action.', [], 400);
+
 

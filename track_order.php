@@ -45,7 +45,7 @@ if ($order_id > 0) {
         COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
         COALESCE(o.store_lat, s.lat, s.lat, 11.00842) AS store_lat,
         COALESCE(o.store_lng, s.lng, s.lng, 124.60721) AS store_lng,
-        COALESCE(o.delivery_lat, o.customer_lat, 11.00762) AS destination_lat,
+        COALESCE(o.id, o.customer_lat, 11.00762) AS destination_lat,
         COALESCE(o.delivery_lng, o.customer_lng, 124.60749) AS destination_lng,
         COALESCE(o.rider_lat, r.current_lat) AS rider_lat,
         COALESCE(o.rider_lng, r.current_lng) AS rider_lng,
@@ -1688,4 +1688,5 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
