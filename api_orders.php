@@ -263,3 +263,4 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
 echo json_encode(['status' => 'online', 'service' => 'api_orders']);
 exit;
 
+
