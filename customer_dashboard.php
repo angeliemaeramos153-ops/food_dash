@@ -299,7 +299,7 @@ $stmt->execute([
     ':delivery_fee'     => $delivery_fee,
     ':total_amount'     => $total_amount,
     ':payment_method'   => $payment_method ?? 'Cash on Delivery (COD)',
-    ':delivery_address' => !empty($delivery_address) ? $delivery_address : 'Western Leyte College'
+    ':delivery_address' => !empty($delivery_address) ? $delivery_address : (!empty($input['delivery_address']) ? trim($input['delivery_address']) : 'Customer Address')
 ]);
 $new_order_id = (int)$conn->lastInsertId();
                 // Insert items into food_order_items
