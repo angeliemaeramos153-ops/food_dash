@@ -276,29 +276,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $store_lng = (!empty($sc_row2['lng']) && is_numeric($sc_row2['lng'])) ? (float)$sc_row2['lng'] : ((!empty($sc_row2['lng']) && is_numeric($sc_row2['lng'])) ? (float)$sc_row2['lng'] : null);
                     }
                 }
-                
                 // Insert order with initial status 'PENDING'
-                $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, store_name, customer_id, customer_name, order_ref, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, delivery_address, created_at) VALUES (:shop_id, :store_name, :customer_id, :customer_name, :order_ref, :items_summary, :subtotal, :delivery_fee, :total_amount, 'PENDING', 'waiting', 'Delivery', :delivery_address, NOW())");
-                $stmt->execute([
-                    ':shop_id'          => $shop_id,
-                    ':store_name'       => $store_name,
-                    ':store_lat'        => $store_lat,
-                    ':store_lng'        => $store_lng,
-                    ':customer_id'      => $user_id,
-                    ':customer_name'    => $cname,
-                    ':order_ref'        => $unique_ref,
-                    ':items_summary'    => $items_summary,
-                    ':subtotal'         => $subtotal,
-                    ':delivery_fee'     => $delivery_fee,
-                    ':total_amount'     => $total_amount,
-                    ':delivery_address' => !empty($delivery_address) ? $delivery_address : null,
-                    ':delivery_lat'     => $delivery_lat,
-                    ':delivery_lng'     => $delivery_lng,
-                    ':customer_lat'     => $customer_lat,
-                    ':customer_lng'     => $customer_lng,
-                ]);
-                $new_order_id = (int)$conn->lastInsertId();
-                
+$stmt = $conn->prepare("
+    INSERT INTO food_orders (
+        shop_id, store_name, customer_id, customer_name, order_ref, 
+        items_summary, subtotal, delivery_fee, total_amount, payment_method, 
+        status, delivery_status, order_type, delivery_address, created_at
+    ) VALUES (
+        :shop_id, :store_name, :customer_id, :customer_name, :order_ref, 
+        :items_summary, :subtotal, :delivery_fee, :total_amount, :payment_method, 
+        'PENDING', 'waiting', 'Delivery', :delivery_address, NOW()
+    )
+");
+$stmt->execute([
+    ':shop_id'          => $shop_id,
+    ':store_name'       => $store_name,
+    ':customer_id'      => $user_id,
+    ':customer_name'    => $cname,
+    ':order_ref'        => $unique_ref,
+    ':items_summary'    => $items_summary,
+    ':subtotal'         => $subtotal,
+    ':delivery_fee'     => $delivery_fee,
+    ':total_amount'     => $total_amount,
+    ':payment_method'   => $payment_method ?? 'Cash on Delivery (COD)',
+    ':delivery_address' => !empty($delivery_address) ? $delivery_address : 'Western Leyte College'
+]);
+$new_order_id = (int)$conn->lastInsertId();
                 // Insert items into food_order_items
                 $it_stmt = $conn->prepare("INSERT INTO food_order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (:oid, :name, :store, :qty, :price, :line, :icon)");
                 foreach ($clean_items as $ci) {
