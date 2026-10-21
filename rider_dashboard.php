@@ -649,12 +649,12 @@ if ($first_order) {
         'store_name' => (string)($first_order['store_name'] ?? 'Restaurant'),
         'store_address' => (string)($first_order['store_address'] ?? ''),
         'delivery_address' => (string)($first_order['delivery_address'] ?? ''),
-        'customer_lat' => $c_lat,
-        'customer_lng' => $c_lng,
+        
+        
         'id' => $c_lat,
-        'delivery_lng' => $c_lng,
-        'store_lat' => $s_lat,
-        'store_lng' => $s_lng,
+        
+        
+        
         'rider_lat' => $r_lat,
         'rider_lng' => $r_lng,
         'is_initial_shop_origin' => $is_initial_shop_origin
@@ -3490,5 +3490,6 @@ pollRiderOrderCommunication();
 
 function toastGps(msg){const el=document.getElementById('gpsStatus');if(el)el.textContent=msg;}
 </script></body></html>
+
 
 

@@ -428,8 +428,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         'distance_km'        => $distance,
         'near'               => $near,
         'near_threshold_km'  => 0.5,
-        'store_lat'          => $store_lat,
-        'store_lng'          => $store_lng,
+        
+        
         'destination_lat'    => $dest_lat,
         'destination_lng'    => $dest_lng,
         'lat'           => $rider_lat,
@@ -448,4 +448,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
 
 out(false, 'Invalid tracking request.', [], 400);
 ?>
+
 

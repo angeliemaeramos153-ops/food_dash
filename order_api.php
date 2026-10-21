@@ -347,8 +347,8 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
         'destination_lng' => $dest_lng,
         'dest_lat'        => $dest_lat,
         'dest_lng'        => $dest_lng,
-        'store_lat'       => $store_lat,
-        'store_lng'       => $store_lng,
+        
+        
         'distance_km'     => $distance_km,
         'status'          => $o['status'],
         'delivery_status' => $o['delivery_status'],
@@ -361,5 +361,6 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
 }
 
 order_api_out(false, 'Invalid order API action.', [], 400);
+
 
 
