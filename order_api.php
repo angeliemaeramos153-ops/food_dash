@@ -275,8 +275,8 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
         COALESCE(o.customer_phone, cu.phone, '+63 928 555 0148') AS customer_phone,
         o.store_name, o.delivery_address,
         o.status, o.delivery_status, o.near_notified_at, o.location_updated_at,
-        COALESCE(o.store_lat, s.latitude, s.lat, 11.006500) AS store_lat,
-        COALESCE(o.store_lng, s.longitude, s.lng, 124.607500) AS store_lng,
+        COALESCE(o.store_lat, s.lat, s.lat, 11.006500) AS store_lat,
+        COALESCE(o.store_lng, s.lng, s.lng, 124.607500) AS store_lng,
         COALESCE(o.delivery_lat, o.customer_lat, 11.004200) AS destination_lat,
         COALESCE(o.delivery_lng, o.customer_lng, 124.605000) AS destination_lng,
         o.customer_lat, o.customer_lng,
@@ -339,8 +339,8 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
         'order_ref'       => '#' . ltrim($o['order_ref'] ?: ('FD-' . $o['order_id']), '#'),
         'lat'             => $rider_lat,
         'lng'             => $rider_lng,
-        'latitude'        => $rider_lat,
-        'longitude'       => $rider_lng,
+        'lat'        => $rider_lat,
+        'lng'       => $rider_lng,
         'rider_lat'       => $rider_lat,
         'rider_lng'       => $rider_lng,
         'destination_lat' => $dest_lat,
@@ -361,3 +361,4 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
 }
 
 order_api_out(false, 'Invalid order API action.', [], 400);
+

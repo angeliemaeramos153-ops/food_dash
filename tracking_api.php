@@ -186,8 +186,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     // 1. Query all partner stores with active orders count
     $store_stmt = $conn->query("SELECT 
         s.shop_id, s.shop_name, s.category, s.address,
-        COALESCE(s.latitude, s.lat, 11.00650000) AS latitude,
-        COALESCE(s.longitude, s.lng, 124.60750000) AS longitude,
+        COALESCE(s.lat, s.lat, 11.00650000) AS lat,
+        COALESCE(s.lng, s.lng, 124.60750000) AS lng,
         COALESCE(s.logo_url, 'assets/shops/default_store.png') AS logo_url,
         (SELECT COUNT(*) FROM food_orders fo 
          WHERE (fo.shop_id = s.shop_id OR (fo.shop_id = 0 AND LOWER(TRIM(fo.store_name)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
@@ -199,8 +199,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
 
     foreach ($stores as &$st) {
         $st['shop_id'] = (int)$st['shop_id'];
-        $st['latitude'] = (float)$st['latitude'];
-        $st['longitude'] = (float)$st['longitude'];
+        $st['lat'] = (float)$st['lat'];
+        $st['lng'] = (float)$st['lng'];
         $st['active_orders_count'] = (int)$st['active_orders_count'];
     }
     unset($st);
@@ -234,8 +234,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
             o.items_summary, o.total_amount, o.status AS order_status, o.delivery_status,
             COALESCE(o.delivery_lat, o.customer_lat) AS dest_lat,
             COALESCE(o.delivery_lng, o.customer_lng) AS dest_lng,
-            COALESCE(o.store_lat, sh.latitude, sh.lat, 11.0065) AS store_lat,
-            COALESCE(o.store_lng, sh.longitude, sh.lng, 124.6075) AS store_lng,
+            COALESCE(o.store_lat, sh.lat, sh.lat, 11.0065) AS store_lat,
+            COALESCE(o.store_lng, sh.lng, sh.lng, 124.6075) AS store_lng,
             COALESCE(o.rider_lat, ?) AS live_rider_lat,
             COALESCE(o.rider_lng, ?) AS live_rider_lng
         FROM food_orders o
@@ -321,8 +321,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         COALESCE(o.customer_phone, cu.phone, '+63 928 555 0148') AS customer_phone,
         o.store_name, o.delivery_address, 
         o.status, o.delivery_status, o.near_notified_at, o.location_updated_at,
-        COALESCE(o.store_lat, s.latitude, s.lat) AS store_lat,
-        COALESCE(o.store_lng, s.longitude, s.lng) AS store_lng,
+        COALESCE(o.store_lat, s.lat, s.lat) AS store_lat,
+        COALESCE(o.store_lng, s.lng, s.lng) AS store_lng,
         COALESCE(o.delivery_lat, o.customer_lat) AS destination_lat,
         COALESCE(o.delivery_lng, o.customer_lng) AS destination_lng,
         o.customer_lat, o.customer_lng,
@@ -367,8 +367,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     $o['destination_lng'] = $dest_lng;
     $o['rider_lat'] = $rider_lat;
     $o['rider_lng'] = $rider_lng;
-    $o['latitude']  = $rider_lat;
-    $o['longitude'] = $rider_lng;
+    $o['lat']  = $rider_lat;
+    $o['lng'] = $rider_lng;
 
     // Fallback phones guaranteed non-null
     if (empty($o['customer_phone'])) $o['customer_phone'] = '+63 917 123 4567';
@@ -432,8 +432,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         'store_lng'          => $store_lng,
         'destination_lat'    => $dest_lat,
         'destination_lng'    => $dest_lng,
-        'latitude'           => $rider_lat,
-        'longitude'          => $rider_lng,
+        'lat'           => $rider_lat,
+        'lng'          => $rider_lng,
         'lat'                => $rider_lat,
         'lng'                => $rider_lng,
         'rider_lat'          => $rider_lat,

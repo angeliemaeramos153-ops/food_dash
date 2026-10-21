@@ -151,11 +151,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $logo_url = trim($_POST['logo_url'] ?? 'assets/shops/default_store.svg');
         if (empty($logo_url)) $logo_url = 'assets/shops/default_store.svg';
 
-        $latitude = (isset($_POST['latitude']) && is_numeric($_POST['latitude']) && floatval($_POST['latitude']) != 0) ? floatval($_POST['latitude']) : null;
-        $longitude = (isset($_POST['longitude']) && is_numeric($_POST['longitude']) && floatval($_POST['longitude']) != 0) ? floatval($_POST['longitude']) : null;
+        $lat = (isset($_POST['lat']) && is_numeric($_POST['lat']) && floatval($_POST['lat']) != 0) ? floatval($_POST['lat']) : null;
+        $lng = (isset($_POST['lng']) && is_numeric($_POST['lng']) && floatval($_POST['lng']) != 0) ? floatval($_POST['lng']) : null;
 
         // Backend fallback geocoding if coordinates not provided
-        if (($latitude === null || $longitude === null) && !empty($shop_name)) {
+        if (($lat === null || $lng === null) && !empty($shop_name)) {
             $q = urlencode(trim($shop_name . (!empty($address) ? ', ' . $address : '') . ', Ormoc City'));
             $ctx = stream_context_create([
                 'http' => [
@@ -167,19 +167,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             if ($res) {
                 $j = json_decode($res, true);
                 if (!empty($j) && isset($j[0]['lat']) && isset($j[0]['lon'])) {
-                    $latitude = floatval($j[0]['lat']);
-                    $longitude = floatval($j[0]['lon']);
+                    $lat = floatval($j[0]['lat']);
+                    $lng = floatval($j[0]['lon']);
                 }
             }
-            if ($latitude === null || $longitude === null) {
-                $latitude = 11.00650000;
-                $longitude = 124.60750000;
+            if ($lat === null || $lng === null) {
+                $lat = 11.00650000;
+                $lng = 124.60750000;
             }
         }
 
         if (!empty($shop_name)) {
-            $stmt = $conn->prepare("INSERT INTO shops (shop_name, category, address, latitude, longitude, lat, lng, logo_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$shop_name, $category, $address, $latitude, $longitude, $latitude, $longitude, $logo_url]);
+            $stmt = $conn->prepare("INSERT INTO shops (shop_name, category, address, lat, lng, lat, lng, logo_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$shop_name, $category, $address, $lat, $lng, $lat, $lng, $logo_url]);
             $action_msg = "Store added successfully with verified coordinates!";
         }
     }
@@ -193,10 +193,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $logo_url = trim($_POST['logo_url'] ?? 'assets/shops/default_store.svg');
         if (empty($logo_url)) $logo_url = 'assets/shops/default_store.svg';
 
-        $latitude = (isset($_POST['latitude']) && is_numeric($_POST['latitude']) && floatval($_POST['latitude']) != 0) ? floatval($_POST['latitude']) : null;
-        $longitude = (isset($_POST['longitude']) && is_numeric($_POST['longitude']) && floatval($_POST['longitude']) != 0) ? floatval($_POST['longitude']) : null;
+        $lat = (isset($_POST['lat']) && is_numeric($_POST['lat']) && floatval($_POST['lat']) != 0) ? floatval($_POST['lat']) : null;
+        $lng = (isset($_POST['lng']) && is_numeric($_POST['lng']) && floatval($_POST['lng']) != 0) ? floatval($_POST['lng']) : null;
 
-        if (($latitude === null || $longitude === null) && !empty($shop_name)) {
+        if (($lat === null || $lng === null) && !empty($shop_name)) {
             $q = urlencode(trim($shop_name . (!empty($address) ? ', ' . $address : '') . ', Ormoc City'));
             $ctx = stream_context_create([
                 'http' => [
@@ -208,15 +208,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             if ($res) {
                 $j = json_decode($res, true);
                 if (!empty($j) && isset($j[0]['lat']) && isset($j[0]['lon'])) {
-                    $latitude = floatval($j[0]['lat']);
-                    $longitude = floatval($j[0]['lon']);
+                    $lat = floatval($j[0]['lat']);
+                    $lng = floatval($j[0]['lon']);
                 }
             }
         }
 
         if ($shop_id > 0 && !empty($shop_name)) {
-            $stmt = $conn->prepare("UPDATE shops SET shop_name = ?, category = ?, address = ?, latitude = ?, longitude = ?, lat = ?, lng = ?, logo_url = ? WHERE shop_id = ?");
-            $stmt->execute([$shop_name, $category, $address, $latitude, $longitude, $latitude, $longitude, $logo_url, $shop_id]);
+            $stmt = $conn->prepare("UPDATE shops SET shop_name = ?, category = ?, address = ?, lat = ?, lng = ?, lat = ?, lng = ?, logo_url = ? WHERE shop_id = ?");
+            $stmt->execute([$shop_name, $category, $address, $lat, $lng, $lat, $lng, $logo_url, $shop_id]);
             $action_msg = "Store updated successfully with verified coordinates!";
         }
     }
@@ -1727,8 +1727,8 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
               $s_logo = !empty($s['logo_url']) ? $s['logo_url'] : 'assets/shops/default_store.png';
               $s_cat = !empty($s['category']) ? $s['category'] : 'Restaurant';
               $s_addr = !empty($s['address']) ? $s['address'] : 'Ormoc City Proper';
-              $s_lat = !empty($s['latitude']) ? (float)$s['latitude'] : (!empty($s['lat']) ? (float)$s['lat'] : null);
-              $s_lng = !empty($s['longitude']) ? (float)$s['longitude'] : (!empty($s['lng']) ? (float)$s['lng'] : null);
+              $s_lat = !empty($s['lat']) ? (float)$s['lat'] : (!empty($s['lat']) ? (float)$s['lat'] : null);
+              $s_lng = !empty($s['lng']) ? (float)$s['lng'] : (!empty($s['lng']) ? (float)$s['lng'] : null);
             ?>
               <div class="admin-store-card">
                 <div class="admin-store-logo">
@@ -2234,8 +2234,8 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
             <i class="fa-solid fa-arrows-up-down-left-right" style="color: #D88F2A;"></i> Type store name/address to auto-locate, or drag marker to pinpoint the store entrance.
           </small>
         </div>
-        <input type="hidden" name="latitude" id="add_shop_lat" value="11.00650000">
-        <input type="hidden" name="longitude" id="add_shop_lng" value="124.60750000">
+        <input type="hidden" name="lat" id="add_shop_lat" value="11.00650000">
+        <input type="hidden" name="lng" id="add_shop_lng" value="124.60750000">
         
         <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Official Logo Path or URL</label>
         <input type="text" name="logo_url" placeholder="assets/shops/default_store.png" value="assets/shops/default_store.png">
@@ -2275,8 +2275,8 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
             <i class="fa-solid fa-arrows-up-down-left-right" style="color: #D88F2A;"></i> Type name/address to auto-locate, or drag marker to position store entrance.
           </small>
         </div>
-        <input type="hidden" name="latitude" id="edit_shop_lat">
-        <input type="hidden" name="longitude" id="edit_shop_lng">
+        <input type="hidden" name="lat" id="edit_shop_lat">
+        <input type="hidden" name="lng" id="edit_shop_lng">
         
         <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Official Logo Path or URL</label>
         <input type="text" name="logo_url" id="edit_shop_logo_url" placeholder="assets/shops/default_store.png">
@@ -3361,8 +3361,8 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
         if (masterStoreLayer && data.stores) {
           masterStoreLayer.clearLayers();
           data.stores.forEach(function(store) {
-            if (store.latitude && store.longitude) {
-              var m = L.marker([store.latitude, store.longitude], {
+            if (store.lat && store.lng) {
+              var m = L.marker([store.lat, store.lng], {
                 icon: createStorePinIcon(store)
               });
               var actCount = store.active_orders_count || 0;

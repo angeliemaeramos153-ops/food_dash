@@ -51,9 +51,9 @@ $ormoc_default_lng = 124.60750000;
 
 // Query shops missing coordinates (or all if force is enabled)
 if ($force) {
-    $stmt = $conn->query("SELECT shop_id, shop_name, category, address, latitude, longitude FROM shops ORDER BY shop_id ASC");
+    $stmt = $conn->query("SELECT shop_id, shop_name, category, address, lat, lng FROM shops ORDER BY shop_id ASC");
 } else {
-    $stmt = $conn->query("SELECT shop_id, shop_name, category, address, latitude, longitude FROM shops WHERE latitude IS NULL OR latitude = 0 OR latitude = '' OR longitude IS NULL OR longitude = 0 OR longitude = '' ORDER BY shop_id ASC");
+    $stmt = $conn->query("SELECT shop_id, shop_name, category, address, lat, lng FROM shops WHERE lat IS NULL OR lat = 0 OR lat = '' OR lng IS NULL OR lng = 0 OR lng = '' ORDER BY shop_id ASC");
 }
 
 $shops_to_process = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
@@ -94,7 +94,7 @@ $updated_count = 0;
 $skipped_count = 0;
 $failed_count = 0;
 
-$update_stmt = $conn->prepare("UPDATE shops SET latitude = ?, longitude = ?, lat = ?, lng = ?, address = ? WHERE shop_id = ?");
+$update_stmt = $conn->prepare("UPDATE shops SET lat = ?, lng = ?, lat = ?, lng = ?, address = ? WHERE shop_id = ?");
 
 foreach ($shops_to_process as $idx => $shop) {
     $shop_id = (int)$shop['shop_id'];
@@ -195,3 +195,4 @@ if (!$is_cli) {
     echo "<a href='../admin_dashboard.php?tab=stores' class='btn'>Return to Admin Stores</a>";
     echo "</div></body></html>";
 }
+

@@ -476,8 +476,8 @@ if ($rid > 0) {
             o.store_name, o.items_summary, o.total_amount, o.payment_method,
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, o.created_at, o.shop_id,
-            COALESCE(o.store_lat, s.latitude, s.lat) AS store_lat, 
-            COALESCE(o.store_lng, s.longitude, s.lng) AS store_lng,
+            COALESCE(o.store_lat, s.lat, s.lat) AS store_lat, 
+            COALESCE(o.store_lng, s.lng, s.lng) AS store_lng,
             s.address AS store_address,
             s.shop_name AS shop_record_name
         FROM food_orders o
@@ -499,8 +499,8 @@ if ($rid > 0) {
             o.rider_lat, o.rider_lng, o.created_at, o.shop_id,
             COALESCE(o.acknowledged_seen, 0) AS acknowledged_seen,
             o.arrival_acknowledged_at, o.arrival_ack_response,
-            COALESCE(o.store_lat, s.latitude, s.lat) AS store_lat, 
-            COALESCE(o.store_lng, s.longitude, s.lng) AS store_lng,
+            COALESCE(o.store_lat, s.lat, s.lat) AS store_lat, 
+            COALESCE(o.store_lng, s.lng, s.lng) AS store_lng,
             s.address AS store_address,
             s.shop_name AS shop_record_name,
             r.current_lat AS rider_current_lat,
@@ -590,7 +590,7 @@ if ($first_order) {
 
                 // Persist the verified coordinates back to database
                 if (!empty($first_order['shop_id'])) {
-                    $u_stmt = $conn->prepare("UPDATE shops SET latitude = ?, longitude = ?, lat = ?, lng = ? WHERE shop_id = ?");
+                    $u_stmt = $conn->prepare("UPDATE shops SET lat = ?, lng = ?, lat = ?, lng = ? WHERE shop_id = ?");
                     $u_stmt->execute([$s_lat, $s_lng, $s_lat, $s_lng, (int)$first_order['shop_id']]);
                 }
                 if (!empty($first_order['order_id'])) {
@@ -1982,7 +1982,7 @@ async function fetchOsrmDrivingRoute(startLat, startLng, destLat, destLng) {
       if (data && data.code === 'Ok' && data.routes && data.routes.length > 0) {
         const route = data.routes[0];
         if (route.geometry && Array.isArray(route.geometry.coordinates) && route.geometry.coordinates.length > 0) {
-          // OSRM returns [longitude, latitude], convert to Leaflet [latitude, longitude]
+          // OSRM returns [lng, lat], convert to Leaflet [lat, lng]
           const leafletCoords = route.geometry.coordinates.map(pt => [pt[1], pt[0]]);
           const distanceMeters = (typeof route.distance === 'number') ? route.distance : calculatePathDistanceMeters(leafletCoords);
           return {
@@ -2401,9 +2401,9 @@ function enableManualSimulation(noticeText) {
   }
 }
 
-function handleRiderPositionUpdate(latitude, longitude, source = 'gps', accuracy = null) {
-  const numLat = parseFloat(latitude);
-  const numLng = parseFloat(longitude);
+function handleRiderPositionUpdate(lat, lng, source = 'gps', accuracy = null) {
+  const numLat = parseFloat(lat);
+  const numLng = parseFloat(lng);
   if (isNaN(numLat) || isNaN(numLng)) return;
 
   const greenRiderIcon = createRiderIcon(false);
@@ -2724,8 +2724,8 @@ function startLiveLocation(orderId) {
           riderMarker.dragging.disable();
         }
 
-        const { latitude, longitude, accuracy } = position.coords;
-        handleRiderPositionUpdate(latitude, longitude, 'gps', accuracy);
+        const { lat, lng, accuracy } = position.coords;
+        handleRiderPositionUpdate(lat, lng, 'gps', accuracy);
       },
       (error) => {
         // Silently fall back to manual simulation without showing permission failure warnings
@@ -3490,3 +3490,4 @@ pollRiderOrderCommunication();
 
 function toastGps(msg){const el=document.getElementById('gpsStatus');if(el)el.textContent=msg;}
 </script></body></html>
+

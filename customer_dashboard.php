@@ -259,21 +259,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $store_lat = null;
                 $store_lng = null;
                 if ($shop_id > 0) {
-                    $sc_stmt = $conn->prepare("SELECT latitude, longitude, lat, lng FROM shops WHERE shop_id = :sid LIMIT 1");
+                    $sc_stmt = $conn->prepare("SELECT lat, lng, lat, lng FROM shops WHERE shop_id = :sid LIMIT 1");
                     $sc_stmt->execute([':sid' => $shop_id]);
                     $sc_row = $sc_stmt->fetch(PDO::FETCH_ASSOC);
                     if ($sc_row) {
-                        $store_lat = (!empty($sc_row['latitude']) && is_numeric($sc_row['latitude'])) ? (float)$sc_row['latitude'] : ((!empty($sc_row['lat']) && is_numeric($sc_row['lat'])) ? (float)$sc_row['lat'] : null);
-                        $store_lng = (!empty($sc_row['longitude']) && is_numeric($sc_row['longitude'])) ? (float)$sc_row['longitude'] : ((!empty($sc_row['lng']) && is_numeric($sc_row['lng'])) ? (float)$sc_row['lng'] : null);
+                        $store_lat = (!empty($sc_row['lat']) && is_numeric($sc_row['lat'])) ? (float)$sc_row['lat'] : ((!empty($sc_row['lat']) && is_numeric($sc_row['lat'])) ? (float)$sc_row['lat'] : null);
+                        $store_lng = (!empty($sc_row['lng']) && is_numeric($sc_row['lng'])) ? (float)$sc_row['lng'] : ((!empty($sc_row['lng']) && is_numeric($sc_row['lng'])) ? (float)$sc_row['lng'] : null);
                     }
                 }
                 if (($store_lat === null || $store_lng === null) && !empty($store_name)) {
-                    $sc_stmt2 = $conn->prepare("SELECT latitude, longitude, lat, lng FROM shops WHERE LOWER(TRIM(shop_name)) = LOWER(TRIM(:sname)) OR LOWER(shop_name) LIKE :slike LIMIT 1");
+                    $sc_stmt2 = $conn->prepare("SELECT lat, lng, lat, lng FROM shops WHERE LOWER(TRIM(shop_name)) = LOWER(TRIM(:sname)) OR LOWER(shop_name) LIKE :slike LIMIT 1");
                     $sc_stmt2->execute([':sname' => $store_name, ':slike' => '%' . strtolower(trim($store_name)) . '%']);
                     $sc_row2 = $sc_stmt2->fetch(PDO::FETCH_ASSOC);
                     if ($sc_row2) {
-                        $store_lat = (!empty($sc_row2['latitude']) && is_numeric($sc_row2['latitude'])) ? (float)$sc_row2['latitude'] : ((!empty($sc_row2['lat']) && is_numeric($sc_row2['lat'])) ? (float)$sc_row2['lat'] : null);
-                        $store_lng = (!empty($sc_row2['longitude']) && is_numeric($sc_row2['longitude'])) ? (float)$sc_row2['longitude'] : ((!empty($sc_row2['lng']) && is_numeric($sc_row2['lng'])) ? (float)$sc_row2['lng'] : null);
+                        $store_lat = (!empty($sc_row2['lat']) && is_numeric($sc_row2['lat'])) ? (float)$sc_row2['lat'] : ((!empty($sc_row2['lat']) && is_numeric($sc_row2['lat'])) ? (float)$sc_row2['lat'] : null);
+                        $store_lng = (!empty($sc_row2['lng']) && is_numeric($sc_row2['lng'])) ? (float)$sc_row2['lng'] : ((!empty($sc_row2['lng']) && is_numeric($sc_row2['lng'])) ? (float)$sc_row2['lng'] : null);
                     }
                 }
                 
@@ -4245,8 +4245,8 @@ function useMyExactLocation() {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Use My Exact Location';
             }
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
+            const lat = position.coords.lat;
+            const lng = position.coords.lng;
 
             // Move the map view and draggable marker to their device's live coordinates
             if (checkoutMap) {
@@ -4295,8 +4295,8 @@ function requestLiveGpsIfAllowed() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
         (position) => {
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
+            const lat = position.coords.lat;
+            const lng = position.coords.lng;
             setDeliveryCoordinates(lat, lng, 'gps');
         },
         (error) => {
@@ -4923,8 +4923,8 @@ function useLocationForNewAddress() {
   toast('Detecting GPS location...', 'info');
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
+      const lat = pos.coords.lat;
+      const lng = pos.coords.lng;
       updateNewAddrCoords(lat, lng);
       if (addAddressPickerMap) {
         addAddressPickerMap.setView([lat, lng], 16);
@@ -4989,8 +4989,8 @@ async function submitNewAddress() {
         barangay: barangay,
         city: city,
         postal_code: postal_code,
-        latitude: lat,
-        longitude: lng,
+        lat: lat,
+        lng: lng,
         is_default: is_default
       })
     });
@@ -5481,7 +5481,7 @@ async function fetchCustOsrmRoute(startLat, startLng, destLat, destLng) {
     if (res.ok) {
       const data = await res.json();
       if (data && data.code === 'Ok' && data.routes && data.routes[0] && data.routes[0].geometry && Array.isArray(data.routes[0].geometry.coordinates)) {
-        // OSRM returns [longitude, latitude], convert to Leaflet [latitude, longitude]
+        // OSRM returns [lng, lat], convert to Leaflet [lat, lng]
         const leafletCoords = data.routes[0].geometry.coordinates.map(pt => [pt[1], pt[0]]);
         currentCustOsrmPath = leafletCoords;
         if (custTrackingMap) {
@@ -5543,8 +5543,8 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     const destLng = parseFloat(data.destination_lng || data.dest_lng || ord.destination_lng || ord.customer_lng);
 
     // Read high-precision coordinates with fallback aliases
-    const riderLat = parseFloat(data.rider_lat ?? data.lat ?? data.latitude ?? ord.rider_lat);
-    const riderLng = parseFloat(data.rider_lng ?? data.lng ?? data.longitude ?? ord.rider_lng);
+    const riderLat = parseFloat(data.rider_lat ?? data.lat ?? data.lat ?? ord.rider_lat);
+    const riderLng = parseFloat(data.rider_lng ?? data.lng ?? data.lng ?? ord.rider_lng);
 
     // Update Rider info with non-null fallbacks
     currentTrackingRiderName = data.rider_name || ord.rider_name || 'Alex Rider';
@@ -6661,3 +6661,4 @@ document.addEventListener('DOMContentLoaded', function() {
 <?php require_once 'gmail_simulator_modal.php'; ?>
 </body>
 </html>
+

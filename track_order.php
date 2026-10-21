@@ -43,8 +43,8 @@ if ($order_id > 0) {
         o.order_id, o.order_ref, o.store_name, o.delivery_address, 
         o.status, o.total_amount, o.created_at,
         COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
-        COALESCE(o.store_lat, s.latitude, s.lat, 11.00842) AS store_lat,
-        COALESCE(o.store_lng, s.longitude, s.lng, 124.60721) AS store_lng,
+        COALESCE(o.store_lat, s.lat, s.lat, 11.00842) AS store_lat,
+        COALESCE(o.store_lng, s.lng, s.lng, 124.60721) AS store_lng,
         COALESCE(o.delivery_lat, o.customer_lat, 11.00762) AS destination_lat,
         COALESCE(o.delivery_lng, o.customer_lng, 124.60749) AS destination_lng,
         COALESCE(o.rider_lat, r.current_lat) AS rider_lat,
@@ -1166,8 +1166,8 @@ async function pollRiderLocation() {
     if (!data.success || !data.order) return;
 
     const ord = data.order;
-    const rLat = parseFloat(data.latitude ?? data.lat ?? data.rider_lat ?? ord.rider_lat);
-    const rLng = parseFloat(data.longitude ?? data.lng ?? data.rider_lng ?? ord.rider_lng);
+    const rLat = parseFloat(data.lat ?? data.lat ?? data.rider_lat ?? ord.rider_lat);
+    const rLng = parseFloat(data.lng ?? data.lng ?? data.rider_lng ?? ord.rider_lng);
     const dLat = parseFloat(data.destination_lat || ord.destination_lat || initDestLat);
     const dLng = parseFloat(data.destination_lng || ord.destination_lng || initDestLng);
 
@@ -1688,3 +1688,4 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+

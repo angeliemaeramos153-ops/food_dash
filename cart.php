@@ -26,7 +26,7 @@ $default_lng = isset($_SESSION['delivery_lng']) ? (float)$_SESSION['delivery_lng
 
 if ($user_id) {
     try {
-        $u_stmt = $conn->prepare("SELECT user_id, username, full_name, email, phone, address, default_address, latitude, longitude FROM users WHERE user_id = :uid LIMIT 1");
+        $u_stmt = $conn->prepare("SELECT user_id, username, full_name, email, phone, address, default_address, lat, lng FROM users WHERE user_id = :uid LIMIT 1");
         $u_stmt->execute([':uid' => $user_id]);
         $user_row = $u_stmt->fetch(PDO::FETCH_ASSOC);
         if ($user_row) {
@@ -39,11 +39,11 @@ if ($user_id) {
             if (empty($default_address)) {
                 $default_address = $user_row['default_address'] ?? $user_row['address'] ?? '';
             }
-            if ($default_lat === null && !empty($user_row['latitude'])) {
-                $default_lat = (float)$user_row['latitude'];
+            if ($default_lat === null && !empty($user_row['lat'])) {
+                $default_lat = (float)$user_row['lat'];
             }
-            if ($default_lng === null && !empty($user_row['longitude'])) {
-                $default_lng = (float)$user_row['longitude'];
+            if ($default_lng === null && !empty($user_row['lng'])) {
+                $default_lng = (float)$user_row['lng'];
             }
         }
     } catch (Throwable $e) {}
@@ -1203,3 +1203,4 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 </body>
 </html>
+

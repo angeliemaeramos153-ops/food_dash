@@ -136,15 +136,15 @@ if ($method === 'POST') {
         $store_lng = null;
 
         if ($shop_id > 0) {
-            $s_stmt = $conn->prepare("SELECT shop_id, latitude, longitude, lat, lng FROM shops WHERE shop_id = :sid LIMIT 1");
+            $s_stmt = $conn->prepare("SELECT shop_id, lat, lng, lat, lng FROM shops WHERE shop_id = :sid LIMIT 1");
             $s_stmt->execute([':sid' => $shop_id]);
             $s_res = $s_stmt->fetch(PDO::FETCH_ASSOC);
             if ($s_res) {
-                $store_lat = (!empty($s_res['latitude']) && is_numeric($s_res['latitude'])) 
-                    ? (float)$s_res['latitude'] 
+                $store_lat = (!empty($s_res['lat']) && is_numeric($s_res['lat'])) 
+                    ? (float)$s_res['lat'] 
                     : ((!empty($s_res['lat']) && is_numeric($s_res['lat'])) ? (float)$s_res['lat'] : null);
-                $store_lng = (!empty($s_res['longitude']) && is_numeric($s_res['longitude'])) 
-                    ? (float)$s_res['longitude'] 
+                $store_lng = (!empty($s_res['lng']) && is_numeric($s_res['lng'])) 
+                    ? (float)$s_res['lng'] 
                     : ((!empty($s_res['lng']) && is_numeric($s_res['lng'])) ? (float)$s_res['lng'] : null);
             }
         }
@@ -152,25 +152,25 @@ if ($method === 'POST') {
         if ($store_lat === null || $store_lng === null) {
             $first_store = array_key_first($stores) ?: $store_name;
             if ($first_store) {
-                $s_stmt = $conn->prepare("SELECT shop_id, latitude, longitude, lat, lng FROM shops WHERE LOWER(TRIM(shop_name)) = LOWER(TRIM(:sname)) LIMIT 1");
+                $s_stmt = $conn->prepare("SELECT shop_id, lat, lng, lat, lng FROM shops WHERE LOWER(TRIM(shop_name)) = LOWER(TRIM(:sname)) LIMIT 1");
                 $s_stmt->execute([':sname' => $first_store]);
                 $s_res = $s_stmt->fetch(PDO::FETCH_ASSOC);
 
                 // Fallback partial match if exact name didn't hit
                 if (!$s_res) {
                     $s_like = '%' . strtolower(trim($first_store)) . '%';
-                    $s_stmt2 = $conn->prepare("SELECT shop_id, latitude, longitude, lat, lng FROM shops WHERE LOWER(shop_name) LIKE :slike LIMIT 1");
+                    $s_stmt2 = $conn->prepare("SELECT shop_id, lat, lng, lat, lng FROM shops WHERE LOWER(shop_name) LIKE :slike LIMIT 1");
                     $s_stmt2->execute([':slike' => $s_like]);
                     $s_res = $s_stmt2->fetch(PDO::FETCH_ASSOC);
                 }
 
                 if ($s_res) {
                     $shop_id = (int)$s_res['shop_id'];
-                    $store_lat = (!empty($s_res['latitude']) && is_numeric($s_res['latitude'])) 
-                        ? (float)$s_res['latitude'] 
+                    $store_lat = (!empty($s_res['lat']) && is_numeric($s_res['lat'])) 
+                        ? (float)$s_res['lat'] 
                         : ((!empty($s_res['lat']) && is_numeric($s_res['lat'])) ? (float)$s_res['lat'] : null);
-                    $store_lng = (!empty($s_res['longitude']) && is_numeric($s_res['longitude'])) 
-                        ? (float)$s_res['longitude'] 
+                    $store_lng = (!empty($s_res['lng']) && is_numeric($s_res['lng'])) 
+                        ? (float)$s_res['lng'] 
                         : ((!empty($s_res['lng']) && is_numeric($s_res['lng'])) ? (float)$s_res['lng'] : null);
                 }
             }
@@ -626,3 +626,4 @@ if ($method === 'GET') {
 
 respond(false, 'Invalid request.', [], 400);
 ?>
+

@@ -28,7 +28,7 @@ if ($method === 'POST' && !empty($payload['action'])) {
 
 // 1. GET ADDRESSES
 if ($action === 'get_addresses' || ($method === 'GET' && empty($action))) {
-    $stmt = $conn->prepare("SELECT address_id, user_id, label, street, barangay, city, postal_code, full_address, latitude, longitude, is_default, created_at 
+    $stmt = $conn->prepare("SELECT address_id, user_id, label, street, barangay, city, postal_code, full_address, lat, lng, is_default, created_at 
         FROM user_addresses 
         WHERE user_id = :uid 
         ORDER BY is_default DESC, address_id DESC");
@@ -38,7 +38,7 @@ if ($action === 'get_addresses' || ($method === 'GET' && empty($action))) {
     // If customer has no saved addresses yet, create default Home address
     if (empty($addresses)) {
         $default_full = '124 Rizal Street, Barangay Cogon, Ormoc City, 6541';
-        $ins = $conn->prepare("INSERT INTO user_addresses (user_id, label, street, barangay, city, postal_code, full_address, latitude, longitude, is_default) 
+        $ins = $conn->prepare("INSERT INTO user_addresses (user_id, label, street, barangay, city, postal_code, full_address, lat, lng, is_default) 
             VALUES (:uid, 'Home', '124 Rizal Street, District 4', 'Barangay Cogon', 'Ormoc City', '6541', :full, 11.00762, 124.60749, 1)");
         $ins->execute([
             ':uid'  => $user_id,
@@ -54,8 +54,8 @@ if ($action === 'get_addresses' || ($method === 'GET' && empty($action))) {
             'city'         => 'Ormoc City',
             'postal_code'  => '6541',
             'full_address' => $default_full,
-            'latitude'     => 11.00762,
-            'longitude'    => 124.60749,
+            'lat'     => 11.00762,
+            'lng'    => 124.60749,
             'is_default'   => 1,
             'created_at'   => date('Y-m-d H:i:s')
         ]];
@@ -71,8 +71,8 @@ if ($action === 'add_address' || $action === 'create_address') {
     $barangay = trim((string)($payload['barangay'] ?? ''));
     $city = trim((string)($payload['city'] ?? 'Ormoc City'));
     $postal_code = trim((string)($payload['postal_code'] ?? '6541'));
-    $lat = isset($payload['latitude']) && is_numeric($payload['latitude']) ? (float)$payload['latitude'] : 11.00762;
-    $lng = isset($payload['longitude']) && is_numeric($payload['longitude']) ? (float)$payload['longitude'] : 124.60749;
+    $lat = isset($payload['lat']) && is_numeric($payload['lat']) ? (float)$payload['lat'] : 11.00762;
+    $lng = isset($payload['lng']) && is_numeric($payload['lng']) ? (float)$payload['lng'] : 124.60749;
     $is_default = !empty($payload['is_default']) ? 1 : 0;
 
     if ($street === '') {
@@ -93,7 +93,7 @@ if ($action === 'add_address' || $action === 'create_address') {
         $conn->prepare("UPDATE user_addresses SET is_default = 0 WHERE user_id = :uid")->execute([':uid' => $user_id]);
     }
 
-    $stmt = $conn->prepare("INSERT INTO user_addresses (user_id, label, street, barangay, city, postal_code, full_address, latitude, longitude, is_default, created_at) 
+    $stmt = $conn->prepare("INSERT INTO user_addresses (user_id, label, street, barangay, city, postal_code, full_address, lat, lng, is_default, created_at) 
         VALUES (:uid, :label, :street, :brgy, :city, :zip, :full, :lat, :lng, :def, NOW())");
     $stmt->execute([
         ':uid'    => $user_id,
@@ -119,8 +119,8 @@ if ($action === 'add_address' || $action === 'create_address') {
             'city'         => $city ?: 'Ormoc City',
             'postal_code'  => $postal_code ?: '6541',
             'full_address' => $full_address,
-            'latitude'     => $lat,
-            'longitude'    => $lng,
+            'lat'     => $lat,
+            'lng'    => $lng,
             'is_default'   => $is_default
         ]
     ]);
@@ -133,7 +133,7 @@ if ($action === 'set_default') {
         addr_out(false, 'Valid address_id is required.', [], 422);
     }
 
-    $chk = $conn->prepare("SELECT full_address, latitude, longitude FROM user_addresses WHERE address_id = :aid AND user_id = :uid LIMIT 1");
+    $chk = $conn->prepare("SELECT full_address, lat, lng FROM user_addresses WHERE address_id = :aid AND user_id = :uid LIMIT 1");
     $chk->execute([':aid' => $address_id, ':uid' => $user_id]);
     $addr = $chk->fetch(PDO::FETCH_ASSOC);
 
@@ -150,8 +150,8 @@ if ($action === 'set_default') {
         addr_out(true, 'Default delivery address updated.', [
             'address_id'   => $address_id,
             'full_address' => $addr['full_address'],
-            'latitude'     => $addr['latitude'],
-            'longitude'    => $addr['longitude']
+            'lat'     => $addr['lat'],
+            'lng'    => $addr['lng']
         ]);
     } catch (Throwable $e) {
         if ($conn->inTransaction()) $conn->rollBack();
@@ -193,3 +193,4 @@ if ($action === 'delete_address') {
 }
 
 addr_out(false, 'Invalid action.', [], 400);
+
