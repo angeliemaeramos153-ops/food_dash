@@ -193,7 +193,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
         $stmt = $conn->prepare("INSERT INTO food_orders 
             (shop_id, customer_id, user_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, payment_status, delivery_address, , , status, delivery_status, order_type, created_at) 
             VALUES 
-            (:shop_id, :cust_id, :uid, :cust_name, :ref, :store, :summary, :subtotal, :fee, :total, :pm, :pstatus, :addr, :dlat, :dlng, :clat, :clng, :status, 'waiting', 'Delivery', NOW())");
 
         $stmt->execute([
             ':shop_id'   => $shop_id,
@@ -209,10 +208,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
             ':pm'        => $payment_method,
             ':pstatus'   => $payment_status,
             ':addr'      => $delivery_address,
-            ':dlat'      => $id,
-            ':dlng'      => $delivery_lng,
-            ':clat'      => $customer_lat,
-            ':clng'      => $customer_lng,
             ':status'    => $initial_status
         ]);
 
@@ -222,9 +217,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
         try {
             $is_pgsql = ($conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql');
             if ($is_pgsql) {
-                $orders_stmt = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, payment_method, shop_id, delivery_address, , created_at) VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, :addr, :dlat, :dlng, NOW()) ON CONFLICT (order_id) DO NOTHING");
             } else {
-                $orders_stmt = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, payment_method, shop_id, delivery_address, , created_at) VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, :addr, :dlat, :dlng, NOW()) ON DUPLICATE KEY UPDATE payment_method = VALUES(payment_method), total_price = VALUES(total_price)");
             }
             $orders_stmt->execute([
                 ':oid'     => $order_id,
@@ -233,8 +226,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
                 ':pm'      => $payment_method,
                 ':shop_id' => $shop_id,
                 ':addr'    => $delivery_address,
-                ':dlat'    => $id,
-                ':dlng'    => $delivery_lng
             ]);
         } catch (Throwable $e) {}
 
