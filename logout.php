@@ -29,6 +29,9 @@ if (ini_get("session.use_cookies")) {
     );
 }
 session_destroy();
-header("Location: index.php?msg=logged_out");
+echo '<!doctype html><html><head><meta charset="utf-8"></head><body><script>' .
+    'try { localStorage.removeItem("foodDashCart"); } catch (error) {} ' .
+    'window.location.replace("index.php?msg=logged_out");' .
+    '</script></body></html>';
 exit();
 ?>

@@ -8,6 +8,15 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require_once __DIR__ . '/db_connect.php';
 
+function redirect_after_cart_reset(string $destination): void {
+    $safe_destination = json_encode($destination, JSON_UNESCAPED_SLASHES);
+    echo '<!doctype html><html><head><meta charset="utf-8"></head><body><script>' .
+        'try { localStorage.removeItem("foodDashCart"); } catch (error) {} ' .
+        'window.location.replace(' . $safe_destination . ');' .
+        '</script></body></html>';
+    exit;
+}
+
 // Check if user is already authenticated
 if (!empty($_SESSION['user_id']) && !empty($_SESSION['role'])) {
     $role = strtolower(trim((string)$_SESSION['role']));
@@ -71,20 +80,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // Role-based redirects
                 if (in_array($user['role'], ['chef', 'manager'])) {
-                    header("Location: chef_dashboard.php");
-                    exit;
+                    redirect_after_cart_reset('chef_dashboard.php');
                 } elseif ($user['role'] === 'rider') {
-                    header("Location: rider_dashboard.php");
-                    exit;
+                    redirect_after_cart_reset('rider_dashboard.php');
                 } elseif ($user['role'] === 'customer') {
-                    header("Location: customer_dashboard.php");
-                    exit;
+                    redirect_after_cart_reset('customer_dashboard.php');
                 } elseif ($user['role'] === 'admin') {
-                    header("Location: admin_dashboard.php");
-                    exit;
+                    redirect_after_cart_reset('admin_dashboard.php');
                 } else {
-                    header("Location: customer_dashboard.php");
-                    exit;
+                    redirect_after_cart_reset('customer_dashboard.php');
                 }
             } else {
                 $_SESSION['login_attempts'] = ($_SESSION['login_attempts'] ?? 0) + 1;

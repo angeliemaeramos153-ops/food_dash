@@ -5083,6 +5083,7 @@ function executeLogout() {
     localStorage.removeItem('fooddash_auth_token');
     localStorage.removeItem('fooddash_user');
     localStorage.removeItem('fooddash_cart');
+    localStorage.removeItem('foodDashCart');
     sessionStorage.clear();
   } catch (e) {}
 

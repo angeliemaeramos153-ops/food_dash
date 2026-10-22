@@ -9,6 +9,15 @@ if (isset($_GET['msg']) && $_GET['msg'] === 'logged_out') {
 require_once __DIR__ . '/db_connect.php';
 require_once __DIR__ . '/notification_lib.php';
 
+function redirect_after_auth_cart_reset(string $destination): void {
+    $safe_destination = json_encode($destination, JSON_UNESCAPED_SLASHES);
+    echo '<!doctype html><html><head><meta charset="utf-8"></head><body><script>' .
+        'try { localStorage.removeItem("foodDashCart"); } catch (error) {} ' .
+        'window.location.replace(' . $safe_destination . ');' .
+        '</script></body></html>';
+    exit;
+}
+
 // Helper function to redirect based on user role
 function redirectUserByRole($role) {
     $role = strtolower(trim((string)$role));
@@ -38,6 +47,7 @@ $success_msg = "";
 $active_tab = "login";
 $lockout_remaining_seconds = 0;
 $saved_demo_user_js = null;
+$clear_cart_on_load = false;
 
 if (empty($error_msg) && !empty($_SESSION['login_error'])) {
     $error_msg = $_SESSION['login_error'];
@@ -135,16 +145,13 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
                         log_activity($conn, $user_id, 'LOGIN_SUCCESS', "User authenticated successfully.", $user['username'], $user['role']);
 
                         if (in_array($user['role'], ['chef', 'manager'])) {
-                            header("Location: chef_dashboard.php");
-                            exit;
+                            redirect_after_auth_cart_reset('chef_dashboard.php');
                         } elseif ($user['role'] === 'rider') {
-                            header("Location: rider_dashboard.php");
-                            exit;
+                            redirect_after_auth_cart_reset('rider_dashboard.php');
                         } elseif ($user['role'] === 'customer') {
-                            header("Location: customer_dashboard.php");
-                            exit;
+                            redirect_after_auth_cart_reset('customer_dashboard.php');
                         } else {
-                            redirectUserByRole($user['role']);
+                            redirect_after_auth_cart_reset('admin_dashboard.php');
                         }
                     } else {
                         // Failed attempt: increment counter
@@ -227,6 +234,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
                         $new_uid = (int)$conn->lastInsertId();
                         $success_msg = "Account created with strong password encryption! You can now sign in.";
                         $active_tab = 'login';
+                        $clear_cart_on_load = true;
                         if (!empty($_POST['remember_demo'])) {
                             $saved_demo_user_js = [
                                 'role'     => $reg_role,
@@ -2209,6 +2217,11 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       if (u && !u.value) { p.value = ''; }
     });
   </script>
+  <?php if ($clear_cart_on_load): ?>
+  <script>
+    try { localStorage.removeItem('foodDashCart'); } catch (error) {}
+  </script>
+  <?php endif; ?>
   <?php require_once 'gmail_simulator_modal.php'; ?>
 </body>
 </html>
