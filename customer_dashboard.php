@@ -2882,7 +2882,7 @@ button{cursor:pointer}
     <div class="quick-status-section">
       <div class="quick-title"><i class="fa-solid fa-bolt"></i> Quick Messages:</div>
       <div class="quick-pills">
-        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('I\'m waiting outside! 👋')">👋 I'm waiting outside</button>
+        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('I'm waiting outside! 👋')">👋 I'm waiting outside</button>
         <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Please leave it with the lobby/guard house 🛡️')">🛡️ Leave at guard house</button>
         <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Thank you! Take your time and ride safely 🛵')">🛵 Ride safely</button>
         <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Please ring doorbell when you arrive 🔔')">🔔 Ring doorbell</button>
