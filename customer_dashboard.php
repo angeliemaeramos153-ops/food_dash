@@ -1,6 +1,7 @@
 ﻿<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    
 }
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
@@ -2331,36 +2332,43 @@ button{cursor:pointer}
         <i class="fa-regular fa-bell"></i>
         <span id="custNoteBadge" class="bell-badge" style="display:none">0</span>
       </button>
-      <div class="avatar"><?php echo strtoupper(substr($full_name,0,1)); ?></div>
+      <div class="avatar"><?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo strtoupper(substr($full_name,0,1)); ?></div>
     </div>
   </div>
 </header>
 
-<?php if ($ontheway_count > 0 && !empty($active_tracking_order)): ?>
+<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } if ($ontheway_count > 0 && !empty($active_tracking_order)): ?>
 <div class="notice-bar" id="dynamicOnTheWayBanner" onclick="openCustomerTrackingModal(<?= (int)$active_tracking_order['order_id'] ?>)" style="cursor:pointer;" title="Tap to view real-time delivery GPS">
   <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food! (<?= htmlspecialchars($active_tracking_order['order_ref']) ?>)</span>
   <button type="button" onclick="event.stopPropagation(); openCustomerTrackingModal(<?= (int)$active_tracking_order['order_id'] ?>)">View</button>
 </div>
-<?php elseif ($ontheway_count > 0): ?>
+<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } elseif ($ontheway_count > 0): ?>
 <div class="notice-bar" id="dynamicOnTheWayBanner" onclick="showScreen('orders')" style="cursor:pointer;">
   <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!</span>
   <button type="button" onclick="showScreen('orders')">View</button>
 </div>
-<?php else: ?>
+<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } else: ?>
 <div class="notice-bar" id="dynamicOnTheWayBanner" style="display:none; cursor:pointer;" onclick="openCustomerTrackingModal(activeCustomerTrackingOrderId || 0)">
   <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!</span>
   <button type="button" onclick="event.stopPropagation(); openCustomerTrackingModal(activeCustomerTrackingOrderId || 0)">View</button>
 </div>
-<?php endif; ?>
+<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } endif; ?>
 
 <section id="home" class="screen active">
-  <div class="greeting"><small>Good Morning,</small><h1><?php echo htmlspecialchars($full_name); ?>!</h1></div>
+  <div class="greeting"><small>Good Morning,</small><h1><?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars($full_name); ?>!</h1></div>
   <div class="search" onclick="showScreen('search')"><i class="fa-solid fa-magnifying-glass"></i><input readonly placeholder="Search for food, restaurants, or stores..."></div>
   <div class="hero"><h2>Delicious Food<br>Fresh & Fast</h2><p>Your favorite Filipino meals delivered.</p><button onclick="showScreen('stores')">Order Now</button></div>
 
   <div class="section-title"><h3>Popular Stores</h3><a onclick="showScreen('stores')">See All</a></div>
   <div class="store-row">
-    <?php 
+    <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } 
     $popular_stores = !empty($db_shops) ? $db_shops : [
         ['shop_name' => 'FoodDash Grill', 'category' => 'Steakhouse & Grill', 'logo_url' => 'logo.jpg'],
         ['shop_name' => 'McDonalds', 'category' => 'Burgers â€¢ Fries', 'logo_url' => 'assets/shops/mcdonalds.png'],
@@ -2376,14 +2384,21 @@ button{cursor:pointer}
         $p_name = $ps['shop_name'];
         $p_cat = $ps['category'] ?? 'Restaurant';
     ?>
-    <div class="store" onclick="openStore('<?php echo htmlspecialchars(addslashes($p_name)); ?>', '<?php echo htmlspecialchars(addslashes($p_logo)); ?>')">
+    <div class="store" onclick="openStore('<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars(addslashes($p_name)); ?>', '<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars(addslashes($p_logo)); ?>')">
       <div class="store-logo">
-        <img src="<?php echo htmlspecialchars($p_logo); ?>" alt="<?php echo htmlspecialchars($p_name); ?>" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='assets/shops/default_store.png';}else{this.onerror=null;this.src='logo.jpg';}">
+        <img src="<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars($p_logo); ?>" alt="<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars($p_name); ?>" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='assets/shops/default_store.png';}else{this.onerror=null;this.src='logo.jpg';}">
       </div>
-      <strong><?php echo htmlspecialchars($p_name); ?></strong>
-      <small><?php echo htmlspecialchars($p_cat); ?></small>
+      <strong><?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars($p_name); ?></strong>
+      <small><?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars($p_cat); ?></small>
     </div>
-    <?php endforeach; ?>
+    <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } endforeach; ?>
   </div>
 
   <div class="section-title"><h3>Popular Near You</h3><a onclick="showScreen('stores')">See All</a></div>
@@ -2407,7 +2422,8 @@ button{cursor:pointer}
     <button class="chip" onclick="filterStoreCategory('Chinese', this)">Chinese</button>
   </div>
   <div class="list" id="storeList">
-    <?php 
+    <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } 
     $all_stores = !empty($db_shops) ? $db_shops : [
         ['shop_name' => 'FoodDash Grill', 'category' => 'Steakhouse & Grill', 'logo_url' => 'logo.jpg'],
         ['shop_name' => 'McDonalds', 'category' => 'Burgers â€¢ Fries â€¢ McSpaghetti', 'logo_url' => 'assets/shops/mcdonalds.png'],
@@ -2423,18 +2439,27 @@ button{cursor:pointer}
       $sh_name = $sh['shop_name'];
       $sh_cat = $sh['category'] ?? 'Specialty Food';
     ?>
-    <div class="row-card" data-name="<?php echo strtolower(htmlspecialchars($sh_name)); ?>" data-category="<?php echo strtolower(htmlspecialchars($sh_cat)); ?>" onclick="openStore('<?php echo htmlspecialchars(addslashes($sh_name)); ?>', '<?php echo htmlspecialchars(addslashes($sh_logo)); ?>')">
+    <div class="row-card" data-name="<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo strtolower(htmlspecialchars($sh_name)); ?>" data-category="<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo strtolower(htmlspecialchars($sh_cat)); ?>" onclick="openStore('<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars(addslashes($sh_name)); ?>', '<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars(addslashes($sh_logo)); ?>')">
       <div class="row-icon">
-        <img src="<?php echo htmlspecialchars($sh_logo); ?>" alt="<?php echo htmlspecialchars($sh_name); ?>" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='assets/shops/default_store.png';}else{this.onerror=null;this.src='logo.jpg';}">
+        <img src="<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars($sh_logo); ?>" alt="<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars($sh_name); ?>" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='assets/shops/default_store.png';}else{this.onerror=null;this.src='logo.jpg';}">
       </div>
       <div class="info">
-        <strong><?php echo htmlspecialchars($sh_name); ?></strong>
-        <small><?php echo htmlspecialchars($sh_cat); ?></small>
+        <strong><?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars($sh_name); ?></strong>
+        <small><?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars($sh_cat); ?></small>
         <small>â­ 4.8 â€¢ 20â€“35 min â€¢ <b style="color:#2f8f45">Open</b></small>
       </div>
       <i class="fa-solid fa-chevron-right chev"></i>
     </div>
-    <?php endforeach; ?>
+    <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } endforeach; ?>
   </div>
 </section>
 
@@ -2590,7 +2615,8 @@ button{cursor:pointer}
     <button class="chip" onclick="filterOrders('cancelled',this)">Cancelled</button>
   </div>
   <div class="list" id="orderList">
-    <?php if (empty($db_orders)): ?>
+    <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } if (empty($db_orders)): ?>
       <div class="empty-state-card" id="noOrders" style="text-align: center; padding: 36px 18px; background: #ffffff; border-radius: 14px; margin: 12px 0; border: 1.5px dashed #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
         <div style="font-size: 42px; margin-bottom: 10px; line-height: 1;">ðŸ›ï¸</div>
         <strong style="display: block; font-size: 16px; color: var(--olive-dark, #2f341d); margin-bottom: 6px;">No orders placed yet!</strong>
@@ -2601,7 +2627,8 @@ button{cursor:pointer}
           <i class="fa-solid fa-store"></i> Browse Stores
         </button>
       </div>
-    <?php else: foreach ($db_orders as $ord): 
+    <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } else: foreach ($db_orders as $ord): 
       $raw_status = strtoupper(trim(str_replace([' ', '-'], '_', (string)($ord['status'] ?? ''))));
       $del_status = strtolower(trim((string)($ord['delivery_status'] ?? '')));
       $status_lower = strtolower(trim((string)($ord['status'] ?? '')));
@@ -2654,46 +2681,60 @@ button{cursor:pointer}
           <strong class="order-ref"><?= htmlspecialchars($clean_card_ref) ?></strong>
           <small class="order-store-items"><?= htmlspecialchars($ord['store_name']) ?> â€¢ <?= htmlspecialchars($ord['items_summary']) ?></small>
           <small class="order-meta order-date-price"><?= htmlspecialchars(date('M d, Y â€¢ g:i A', strtotime($ord['created_at']))) ?> â€¢ â‚±<?= number_format((float)$ord['total_amount'], 2) ?></small>
-          <?php if (!empty($ord['delivery_address'])): ?>
+          <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } if (!empty($ord['delivery_address'])): ?>
             <small class="order-meta order-address" style="color: #64748b; font-weight: 500; font-size: 12px; margin-top: 2px; white-space: normal; line-height: 1.35;"><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> <?= htmlspecialchars($ord['delivery_address']) ?></small>
-          <?php endif; ?>
+          <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } endif; ?>
           
           <div style="margin-top: 8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span class="status-badge status-<?= htmlspecialchars($norm_status) ?>" id="status-tag-<?= $ord['order_id'] ?>">
-              <?php if ($is_arrived): ?>
+              <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } if ($is_arrived): ?>
                 <i class="fa-solid fa-bell fa-shake"></i>
-              <?php elseif ($is_near): ?>
+              <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } elseif ($is_near): ?>
                 <i class="fa-solid fa-person-biking fa-beat"></i>
-              <?php endif; ?>
+              <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } endif; ?>
               <?= htmlspecialchars($status_label) ?>
             </span>
             <?= render_payment_badge($ord['payment_method'] ?? 'Cash on Delivery (COD)') ?>
-            <?php if ($is_settled): ?>
+            <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } if ($is_settled): ?>
               <span class="settled-tag"><i class="fa-solid fa-circle-check"></i> Reconciled</span>
-            <?php endif; ?>
+            <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } endif; ?>
           </div>
 
-          <?php if ($can_cancel): ?>
+          <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } if ($can_cancel): ?>
             <!-- a. Status 'pending' / 'preparing': Show Cancel Order button -->
             <div style="margin-top:8px;" id="cancel-wrap-<?= $ord['order_id'] ?>" class="order-actions-wrap">
               <button type="button" class="btn-cancel-order" id="btn-cancel-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); promptCancelOrder(<?= (int)$ord['order_id'] ?>, '<?= htmlspecialchars(addslashes($clean_card_ref)) ?>', '<?= htmlspecialchars(addslashes($status_label)) ?>')">
                 <i class="fa-solid fa-ban"></i> Cancel Order
               </button>
             </div>
-          <?php elseif ($is_cancelled): ?>
+          <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } elseif ($is_cancelled): ?>
             <div style="font-size: 12px; color: #dc2626; font-weight:700; margin-top:6px;">
               <i class="fa-solid fa-circle-xmark"></i> Cancelled by Customer
             </div>
-          <?php endif; ?>
+          <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } endif; ?>
 
-          <?php if ($is_ontheway || $is_near || $is_arrived): ?>
+          <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } if ($is_ontheway || $is_near || $is_arrived): ?>
             <!-- b. Status 'on_delivery' / 'near_customer' / 'arrived': Show Live Track Rider and Received buttons -->
             <div style="font-size: 12px; color: var(--harvest-sun); font-weight:600; margin-top:6px;">
-              <?php if ($is_arrived): ?>
+              <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } if ($is_arrived): ?>
                 <i class="fa-solid fa-bell fa-shake"></i> Rider has arrived at your location!
-              <?php elseif ($is_near): ?>
+              <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } elseif ($is_near): ?>
                 <i class="fa-solid fa-person-biking fa-beat"></i> Rider is near your location (&lt; 200m)!
-              <?php endif; ?>
+              <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } endif; ?>
               <?= htmlspecialchars($status_label) ?>
             </span>
             <div id="track-actions-<?= $ord['order_id'] ?>" class="order-actions-wrap" style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
@@ -2704,20 +2745,24 @@ button{cursor:pointer}
                 <i class="fa-solid fa-box-open"></i> ðŸ“¦ Received
               </button>
             </div>
-          <?php elseif ($is_delivered && !$is_settled): ?>
+          <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } elseif ($is_delivered && !$is_settled): ?>
             <div style="font-size: 12px; color: var(--sagebrush); font-weight:600; margin-top:6px;">
               <i class="fa-solid fa-circle-check"></i> Order Delivered. Awaiting admin settlement.
             </div>
-          <?php endif; ?>
+          <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } endif; ?>
         </div>
       </div>
-    <?php endforeach; endif; ?>
+    <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } endforeach; endif; ?>
   </div>
 </section>
 
 <section id="account" class="screen">
   <div class="section-title"><h3>My Account</h3><i class="fa-solid fa-gear"></i></div>
-  <div class="profile"><div class="profile-pic">ðŸ‘¤</div><div><strong><?php echo htmlspecialchars($full_name); ?></strong><small>Customer account</small></div></div>
+  <div class="profile"><div class="profile-pic">ðŸ‘¤</div><div><strong><?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars($full_name); ?></strong><small>Customer account</small></div></div>
   <div class="menu">
     <a href="javascript:void(0)" onclick="showScreen('orders')"><span><i class="fa-regular fa-clipboard"></i>My Orders</span><i class="fa-solid fa-chevron-right"></i></a>
     <a href="javascript:void(0)" onclick="openSavedAddressesModal()"><span><i class="fa-solid fa-location-dot"></i>Addresses</span><i class="fa-solid fa-chevron-right"></i></a>
@@ -3344,10 +3389,13 @@ let cart = JSON.parse(localStorage.getItem('foodDashCart') || '[]');
 let itemQty = 1;
 let currentItem = {name:'Big Mac', price:179, icon:'ðŸ”', desc:'Two beef patties, special sauce, lettuce and cheese.', store:'McDonalds'};
 
-const onTheWayCount = <?php echo (int)$ontheway_count; ?>;
+const onTheWayCount = <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo (int)$ontheway_count; ?>;
 
-const dbStoreMenus = <?php echo json_encode($db_store_menus, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
-const dbStoreCategories = <?php echo json_encode($db_store_categories, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+const dbStoreMenus = <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo json_encode($db_store_menus, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+const dbStoreCategories = <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo json_encode($db_store_categories, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 
 const menus = {
   'FoodDash Grill': [
@@ -5148,7 +5196,8 @@ let custDestMarker = null;
 let custRiderMarker = null;
 let custRoutePolyline = null;
 let custTrackingTimer = null;
-let activeCustomerTrackingOrderId = <?php echo !empty($active_tracking_order['order_id']) ? (int)$active_tracking_order['order_id'] : 'null'; ?>;
+let activeCustomerTrackingOrderId = <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo !empty($active_tracking_order['order_id']) ? (int)$active_tracking_order['order_id'] : 'null'; ?>;
 let currentTrackingRiderPhone = '+639175550192';
 let currentTrackingRiderName = 'Alex Rider';
 
@@ -5648,7 +5697,8 @@ function renderCustomerMap(opts) {
 
 // Customer Chat Integration
 function openCustomerChat() {
-  const orderId = activeCustomerTrackingOrderId || <?php echo !empty($active_tracking_order['order_id']) ? (int)$active_tracking_order['order_id'] : '0'; ?>;
+  const orderId = activeCustomerTrackingOrderId || <?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } echo !empty($active_tracking_order['order_id']) ? (int)$active_tracking_order['order_id'] : '0'; ?>;
   if (!orderId) {
     showScreen('orders');
     return;
@@ -6584,9 +6634,11 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch(e) {}
 });
 </script>
-<?php require_once 'gmail_simulator_modal.php'; ?>
+<?php
+if (session_status() === PHP_SESSION_NONE) { session_start(); } require_once 'gmail_simulator_modal.php'; ?>
 </body>
 </html>
+
 
 
 
