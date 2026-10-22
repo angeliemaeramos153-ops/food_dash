@@ -278,13 +278,15 @@ $new_order_id = (int)$conn->lastInsertId();
                 // Insert items into food_order_items
                 $it_stmt = $conn->prepare("INSERT INTO food_order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (:oid, :name, :store, :qty, :price, :line, :icon)");
                 foreach ($clean_items as $ci) {
+                    $unit_price = isset($ci['price']) && is_numeric($ci['price']) ? (float)$ci['price'] : 0.00;
+                    $line_total = isset($ci['line']) && is_numeric($ci['line']) ? (float)$ci['line'] : round($unit_price * (int)$ci['qty'], 2);
                     $it_stmt->execute([
                         ':oid'   => $new_order_id,
                         ':name'  => $ci['name'],
                         ':store' => $ci['store'],
                         ':qty'   => $ci['qty'],
-                        ':price' => $ci['price'],
-                        ':line'  => $ci['line'],
+                        ':price' => $unit_price,
+                        ':line'  => $line_total,
                         ':icon'  => $ci['icon'],
                     ]);
                 }
@@ -292,12 +294,14 @@ $new_order_id = (int)$conn->lastInsertId();
                 // Insert into order_items compatibility table
                 $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, quantity, unit_price, line_total) VALUES (:oid, :name, :qty, :price, :line)");
                 foreach ($clean_items as $ci) {
+                    $unit_price = isset($ci['price']) && is_numeric($ci['price']) ? (float)$ci['price'] : 0.00;
+                    $line_total = isset($ci['line']) && is_numeric($ci['line']) ? (float)$ci['line'] : round($unit_price * (int)$ci['qty'], 2);
                     $co_stmt->execute([
                         ':oid'   => $new_order_id,
                         ':name'  => $ci['name'],
                         ':qty'   => $ci['qty'],
-                        ':price' => $ci['price'],
-                        ':line'  => $ci['line']
+                        ':price' => $unit_price,
+                        ':line'  => $line_total
                     ]);
                 }
 

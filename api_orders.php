@@ -214,15 +214,32 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
             "(order_id, item_name, store_name, quantity, unit_price, line_total, icon) " .
             "VALUES (:oid, :name, :store, :qty, :price, :line, :icon)"
         );
+        $compat_item_stmt = $conn->prepare("INSERT INTO order_items " .
+            "(order_id, item_name, quantity, unit_price, line_total) " .
+            "VALUES (:oid, :name, :qty, :price, :line)"
+        );
         foreach ($clean_items as $item) {
+            $unit_price = isset($item['unit_price']) && is_numeric($item['unit_price'])
+                ? (float)$item['unit_price']
+                : 0.00;
+            $line_total = isset($item['line_total']) && is_numeric($item['line_total'])
+                ? (float)$item['line_total']
+                : round($unit_price * (int)$item['quantity'], 2);
             $item_stmt->execute([
                 ':oid' => $order_id,
                 ':name' => $item['name'],
                 ':store' => $store_name,
                 ':qty' => $item['quantity'],
-                ':price' => $item['unit_price'],
-                ':line' => $item['line_total'],
+                ':price' => $unit_price,
+                ':line' => $line_total,
                 ':icon' => $item['icon']
+            ]);
+            $compat_item_stmt->execute([
+                ':oid' => $order_id,
+                ':name' => $item['name'],
+                ':qty' => $item['quantity'],
+                ':price' => $unit_price,
+                ':line' => $line_total
             ]);
         }
 
