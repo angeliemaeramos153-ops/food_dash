@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 session_start();
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
@@ -100,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'id'          => (int)$m_row['item_id'],
                     'name'        => $m_row['item_name'],
                     'price'       => (float)$m_row['price'],
-                    'icon'        => !empty($m_row['icon']) ? $m_row['icon'] : '🍴',
+                    'icon'        => !empty($m_row['icon']) ? $m_row['icon'] : 'ðŸ´',
                     'desc'        => !empty($m_row['description']) ? $m_row['description'] : '',
                     'category'    => !empty($m_row['category']) ? $m_row['category'] : 'Main',
                     'recommended' => (!empty($m_row['is_recommended']) && $m_row['is_recommended'] !== 'f' && $m_row['is_recommended'] !== false) ? 1 : 0
@@ -155,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':oid'   => $order_id,
                     ':uid'   => $user_id,
                     ':cname' => $cname,
-                    ':txt'   => 'Customer: 📦 Order receipt confirmed. Thank you!'
+                    ':txt'   => 'Customer: ðŸ“¦ Order receipt confirmed. Thank you!'
                 ]);
             }
         } catch (Throwable $e) {}
@@ -227,7 +227,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $qty = (int)($item['qty'] ?? 1);
                     $price = (float)($item['price'] ?? 0);
                     $iname = trim((string)($item['name'] ?? ''));
-                    $icon = trim((string)($item['icon'] ?? '🍴'));
+                    $icon = trim((string)($item['icon'] ?? 'ðŸ´'));
                     if ($iname === '' || $price <= 0 || $qty <= 0) continue;
                     $line = round($price * $qty, 2);
                     $subtotal += $line;
@@ -285,7 +285,7 @@ $new_order_id = (int)$conn->lastInsertId();
                         ':name'  => $ci['name'],
                         ':store' => $ci['store'],
                         ':qty'   => $ci['qty'],
-                        ':price' => isset(\['price']) && floatval(\['price']) > 0 ? floatval(\['price']) : (isset(\['unit_price']) && floatval(\['unit_price']) > 0 ? floatval(\['unit_price']) : (isset(\['line_total']) && isset(\['qty']) && \['qty'] > 0 ? floatval(\['line_total'])/floatval(\['qty']) : 100.00)),
+    ':price' => isset(\['price']) ? floatval(\['price']) : 100.00,
                         ':line'  => $line_total,
                         ':icon'  => $ci['icon'],
                     ]);
@@ -434,7 +434,7 @@ if ($menu_items_res) {
             'id'          => (int)$mi['item_id'],
             'name'        => $mi['item_name'],
             'price'       => (float)$mi['price'],
-            'icon'        => !empty($mi['icon']) ? $mi['icon'] : '🍴',
+            'icon'        => !empty($mi['icon']) ? $mi['icon'] : 'ðŸ´',
             'desc'        => !empty($mi['description']) ? $mi['description'] : 'Fresh and delicious meal prepared to order.',
             'category'    => $cat,
             'recommended' => (!empty($mi['is_recommended']) && $mi['is_recommended'] !== 'f' && $mi['is_recommended'] !== false) ? 1 : 0
@@ -447,7 +447,7 @@ if ($menu_items_res) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Food Dash — Customer</title>
+<title>Food Dash â€” Customer</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -2361,13 +2361,13 @@ button{cursor:pointer}
     <?php 
     $popular_stores = !empty($db_shops) ? $db_shops : [
         ['shop_name' => 'FoodDash Grill', 'category' => 'Steakhouse & Grill', 'logo_url' => 'logo.jpg'],
-        ['shop_name' => 'McDonalds', 'category' => 'Burgers • Fries', 'logo_url' => 'assets/shops/mcdonalds.png'],
-        ['shop_name' => 'Jollibee', 'category' => 'Chickenjoy • Fast Food', 'logo_url' => 'assets/shops/jollibee.png'],
-        ['shop_name' => 'Mang Inasal', 'category' => 'Grilled Chicken • Rice Meals', 'logo_url' => 'assets/shops/mang_inasal.png'],
-        ['shop_name' => 'Ribshack', 'category' => 'Ribs • BBQ', 'logo_url' => 'assets/shops/ribshack.png'],
-        ['shop_name' => 'Shakeys', 'category' => 'Pizza • Mojos', 'logo_url' => 'assets/shops/shakeys.png'],
-        ['shop_name' => 'Chowking', 'category' => 'Chinese • Dim Sum', 'logo_url' => 'assets/shops/chowking.png'],
-        ['shop_name' => 'Greenwich', 'category' => 'Pizza • Pasta', 'logo_url' => 'assets/shops/greenwich.png']
+        ['shop_name' => 'McDonalds', 'category' => 'Burgers â€¢ Fries', 'logo_url' => 'assets/shops/mcdonalds.png'],
+        ['shop_name' => 'Jollibee', 'category' => 'Chickenjoy â€¢ Fast Food', 'logo_url' => 'assets/shops/jollibee.png'],
+        ['shop_name' => 'Mang Inasal', 'category' => 'Grilled Chicken â€¢ Rice Meals', 'logo_url' => 'assets/shops/mang_inasal.png'],
+        ['shop_name' => 'Ribshack', 'category' => 'Ribs â€¢ BBQ', 'logo_url' => 'assets/shops/ribshack.png'],
+        ['shop_name' => 'Shakeys', 'category' => 'Pizza â€¢ Mojos', 'logo_url' => 'assets/shops/shakeys.png'],
+        ['shop_name' => 'Chowking', 'category' => 'Chinese â€¢ Dim Sum', 'logo_url' => 'assets/shops/chowking.png'],
+        ['shop_name' => 'Greenwich', 'category' => 'Pizza â€¢ Pasta', 'logo_url' => 'assets/shops/greenwich.png']
     ];
     foreach ($popular_stores as $ps):
         $p_logo = !empty($ps['logo_url']) ? $ps['logo_url'] : 'assets/shops/default_store.png';
@@ -2386,10 +2386,10 @@ button{cursor:pointer}
 
   <div class="section-title"><h3>Popular Near You</h3><a onclick="showScreen('stores')">See All</a></div>
   <div class="grid">
-    <div class="food-card"><div class="food-img">🍔</div><div class="food-body"><strong>Big Mac</strong><small>McDonalds</small><div class="price-row"><span class="price">₱179.00</span><button class="add" onclick="addCart('Big Mac',179,'🍔','McDonalds')">+</button></div></div></div>
-    <div class="food-card"><div class="food-img">🍗</div><div class="food-body"><strong>Chickenjoy</strong><small>Jollibee</small><div class="price-row"><span class="price">₱129.00</span><button class="add" onclick="addCart('Chickenjoy',129,'🍗','Jollibee')">+</button></div></div></div>
-    <div class="food-card"><div class="food-img">🍚</div><div class="food-body"><strong>Chicken Inasal</strong><small>Mang Inasal</small><div class="price-row"><span class="price">₱189.00</span><button class="add" onclick="addCart('Chicken Inasal',189,'🍚','Mang Inasal')">+</button></div></div></div>
-    <div class="food-card"><div class="food-img">🍕</div><div class="food-body"><strong>Managers Choice Pizza</strong><small>Shakeys</small><div class="price-row"><span class="price">₱499.00</span><button class="add" onclick="addCart('Managers Choice Pizza',499,'🍕','Shakeys')">+</button></div></div></div>
+    <div class="food-card"><div class="food-img">ðŸ”</div><div class="food-body"><strong>Big Mac</strong><small>McDonalds</small><div class="price-row"><span class="price">â‚±179.00</span><button class="add" onclick="addCart('Big Mac',179,'ðŸ”','McDonalds')">+</button></div></div></div>
+    <div class="food-card"><div class="food-img">ðŸ—</div><div class="food-body"><strong>Chickenjoy</strong><small>Jollibee</small><div class="price-row"><span class="price">â‚±129.00</span><button class="add" onclick="addCart('Chickenjoy',129,'ðŸ—','Jollibee')">+</button></div></div></div>
+    <div class="food-card"><div class="food-img">ðŸš</div><div class="food-body"><strong>Chicken Inasal</strong><small>Mang Inasal</small><div class="price-row"><span class="price">â‚±189.00</span><button class="add" onclick="addCart('Chicken Inasal',189,'ðŸš','Mang Inasal')">+</button></div></div></div>
+    <div class="food-card"><div class="food-img">ðŸ•</div><div class="food-body"><strong>Managers Choice Pizza</strong><small>Shakeys</small><div class="price-row"><span class="price">â‚±499.00</span><button class="add" onclick="addCart('Managers Choice Pizza',499,'ðŸ•','Shakeys')">+</button></div></div></div>
   </div>
 </section>
 
@@ -2408,13 +2408,13 @@ button{cursor:pointer}
     <?php 
     $all_stores = !empty($db_shops) ? $db_shops : [
         ['shop_name' => 'FoodDash Grill', 'category' => 'Steakhouse & Grill', 'logo_url' => 'logo.jpg'],
-        ['shop_name' => 'McDonalds', 'category' => 'Burgers • Fries • McSpaghetti', 'logo_url' => 'assets/shops/mcdonalds.png'],
-        ['shop_name' => 'Jollibee', 'category' => 'Chicken • Burgers • Spaghetti', 'logo_url' => 'assets/shops/jollibee.png'],
-        ['shop_name' => 'Mang Inasal', 'category' => 'Grilled Chicken • Rice Meals', 'logo_url' => 'assets/shops/mang_inasal.png'],
-        ['shop_name' => 'Ribshack', 'category' => 'Ribs • Chicken • Pasta', 'logo_url' => 'assets/shops/ribshack.png'],
-        ['shop_name' => 'Shakeys', 'category' => 'Pizza • Chicken • Pasta', 'logo_url' => 'assets/shops/shakeys.png'],
-        ['shop_name' => 'Chowking', 'category' => 'Chinese Favorites • Rice Meals', 'logo_url' => 'assets/shops/chowking.png'],
-        ['shop_name' => 'Greenwich', 'category' => 'Pizza • Pasta • Chicken', 'logo_url' => 'assets/shops/greenwich.png']
+        ['shop_name' => 'McDonalds', 'category' => 'Burgers â€¢ Fries â€¢ McSpaghetti', 'logo_url' => 'assets/shops/mcdonalds.png'],
+        ['shop_name' => 'Jollibee', 'category' => 'Chicken â€¢ Burgers â€¢ Spaghetti', 'logo_url' => 'assets/shops/jollibee.png'],
+        ['shop_name' => 'Mang Inasal', 'category' => 'Grilled Chicken â€¢ Rice Meals', 'logo_url' => 'assets/shops/mang_inasal.png'],
+        ['shop_name' => 'Ribshack', 'category' => 'Ribs â€¢ Chicken â€¢ Pasta', 'logo_url' => 'assets/shops/ribshack.png'],
+        ['shop_name' => 'Shakeys', 'category' => 'Pizza â€¢ Chicken â€¢ Pasta', 'logo_url' => 'assets/shops/shakeys.png'],
+        ['shop_name' => 'Chowking', 'category' => 'Chinese Favorites â€¢ Rice Meals', 'logo_url' => 'assets/shops/chowking.png'],
+        ['shop_name' => 'Greenwich', 'category' => 'Pizza â€¢ Pasta â€¢ Chicken', 'logo_url' => 'assets/shops/greenwich.png']
     ];
     foreach ($all_stores as $sh): 
       $sh_logo = !empty($sh['logo_url']) ? $sh['logo_url'] : 'assets/shops/default_store.png';
@@ -2428,7 +2428,7 @@ button{cursor:pointer}
       <div class="info">
         <strong><?php echo htmlspecialchars($sh_name); ?></strong>
         <small><?php echo htmlspecialchars($sh_cat); ?></small>
-        <small>⭐ 4.8 • 20–35 min • <b style="color:#2f8f45">Open</b></small>
+        <small>â­ 4.8 â€¢ 20â€“35 min â€¢ <b style="color:#2f8f45">Open</b></small>
       </div>
       <i class="fa-solid fa-chevron-right chev"></i>
     </div>
@@ -2444,7 +2444,7 @@ button{cursor:pointer}
     </div>
     <h2 id="storeName">McDonalds</h2>
     <p id="storeDesc">Burgers, Fries, McSpaghetti and more!</p>
-    <div class="rating">⭐ 4.8 &nbsp; • &nbsp; 20–30 min &nbsp; • &nbsp; <b>Open</b></div>
+    <div class="rating">â­ 4.8 &nbsp; â€¢ &nbsp; 20â€“30 min &nbsp; â€¢ &nbsp; <b>Open</b></div>
   </div>
   <div class="chips" id="storeDishCategoryChips">
     <!-- Populated dynamically per active store -->
@@ -2460,8 +2460,8 @@ button{cursor:pointer}
 <section id="item" class="screen">
   <div class="section-title"><button class="icon-btn" onclick="showScreen('store')"><i class="fa-solid fa-arrow-left"></i></button><h3>Item Details</h3><i class="fa-regular fa-heart"></i></div>
   <div class="item-detail">
-    <div class="item-art" id="itemArt">🍔</div>
-    <div class="item-info"><h2 id="itemName">Big Mac</h2><p id="itemDesc">Two beef patties, special sauce, lettuce and cheese.</p><div class="item-price" id="itemPrice">₱179.00</div><div class="qty"><button onclick="changeQty(-1)">−</button><span id="itemQty">1</span><button onclick="changeQty(1)">+</button></div><button class="primary" style="margin-top:13px" onclick="addCurrentItem()">Add to Cart</button></div>
+    <div class="item-art" id="itemArt">ðŸ”</div>
+    <div class="item-info"><h2 id="itemName">Big Mac</h2><p id="itemDesc">Two beef patties, special sauce, lettuce and cheese.</p><div class="item-price" id="itemPrice">â‚±179.00</div><div class="qty"><button onclick="changeQty(-1)">âˆ’</button><span id="itemQty">1</span><button onclick="changeQty(1)">+</button></div><button class="primary" style="margin-top:13px" onclick="addCurrentItem()">Add to Cart</button></div>
   </div>
 </section>
 
@@ -2471,11 +2471,11 @@ button{cursor:pointer}
   <div class="section-title"><h3>Popular Searches</h3></div>
   <div class="chips"><button class="chip" onclick="setSearch('big mac')">Big Mac</button><button class="chip" onclick="setSearch('chickenjoy')">Chickenjoy</button><button class="chip" onclick="setSearch('mcspaghetti')">McSpaghetti</button><button class="chip" onclick="setSearch('inasal')">Inasal</button><button class="chip" onclick="setSearch('pizza')">Pizza</button></div>
   <div class="list" id="searchResults">
-    <div class="row-card" onclick="openStore('FoodDash Grill','logo.jpg')"><div class="row-icon"><img src="logo.jpg" alt="FoodDash Grill" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>FoodDash Grill</strong><small>Smoked Ribs • Flame-Grilled BBQ • Angus Burgers</small></div></div>
-    <div class="row-card" onclick="openStore('McDonalds','assets/shops/mcdonalds.png')"><div class="row-icon"><img src="assets/shops/mcdonalds.png" alt="McDonalds" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>McDonalds</strong><small>Big Mac • McSpaghetti • French Fries</small></div></div>
-    <div class="row-card" onclick="openStore('Jollibee','assets/shops/jollibee.png')"><div class="row-icon"><img src="assets/shops/jollibee.png" alt="Jollibee" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>Jollibee</strong><small>Chickenjoy • Jolly Spaghetti • Yumburger</small></div></div>
-    <div class="row-card" onclick="openStore('Mang Inasal','assets/shops/mang_inasal.png')"><div class="row-icon"><img src="assets/shops/mang_inasal.png" alt="Mang Inasal" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>Mang Inasal</strong><small>Chicken Inasal • Pork BBQ • Halo-Halo</small></div></div>
-    <div class="row-card" onclick="openStore('Ribshack','assets/shops/ribshack.png')"><div class="row-icon"><img src="assets/shops/ribshack.png" alt="Ribshack" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>Ribshack</strong><small>Baby Back Ribs • Chicken BBQ • Meals</small></div></div>
+    <div class="row-card" onclick="openStore('FoodDash Grill','logo.jpg')"><div class="row-icon"><img src="logo.jpg" alt="FoodDash Grill" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>FoodDash Grill</strong><small>Smoked Ribs â€¢ Flame-Grilled BBQ â€¢ Angus Burgers</small></div></div>
+    <div class="row-card" onclick="openStore('McDonalds','assets/shops/mcdonalds.png')"><div class="row-icon"><img src="assets/shops/mcdonalds.png" alt="McDonalds" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>McDonalds</strong><small>Big Mac â€¢ McSpaghetti â€¢ French Fries</small></div></div>
+    <div class="row-card" onclick="openStore('Jollibee','assets/shops/jollibee.png')"><div class="row-icon"><img src="assets/shops/jollibee.png" alt="Jollibee" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>Jollibee</strong><small>Chickenjoy â€¢ Jolly Spaghetti â€¢ Yumburger</small></div></div>
+    <div class="row-card" onclick="openStore('Mang Inasal','assets/shops/mang_inasal.png')"><div class="row-icon"><img src="assets/shops/mang_inasal.png" alt="Mang Inasal" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>Mang Inasal</strong><small>Chicken Inasal â€¢ Pork BBQ â€¢ Halo-Halo</small></div></div>
+    <div class="row-card" onclick="openStore('Ribshack','assets/shops/ribshack.png')"><div class="row-icon"><img src="assets/shops/ribshack.png" alt="Ribshack" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>Ribshack</strong><small>Baby Back Ribs â€¢ Chicken BBQ â€¢ Meals</small></div></div>
   </div>
 </section>
 
@@ -2567,9 +2567,9 @@ button{cursor:pointer}
     </div>
 
     <div class="summary">
-      <div class="sumrow"><span>Subtotal</span><span id="subtotal">₱0.00</span></div>
-      <div class="sumrow"><span>Delivery Fee</span><span>₱30.00</span></div>
-      <div class="sumrow total"><span>Total</span><span id="total">₱30.00</span></div>
+      <div class="sumrow"><span>Subtotal</span><span id="subtotal">â‚±0.00</span></div>
+      <div class="sumrow"><span>Delivery Fee</span><span>â‚±30.00</span></div>
+      <div class="sumrow total"><span>Total</span><span id="total">â‚±30.00</span></div>
     </div>
     <button type="button" class="primary btn-checkout" style="margin-top:12px" id="payActionBtn" onclick="handlePayAction()">Checkout</button>
   </div>
@@ -2590,7 +2590,7 @@ button{cursor:pointer}
   <div class="list" id="orderList">
     <?php if (empty($db_orders)): ?>
       <div class="empty-state-card" id="noOrders" style="text-align: center; padding: 36px 18px; background: #ffffff; border-radius: 14px; margin: 12px 0; border: 1.5px dashed #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
-        <div style="font-size: 42px; margin-bottom: 10px; line-height: 1;">🛍️</div>
+        <div style="font-size: 42px; margin-bottom: 10px; line-height: 1;">ðŸ›ï¸</div>
         <strong style="display: block; font-size: 16px; color: var(--olive-dark, #2f341d); margin-bottom: 6px;">No orders placed yet!</strong>
         <p style="font-size: 12px; color: var(--muted, #64748b); margin-bottom: 16px; max-width: 280px; margin-left: auto; margin-right: auto; line-height: 1.4;">
           Your order history is clean. Discover our partner stores and order delicious meals today!
@@ -2646,12 +2646,12 @@ button{cursor:pointer}
     ?>
       <div class="row-card order-row <?= $is_ontheway ? 'on-the-way-card' : '' ?>" data-status="<?= htmlspecialchars($norm_status) ?>" id="order-card-<?= $ord['order_id'] ?>" <?= $is_ontheway ? 'onclick="openTrackingModal(' . (int)$ord['order_id'] . ')" style="cursor:pointer;" title="Tap to view live delivery tracking map"' : '' ?>>
         <div class="row-icon <?= $is_cancelled ? 'grey' : ($is_ontheway ? 'jolli' : ($is_settled ? 'settled-icon' : 'green')) ?>">
-          <?= $is_cancelled ? '🚫' : ($is_ontheway ? '🛵' : ($is_settled ? '🛡️' : ($is_delivered ? '📦' : ($is_prep ? '🍳' : '🛍️')))) ?>
+          <?= $is_cancelled ? 'ðŸš«' : ($is_ontheway ? 'ðŸ›µ' : ($is_settled ? 'ðŸ›¡ï¸' : ($is_delivered ? 'ðŸ“¦' : ($is_prep ? 'ðŸ³' : 'ðŸ›ï¸')))) ?>
         </div>
         <div class="info">
           <strong class="order-ref"><?= htmlspecialchars($clean_card_ref) ?></strong>
-          <small class="order-store-items"><?= htmlspecialchars($ord['store_name']) ?> • <?= htmlspecialchars($ord['items_summary']) ?></small>
-          <small class="order-meta order-date-price"><?= htmlspecialchars(date('M d, Y • g:i A', strtotime($ord['created_at']))) ?> • ₱<?= number_format((float)$ord['total_amount'], 2) ?></small>
+          <small class="order-store-items"><?= htmlspecialchars($ord['store_name']) ?> â€¢ <?= htmlspecialchars($ord['items_summary']) ?></small>
+          <small class="order-meta order-date-price"><?= htmlspecialchars(date('M d, Y â€¢ g:i A', strtotime($ord['created_at']))) ?> â€¢ â‚±<?= number_format((float)$ord['total_amount'], 2) ?></small>
           <?php if (!empty($ord['delivery_address'])): ?>
             <small class="order-meta order-address" style="color: #64748b; font-weight: 500; font-size: 12px; margin-top: 2px; white-space: normal; line-height: 1.35;"><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> <?= htmlspecialchars($ord['delivery_address']) ?></small>
           <?php endif; ?>
@@ -2696,10 +2696,10 @@ button{cursor:pointer}
             </span>
             <div id="track-actions-<?= $ord['order_id'] ?>" class="order-actions-wrap" style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
               <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(<?= (int)$ord['order_id'] ?>)" title="Tap to view live delivery map">
-                <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
+                <i class="fa-solid fa-location-dot"></i> ðŸ“ Live Track Rider
               </button>
               <button class="confirm-btn" id="confirm-btn-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); confirmOrderReceived(<?= $ord['order_id'] ?>)">
-                <i class="fa-solid fa-box-open"></i> 📦 Received
+                <i class="fa-solid fa-box-open"></i> ðŸ“¦ Received
               </button>
             </div>
           <?php elseif ($is_delivered && !$is_settled): ?>
@@ -2715,7 +2715,7 @@ button{cursor:pointer}
 
 <section id="account" class="screen">
   <div class="section-title"><h3>My Account</h3><i class="fa-solid fa-gear"></i></div>
-  <div class="profile"><div class="profile-pic">👤</div><div><strong><?php echo htmlspecialchars($full_name); ?></strong><small>Customer account</small></div></div>
+  <div class="profile"><div class="profile-pic">ðŸ‘¤</div><div><strong><?php echo htmlspecialchars($full_name); ?></strong><small>Customer account</small></div></div>
   <div class="menu">
     <a href="javascript:void(0)" onclick="showScreen('orders')"><span><i class="fa-regular fa-clipboard"></i>My Orders</span><i class="fa-solid fa-chevron-right"></i></a>
     <a href="javascript:void(0)" onclick="openSavedAddressesModal()"><span><i class="fa-solid fa-location-dot"></i>Addresses</span><i class="fa-solid fa-chevron-right"></i></a>
@@ -2781,7 +2781,7 @@ button{cursor:pointer}
 <div class="fd-modal" id="customerNoteModal" onclick="if(event.target===this)closeNotifications()">
   <div class="fd-modal-box">
     <div class="fd-modal-header">
-      <h3><span>🔔</span> Notifications</h3>
+      <h3><span>ðŸ””</span> Notifications</h3>
       <button class="fd-modal-close" onclick="closeNotifications()">&times;</button>
     </div>
     <div id="customerNoteList" class="fd-note-list">
@@ -2801,7 +2801,7 @@ button{cursor:pointer}
   <div class="fd-modal-box cust-track-modal-box modal-content">
     <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone); flex-shrink:0;">
       <div style="display:flex; align-items:center; gap:8px;">
-        <span style="font-size:18px;">🛵</span>
+        <span style="font-size:18px;">ðŸ›µ</span>
         <div>
           <h3 id="trackModalOrderRef" style="margin:0; font-size:13px; color:var(--olive-shadow);">Live Delivery Tracking</h3>
           <small id="trackModalStoreSubtitle" style="font-size:10px; color:var(--muted);">Store pickup & real-time GPS</small>
@@ -2834,7 +2834,7 @@ button{cursor:pointer}
         </div>
       </div>
 
-      <!-- Remaining distance & ETA badge (e.g. "500m away • ~3 mins") -->
+      <!-- Remaining distance & ETA badge (e.g. "500m away â€¢ ~3 mins") -->
       <div class="cust-track-eta-badge" id="custTrackEtaBadge">
         <i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i>
         <span id="custTrackEtaBadgeText">Locating rider & calculating ETA...</span>
@@ -2882,10 +2882,10 @@ button{cursor:pointer}
     <div class="quick-status-section">
       <div class="quick-title"><i class="fa-solid fa-bolt"></i> Quick Messages:</div>
       <div class="quick-pills">
-        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('I'm waiting outside! 👋')">👋 I'm waiting outside</button>
-        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Please leave it with the lobby/guard house 🛡️')">🛡️ Leave at guard house</button>
-        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Thank you! Take your time and ride safely 🛵')">🛵 Ride safely</button>
-        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Please ring doorbell when you arrive 🔔')">🔔 Ring doorbell</button>
+        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('I'm waiting outside! ðŸ‘‹')">ðŸ‘‹ I'm waiting outside</button>
+        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Please leave it with the lobby/guard house ðŸ›¡ï¸')">ðŸ›¡ï¸ Leave at guard house</button>
+        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Thank you! Take your time and ride safely ðŸ›µ')">ðŸ›µ Ride safely</button>
+        <button type="button" class="quick-pill" onclick="sendCustomerQuickReply('Please ring doorbell when you arrive ðŸ””')">ðŸ”” Ring doorbell</button>
       </div>
     </div>
 
@@ -2943,7 +2943,7 @@ button{cursor:pointer}
     </span>
     <h2 style="font-size:20px; font-weight:800; color:#14532d; margin-bottom:8px;">Your rider has arrived!</h2>
     <p id="riderArrivedModalMsg" style="font-size:13px; color:#4b5563; line-height:1.5; margin-bottom:18px;">
-      📍 Your rider has arrived at your delivery address! Please choose a quick response so your rider knows you are coming:
+      ðŸ“ Your rider has arrived at your delivery address! Please choose a quick response so your rider knows you are coming:
     </p>
     <div id="riderArrivedActionButtons" style="display:flex; flex-direction:column; gap:10px;">
       <button type="button" class="btn-arrival-action minute" onclick="respondToRiderArrival('Be there in a minute!')">
@@ -2964,7 +2964,7 @@ button{cursor:pointer}
   <div class="rct-icon"><i class="fa-solid fa-comment-dots"></i></div>
   <div class="rct-body">
     <div class="rct-title" id="liveMsgBannerTitle">MESSAGE FROM RIDER</div>
-    <div class="rct-text" id="liveMsgBannerText">I'm outside with your order! 🛵</div>
+    <div class="rct-text" id="liveMsgBannerText">I'm outside with your order! ðŸ›µ</div>
   </div>
   <button type="button" class="rct-close" onclick="event.stopPropagation(); dismissLiveRiderBanner()">&times;</button>
 </div>
@@ -3231,7 +3231,7 @@ button{cursor:pointer}
           <i class="fa-solid fa-chevron-down" id="faq2_icon"></i>
         </div>
         <div class="faq-a" id="faq2">
-          Meals are typically prepared by our restaurant chefs within 15–20 minutes. Once picked up by your rider, delivery takes approximately 10–20 minutes depending on road distance and traffic.
+          Meals are typically prepared by our restaurant chefs within 15â€“20 minutes. Once picked up by your rider, delivery takes approximately 10â€“20 minutes depending on road distance and traffic.
         </div>
       </div>
 
@@ -3340,7 +3340,7 @@ if (window.FoodDashCall) {
 }
 let cart = JSON.parse(localStorage.getItem('foodDashCart') || '[]');
 let itemQty = 1;
-let currentItem = {name:'Big Mac', price:179, icon:'🍔', desc:'Two beef patties, special sauce, lettuce and cheese.', store:'McDonalds'};
+let currentItem = {name:'Big Mac', price:179, icon:'ðŸ”', desc:'Two beef patties, special sauce, lettuce and cheese.', store:'McDonalds'};
 
 const onTheWayCount = <?php echo (int)$ontheway_count; ?>;
 
@@ -3349,56 +3349,56 @@ const dbStoreCategories = <?php echo json_encode($db_store_categories, JSON_UNES
 
 const menus = {
   'FoodDash Grill': [
-    ['Smoked Pork BBQ Ribs',289,'🍖','Signature flame-grilled pork ribs with house barbecue glaze.','Ribs & Steaks'],
-    ['Flame-Grilled Inasal Platter',219,'🍗','Charcoal-grilled quarter chicken with spiced garlic rice.','Grilled Chicken'],
-    ['Angus Beef Grill Burger',199,'🍔','100% Angus beef patty flame-grilled to perfection with cheddar.','Burgers'],
-    ['Grilled Pork Belly Liempo',249,'🥩','Marinated succulent pork belly grilled over live charcoal.','BBQ & Pork']
+    ['Smoked Pork BBQ Ribs',289,'ðŸ–','Signature flame-grilled pork ribs with house barbecue glaze.','Ribs & Steaks'],
+    ['Flame-Grilled Inasal Platter',219,'ðŸ—','Charcoal-grilled quarter chicken with spiced garlic rice.','Grilled Chicken'],
+    ['Angus Beef Grill Burger',199,'ðŸ”','100% Angus beef patty flame-grilled to perfection with cheddar.','Burgers'],
+    ['Grilled Pork Belly Liempo',249,'ðŸ¥©','Marinated succulent pork belly grilled over live charcoal.','BBQ & Pork']
   ],
   'McDonalds': [
-    ['Big Mac',179,'🍔','Two beef patties, special sauce, lettuce and cheese.','Burgers'],
-    ['McSpaghetti',89,'🍝','Filipino-style sweet spaghetti.','Pasta'],
-    ['Chicken McDo',119,'🍗','Crispy fried chicken with rice.','Chicken'],
-    ['French Fries',75,'🍟','Golden crispy fries.','Sides']
+    ['Big Mac',179,'ðŸ”','Two beef patties, special sauce, lettuce and cheese.','Burgers'],
+    ['McSpaghetti',89,'ðŸ','Filipino-style sweet spaghetti.','Pasta'],
+    ['Chicken McDo',119,'ðŸ—','Crispy fried chicken with rice.','Chicken'],
+    ['French Fries',75,'ðŸŸ','Golden crispy fries.','Sides']
   ],
   'Jollibee': [
-    ['Chickenjoy',129,'🍗','Crispy fried chicken with rice and gravy.','Chicken'],
-    ['Jolly Spaghetti',99,'🍝','Sweet-style Filipino spaghetti with cheese.','Pasta'],
-    ['Yumburger',69,'🍔','Classic Filipino fast-food burger.','Burgers'],
-    ['Jolly Hotdog',59,'🌭','Classic hotdog with sweet-style sauce.','Snacks']
+    ['Chickenjoy',129,'ðŸ—','Crispy fried chicken with rice and gravy.','Chicken'],
+    ['Jolly Spaghetti',99,'ðŸ','Sweet-style Filipino spaghetti with cheese.','Pasta'],
+    ['Yumburger',69,'ðŸ”','Classic Filipino fast-food burger.','Burgers'],
+    ['Jolly Hotdog',59,'ðŸŒ­','Classic hotdog with sweet-style sauce.','Snacks']
   ],
   'Mang Inasal': [
-    ['Chicken Inasal',189,'🍚','Grilled chicken with rice and savory marinade.','Inasal Meals'],
-    ['Pecho',199,'🍗','Grilled chicken breast meal.','Inasal Meals'],
-    ['Pork BBQ',129,'🍢','Filipino-style grilled pork barbecue.','Grilled BBQ'],
-    ['Halo-Halo',99,'🍧','Classic Filipino shaved-ice dessert.','Desserts']
+    ['Chicken Inasal',189,'ðŸš','Grilled chicken with rice and savory marinade.','Inasal Meals'],
+    ['Pecho',199,'ðŸ—','Grilled chicken breast meal.','Inasal Meals'],
+    ['Pork BBQ',129,'ðŸ¢','Filipino-style grilled pork barbecue.','Grilled BBQ'],
+    ['Halo-Halo',99,'ðŸ§','Classic Filipino shaved-ice dessert.','Desserts']
   ],
   'Ribshack': [
-    ['Baby Back Ribs',349,'🍖','Tender ribs with signature barbecue sauce.','Ribs & Platters'],
-    ['Chicken BBQ',219,'🍗','Grilled chicken with barbecue glaze.','Grilled Chicken'],
-    ['Pasta',229,'🍝','Creamy pasta favorite.','Pasta'],
-    ['Ribs Meal',399,'🍖','Ribs with sides and rice.','Ribs & Platters']
+    ['Baby Back Ribs',349,'ðŸ–','Tender ribs with signature barbecue sauce.','Ribs & Platters'],
+    ['Chicken BBQ',219,'ðŸ—','Grilled chicken with barbecue glaze.','Grilled Chicken'],
+    ['Pasta',229,'ðŸ','Creamy pasta favorite.','Pasta'],
+    ['Ribs Meal',399,'ðŸ–','Ribs with sides and rice.','Ribs & Platters']
   ],
   'Shakeys': [
-    ['Managers Choice Pizza',499,'🍕','Loaded pizza with favorite toppings.','Pizza'],
-    ['Pepperoni Crunch',459,'🍕','Pepperoni pizza with a crispy finish.','Pizza'],
-    ['Chicken N Mojos',349,'🍗','Crispy chicken with seasoned mojos.','Chicken'],
-    ['Bunch of Lunch',399,'🍕','Pizza and chicken meal combo.','Combos']
+    ['Managers Choice Pizza',499,'ðŸ•','Loaded pizza with favorite toppings.','Pizza'],
+    ['Pepperoni Crunch',459,'ðŸ•','Pepperoni pizza with a crispy finish.','Pizza'],
+    ['Chicken N Mojos',349,'ðŸ—','Crispy chicken with seasoned mojos.','Chicken'],
+    ['Bunch of Lunch',399,'ðŸ•','Pizza and chicken meal combo.','Combos']
   ],
   'Chowking': [
-    ['Chao Fan',99,'🍚','Filipino-Chinese fried rice favorite.','Rice Bowls'],
-    ['Siomai',79,'🥟','Steamed dumplings with savory filling.','Dim Sum'],
-    ['Siopao',69,'🥮','Soft steamed bun with savory filling.','Dim Sum'],
-    ['Chopsuey',129,'🥬','Mixed vegetables in savory sauce.','Sides']
+    ['Chao Fan',99,'ðŸš','Filipino-Chinese fried rice favorite.','Rice Bowls'],
+    ['Siomai',79,'ðŸ¥Ÿ','Steamed dumplings with savory filling.','Dim Sum'],
+    ['Siopao',69,'ðŸ¥®','Soft steamed bun with savory filling.','Dim Sum'],
+    ['Chopsuey',129,'ðŸ¥¬','Mixed vegetables in savory sauce.','Sides']
   ],
   'Greenwich': [
-    ['Hawaiian Overload',499,'🍕','Pizza with ham, pineapple and cheese.','Pizza'],
-    ['Lasagna Supreme',229,'🍝','Cheesy layered pasta favorite.','Pasta'],
-    ['Chicken & Pizza',399,'🍗','Chicken and pizza combo.','Combos'],
-    ['Garlic & Cheese Pizza',459,'🍕','Cheesy pizza with garlic flavor.','Pizza']
+    ['Hawaiian Overload',499,'ðŸ•','Pizza with ham, pineapple and cheese.','Pizza'],
+    ['Lasagna Supreme',229,'ðŸ','Cheesy layered pasta favorite.','Pasta'],
+    ['Chicken & Pizza',399,'ðŸ—','Chicken and pizza combo.','Combos'],
+    ['Garlic & Cheese Pizza',459,'ðŸ•','Cheesy pizza with garlic flavor.','Pizza']
   ]
 };
 
-function money(n){ return '₱'+Number(n).toFixed(2); }
+function money(n){ return 'â‚±'+Number(n).toFixed(2); }
 
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -3685,7 +3685,7 @@ function openItem(name, price, icon, desc, store){
   currentItem = {
     name: decodeURIComponent(name),
     price: price,
-    icon: decodeURIComponent(icon || '🍴'),
+    icon: decodeURIComponent(icon || 'ðŸ´'),
     desc: decodeURIComponent(desc),
     store: normalizeStoreName(decodeURIComponent(store || 'McDonalds'))
   };
@@ -3741,7 +3741,7 @@ function renderCart(){
   const summaryBox = document.getElementById('cartSummary');
   
   if(!cart.length){
-    el.innerHTML = '<div class="row-card"><div class="row-icon" style="background:#eee8d7;color:#4f5d21">🛒</div><div class="info"><strong>Your cart is empty</strong><small>Add delicious meals from your favorite stores.</small></div></div>';
+    el.innerHTML = '<div class="row-card"><div class="row-icon" style="background:#eee8d7;color:#4f5d21">ðŸ›’</div><div class="info"><strong>Your cart is empty</strong><small>Add delicious meals from your favorite stores.</small></div></div>';
     summaryBox.style.display = 'none';
     return;
   }
@@ -3755,7 +3755,7 @@ function renderCart(){
         <div class="cart-bottom">
           <span style="font-size:10px;font-weight:700;color:var(--olive-dark)">${money(item.price * item.qty)}</span>
           <div class="qty">
-            <button onclick="updateCartQty(${index}, -1)">−</button>
+            <button onclick="updateCartQty(${index}, -1)">âˆ’</button>
             <span>${item.qty}</span>
             <button onclick="updateCartQty(${index}, 1)">+</button>
           </div>
@@ -4590,7 +4590,7 @@ async function executeCancelOrder() {
         const iconDiv = card.querySelector('.row-icon');
         if (iconDiv) {
           iconDiv.className = 'row-icon grey';
-          iconDiv.textContent = '🚫';
+          iconDiv.textContent = 'ðŸš«';
         }
         const badge = document.getElementById(`status-tag-${targetId}`);
         if (badge) {
@@ -5363,18 +5363,18 @@ function updateCustomerEtaBadge(dKm, distMeters = null) {
   let etaStr = '';
 
   if (meters <= 50) {
-    badgeStr = 'Arrived at your door! • 0 mins';
+    badgeStr = 'Arrived at your door! â€¢ 0 mins';
     distStr = 'Road Distance: Arrived!';
-    etaStr = 'Rider is outside now! 🛵';
+    etaStr = 'Rider is outside now! ðŸ›µ';
   } else if (meters < 1000) {
     const mins = Math.max(1, Math.round((meters / 1000) * 4));
-    badgeStr = `${meters}m away • ~${mins} mins`;
+    badgeStr = `${meters}m away â€¢ ~${mins} mins`;
     distStr = `Road Distance: ${meters} meters`;
     etaStr = `Arriving in ~${mins} mins`;
   } else {
     const kmStr = (meters / 1000).toFixed(2);
     const mins = Math.max(3, Math.round((meters / 1000) * 3.5));
-    badgeStr = `${kmStr} km away • ~${mins} mins`;
+    badgeStr = `${kmStr} km away â€¢ ~${mins} mins`;
     distStr = `Road Distance: ${kmStr} km`;
     etaStr = `Estimated ~${mins} mins`;
   }
@@ -5495,9 +5495,9 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     }
 
     const subEl = document.getElementById('trackModalStoreSubtitle');
-    if (subEl) subEl.textContent = `${ord.store_name || data.store_name || 'Store'} • ${data.status || ord.status || 'On Delivery'}`;
+    if (subEl) subEl.textContent = `${ord.store_name || data.store_name || 'Store'} â€¢ ${data.status || ord.status || 'On Delivery'}`;
 
-    // Update Distance / ETA text & badge (e.g. "500m away • ~3 mins")
+    // Update Distance / ETA text & badge (e.g. "500m away â€¢ ~3 mins")
     let dKm = (data.distance_km !== null && !isNaN(data.distance_km)) ? parseFloat(data.distance_km) : null;
     if (dKm === null && !isNaN(destLat) && !isNaN(destLng) && !isNaN(riderLat) && !isNaN(riderLng) && riderLat !== 0) {
       dKm = calculateHaversineKm(riderLat, riderLng, destLat, destLng);
@@ -5719,7 +5719,7 @@ function renderChatMessages(messages, scrollToBottom = true) {
         bubble.setAttribute('data-msg-id', msg.message_id);
         bubble.innerHTML = `
           <div>${escapeCustHtml(msg.message_text)}</div>
-          <div class="msg-meta">${escapeCustHtml(msg.sender_name || 'Rider')} • ${escapeCustHtml(msg.time_formatted || '')}</div>
+          <div class="msg-meta">${escapeCustHtml(msg.sender_name || 'Rider')} â€¢ ${escapeCustHtml(msg.time_formatted || '')}</div>
         `;
         container.appendChild(bubble);
 
@@ -6142,7 +6142,7 @@ function appendMessageToChatDrawer(msg) {
   bubble.setAttribute('data-msg-id', msg.message_id);
   bubble.innerHTML = `
     <div>${escapeCustHtml(msg.message_text)}</div>
-    <div class="msg-meta">${escapeCustHtml(msg.sender_name || 'Rider')} • ${escapeCustHtml(msg.time_formatted || 'Just now')}</div>
+    <div class="msg-meta">${escapeCustHtml(msg.sender_name || 'Rider')} â€¢ ${escapeCustHtml(msg.time_formatted || 'Just now')}</div>
   `;
   container.appendChild(bubble);
   container.scrollTop = container.scrollHeight;
@@ -6230,7 +6230,7 @@ function updateOrderStatusToArrived(orderId) {
   if (card) {
     card.setAttribute('data-status', 'arrived');
     const rowIcon = card.querySelector('.row-icon');
-    if (rowIcon) rowIcon.textContent = '📍';
+    if (rowIcon) rowIcon.textContent = 'ðŸ“';
     const subNotice = card.querySelector('.fa-circle-notch')?.parentElement;
     if (subNotice) {
       subNotice.style.color = '#15803d';
@@ -6244,7 +6244,7 @@ function updateOrderStatusToArrived(orderId) {
   }
   const etaText = document.getElementById('custTrackEtaBadgeText');
   if (etaText) {
-    etaText.textContent = 'Your rider has arrived outside! 🛵';
+    etaText.textContent = 'Your rider has arrived outside! ðŸ›µ';
   }
   const distText = document.getElementById('custTrackDistText');
   if (distText) {
@@ -6268,7 +6268,7 @@ function handleRiderArrivedEvent(data) {
     if (modal) modal.style.display = 'flex';
   }
 
-  toast(`📍 Your rider has arrived! Please choose a response.`);
+  toast(`ðŸ“ Your rider has arrived! Please choose a response.`);
   updateOrderStatusToArrived(oId);
 }
 
@@ -6386,16 +6386,16 @@ async function pollCustomerCommunicationUpdates() {
         card.setAttribute('title', 'Tap to view live delivery tracking map');
 
         const rowIcon = card.querySelector('.row-icon');
-        if (rowIcon && !rowIcon.textContent.includes('📍') && !rowIcon.textContent.includes('🛵')) {
+        if (rowIcon && !rowIcon.textContent.includes('ðŸ“') && !rowIcon.textContent.includes('ðŸ›µ')) {
           rowIcon.className = 'row-icon jolli';
-          rowIcon.textContent = '🛵';
+          rowIcon.textContent = 'ðŸ›µ';
         }
 
         // Hide cancel button if order has transitioned to on_delivery / near / arrived
         const cancelWrap = document.getElementById(`cancel-wrap-${oId}`);
         if (cancelWrap) cancelWrap.style.display = 'none';
 
-        // Ensure the [ 📍 Live Track Rider ] button and [ 📦 Received ] button exist on the card
+        // Ensure the [ ðŸ“ Live Track Rider ] button and [ ðŸ“¦ Received ] button exist on the card
         let trackActions = document.getElementById(`track-actions-${oId}`);
         if (!trackActions) {
           const infoDiv = card.querySelector('.info');
@@ -6406,10 +6406,10 @@ async function pollCustomerCommunicationUpdates() {
             trackActions.style.cssText = 'display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;';
             trackActions.innerHTML = `
               <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(${oId})" title="Tap to view live delivery map">
-                <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
+                <i class="fa-solid fa-location-dot"></i> ðŸ“ Live Track Rider
               </button>
               <button class="confirm-btn" id="confirm-btn-${oId}" onclick="event.stopPropagation(); confirmOrderReceived(${oId})">
-                <i class="fa-solid fa-box-open"></i> 📦 Received
+                <i class="fa-solid fa-box-open"></i> ðŸ“¦ Received
               </button>
             `;
             infoDiv.appendChild(trackActions);
@@ -6462,7 +6462,7 @@ if (window.location.hash) {
 </script>
 <script>
 let selectedMethod = 'cod';
-const orderTotal = '₱200.00';
+const orderTotal = 'â‚±200.00';
 
 function updatePaymentTheme(method) {
     selectedMethod = method;
@@ -6472,23 +6472,23 @@ function updatePaymentTheme(method) {
     if (method === 'cod') {
         btn.style.setProperty('background-color', '#283d23', 'important');
         btn.style.setProperty('color', '#ffffff', 'important');
-        btn.innerHTML = '<i class="fa-solid fa-money-bill-wave" style="margin-right:8px;"></i> Place Order • ' + orderTotal;
+        btn.innerHTML = '<i class="fa-solid fa-money-bill-wave" style="margin-right:8px;"></i> Place Order â€¢ ' + orderTotal;
     } else if (method === 'gcash') {
         btn.style.setProperty('background-color', '#007DFE', 'important');
         btn.style.setProperty('color', '#ffffff', 'important');
-        btn.innerHTML = '<span style="background:#fff; color:#007DFE; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">G</span> Pay with GCash • ' + orderTotal;
+        btn.innerHTML = '<span style="background:#fff; color:#007DFE; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">G</span> Pay with GCash â€¢ ' + orderTotal;
     } else if (method === 'maya') {
         btn.style.setProperty('background-color', '#023a2b', 'important');
         btn.style.setProperty('color', '#05B851', 'important');
-        btn.innerHTML = '<span style="background:#05B851; color:#023a2b; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">M</span> Pay with Maya • ' + orderTotal;
+        btn.innerHTML = '<span style="background:#05B851; color:#023a2b; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">M</span> Pay with Maya â€¢ ' + orderTotal;
     } else if (method === 'gotyme') {
         btn.style.setProperty('background-color', '#0a2540', 'important');
         btn.style.setProperty('color', '#00d2ff', 'important');
-        btn.innerHTML = '<span style="background:#00d2ff; color:#0a2540; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">GT</span> Pay with GoTyme • ' + orderTotal;
+        btn.innerHTML = '<span style="background:#00d2ff; color:#0a2540; font-weight:bold; border-radius:4px; padding:1px 6px; margin-right:6px; font-size:12px;">GT</span> Pay with GoTyme â€¢ ' + orderTotal;
     } else if (method === 'apple_pay') {
         btn.style.setProperty('background-color', '#000000', 'important');
         btn.style.setProperty('color', '#ffffff', 'important');
-        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + orderTotal;
+        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;">ï£¿</span> Pay â€¢ ' + orderTotal;
     }
 }
 
