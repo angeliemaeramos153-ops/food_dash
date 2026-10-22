@@ -282,16 +282,14 @@ $new_order_id = (int)$conn->lastInsertId();
                 }
 
                 // Insert into order_items compatibility table
-                $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (:oid, :name, :store, :qty, :price, :line, :icon)");
+                $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, quantity, unit_price, line_total) VALUES (:oid, :name, :qty, :price, :line)");
                 foreach ($clean_items as $ci) {
                     $co_stmt->execute([
                         ':oid'   => $new_order_id,
                         ':name'  => $ci['name'],
-                        ':store' => $ci['store'],
                         ':qty'   => $ci['qty'],
                         ':price' => $ci['price'],
-                        ':line'  => $ci['line'],
-                        ':icon'  => $ci['icon'],
+                        ':line'  => $ci['line']
                     ]);
                 }
 

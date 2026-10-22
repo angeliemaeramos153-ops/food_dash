@@ -270,16 +270,14 @@ if ($method === 'POST') {
             }
 
             // Insert into order_items compatibility table
-            $c_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, store_name, quantity, unit_price, line_total, icon) VALUES (:oid, :name, :store, :qty, :price, :line, :icon)");
+            $c_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, quantity, unit_price, line_total) VALUES (:oid, :name, :qty, :price, :line)");
             foreach ($clean as $x) {
                 $c_stmt->execute([
                     ':oid'   => $order_id,
                     ':name'  => $x['name'],
-                    ':store' => $x['store'],
                     ':qty'   => $x['qty'],
                     ':price' => $x['price'],
-                    ':line'  => $x['line'],
-                    ':icon'  => $x['icon'],
+                    ':line'  => $x['line']
                 ]);
             }
 
