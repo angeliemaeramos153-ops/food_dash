@@ -82,7 +82,7 @@ $user_id = $resolved_user_id ?: 0;
 $customer_name = $resolved_fullname ?: ($resolved_username ?: 'Customer');
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
-    $raw_pm = strtolower(trim((string)($payload['payment_method'] ?? 'gcash')));
+    $raw_pm = strtolower(trim((string)($payload['payment_method'] ?? 'cod')));
     
     // Canonical payment method and status mapping
     if (str_contains($raw_pm, 'gcash')) {
@@ -108,22 +108,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
     $order_num = "FD-{$today_ymd}-{$rand_num}";
     $order_ref = "#" . $order_num;
 
-    // Dynamic Financial Calculations from submitted payload
-    $delivery_fee = isset($payload['delivery_fee']) ? (float)$payload['delivery_fee'] : 30.00;
-    $total = 0.00;
-    if (!empty($payload['total_amount']) && is_numeric($payload['total_amount'])) {
-        $total = (float)$payload['total_amount'];
-    } elseif (!empty($payload['total']) && is_numeric($payload['total'])) {
-        $total = (float)$payload['total'];
-    }
-
-    if ($total > 0) {
-        $subtotal = isset($payload['subtotal']) && is_numeric($payload['subtotal']) ? (float)$payload['subtotal'] : round(max(0, $total - $delivery_fee), 2);
-    } else {
-        $subtotal = isset($payload['subtotal']) && is_numeric($payload['subtotal']) ? (float)$payload['subtotal'] : 0.00;
-        $total = round($subtotal + $delivery_fee, 2);
-    }
-
     // Dynamic Delivery Location from submitted payload
     $delivery_address = trim((string)($payload['delivery_address'] ?? $payload['address'] ?? ''));
     if ($delivery_address === '') {
@@ -135,35 +119,69 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
         exit;
     }
 
-    // Dynamic Cart / Items Summary
+    // Build the order strictly from submitted cart data.
     $cart = $payload['cart'] ?? null;
     if (is_string($cart)) {
         $decoded = json_decode($cart, true);
         if (is_array($decoded)) $cart = $decoded;
     }
-    $store_name = 'Food Dash Kitchen';
-    $shop_id = 1;
-
-    if (is_array($cart) && !empty($cart)) {
-        $items_summary = implode(', ', array_map(function($i) {
-            $qty = $i['qty'] ?? $i['quantity'] ?? 1;
-            $name = $i['name'] ?? $i['title'] ?? 'Item';
-            return "{$qty}x {$name}";
-        }, $cart));
-        if (!empty($cart[0]['store'])) {
-            $store_name = $cart[0]['store'];
-        }
-    } else {
-        $items_summary = 'Delicious Food Order';
+    if (!is_array($cart) || empty($cart)) {
+        http_response_code(422);
+        echo json_encode(['success' => false, 'message' => 'Your cart is empty.']);
+        exit;
     }
+
+    $store_name = '';
+    $clean_items = [];
+    $subtotal = 0.00;
+    foreach ($cart as $item) {
+        $item_name = trim((string)($item['name'] ?? $item['title'] ?? ''));
+        $item_store = trim((string)($item['store'] ?? ''));
+        $quantity = (int)($item['qty'] ?? $item['quantity'] ?? 0);
+        $unit_price = isset($item['price']) && is_numeric($item['price']) ? (float)$item['price'] : 0.00;
+        $icon = trim((string)($item['icon'] ?? ''));
+
+        if ($item_name === '' || $item_store === '' || $quantity < 1 || $unit_price <= 0) {
+            http_response_code(422);
+            echo json_encode(['success' => false, 'message' => 'Each cart item must include a store, name, quantity, and price.']);
+            exit;
+        }
+        if ($store_name !== '' && strcasecmp($store_name, $item_store) !== 0) {
+            http_response_code(422);
+            echo json_encode(['success' => false, 'message' => 'Submit one store per order.']);
+            exit;
+        }
+
+        $store_name = $item_store;
+        $line_total = round($unit_price * $quantity, 2);
+        $subtotal += $line_total;
+        $clean_items[] = [
+            'name' => $item_name,
+            'quantity' => $quantity,
+            'unit_price' => $unit_price,
+            'line_total' => $line_total,
+            'icon' => $icon
+        ];
+    }
+
+    $delivery_fee = isset($payload['delivery_fee']) && is_numeric($payload['delivery_fee'])
+        ? max(0, (float)$payload['delivery_fee'])
+        : 30.00;
+    $subtotal = round($subtotal, 2);
+    $total = round($subtotal + $delivery_fee, 2);
+    $items_summary = implode(', ', array_map(function ($item) {
+        return $item['quantity'] . 'x ' . $item['name'];
+    }, $clean_items));
+    $shop_id = isset($payload['shop_id']) && is_numeric($payload['shop_id']) ? (int)$payload['shop_id'] : 0;
 
     // Attempt matching shop_id from shops table
     try {
-        $shop_stmt = $conn->prepare("SELECT shop_id FROM shops WHERE LOWER(shop_name) = LOWER(:s) LIMIT 1");
+        $shop_stmt = $conn->prepare("SELECT shop_id, shop_name FROM shops WHERE LOWER(shop_name) = LOWER(:s) LIMIT 1");
         $shop_stmt->execute([':s' => $store_name]);
         $found_shop = $shop_stmt->fetch(PDO::FETCH_ASSOC);
         if ($found_shop && !empty($found_shop['shop_id'])) {
             $shop_id = (int)$found_shop['shop_id'];
+            $store_name = $found_shop['shop_name'];
         }
     } catch (Throwable $e) {}
 
@@ -171,8 +189,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
 
     try {
         $stmt = $conn->prepare("INSERT INTO food_orders " .
-            "(shop_id, customer_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, created_at) " .
-            "VALUES (:shop_id, :cust_id, :cust_name, :ref, :store, :summary, :subtotal, :fee, :total, :status, 'waiting', 'Delivery', NOW())"
+            "(shop_id, customer_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, delivery_address, status, delivery_status, order_type, created_at) " .
+            "VALUES (:shop_id, :cust_id, :cust_name, :ref, :store, :summary, :subtotal, :fee, :total, :pm, :address, :status, 'waiting', 'Delivery', NOW())"
         );
 
         $stmt->execute([
@@ -185,10 +203,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
             ':subtotal'  => $subtotal,
             ':fee'       => $delivery_fee,
             ':total'     => $total,
+            ':pm'        => $payment_method,
+            ':address'   => $delivery_address,
             ':status'    => $initial_status
         ]);
 
         $order_id = (int)$conn->lastInsertId();
+
+        $item_stmt = $conn->prepare("INSERT INTO food_order_items " .
+            "(order_id, item_name, store_name, quantity, unit_price, line_total, icon) " .
+            "VALUES (:oid, :name, :store, :qty, :price, :line, :icon)"
+        );
+        foreach ($clean_items as $item) {
+            $item_stmt->execute([
+                ':oid' => $order_id,
+                ':name' => $item['name'],
+                ':store' => $store_name,
+                ':qty' => $item['quantity'],
+                ':price' => $item['unit_price'],
+                ':line' => $item['line_total'],
+                ':icon' => $item['icon']
+            ]);
+        }
 
         // Mirror into orders table
         try {

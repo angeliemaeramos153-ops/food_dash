@@ -166,10 +166,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Customer places order -> status 'PENDING'
     if ($action === 'checkout' || $action === 'create_order') {
         $cart_items = $input['cart'] ?? [];
-        $delivery_fee = (float)($input['delivery_fee'] ?? 30.00);
+        if (is_string($cart_items)) {
+            $decoded_cart = json_decode($cart_items, true);
+            if (is_array($decoded_cart)) $cart_items = $decoded_cart;
+        }
+        $delivery_fee = max(0, (float)($input['delivery_fee'] ?? 30.00));
         $delivery_address = trim((string)($input['delivery_address'] ?? $input['address'] ?? ''));
+        $payment_method = trim((string)($input['payment_method'] ?? 'Cash on Delivery (COD)'));
         
-        if (empty($cart_items)) {
+        if (!is_array($cart_items) || empty($cart_items)) {
             api_response(['success' => false, 'message' => 'Your cart is empty.'], 400);
         }
         if ($delivery_address === '') {
@@ -179,7 +184,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Group cart items by store
         $items_by_store = [];
         foreach ($cart_items as $item) {
-            $store = trim((string)($item['store'] ?? 'Food Dash'));
+            $store = trim((string)($item['store'] ?? ''));
+            if ($store === '') {
+                api_response(['success' => false, 'message' => 'Each cart item must include its store.'], 422);
+            }
             if (!isset($items_by_store[$store])) {
                 $items_by_store[$store] = [];
             }
@@ -263,7 +271,7 @@ $stmt->execute([
     ':subtotal'         => $subtotal,
     ':delivery_fee'     => $delivery_fee,
     ':total_amount'     => $total_amount,
-    ':payment_method'   => $payment_method ?? 'Cash on Delivery (COD)',
+    ':payment_method'   => $payment_method,
     ':delivery_address' => $delivery_address
 ]);
 $new_order_id = (int)$conn->lastInsertId();
@@ -301,7 +309,7 @@ $new_order_id = (int)$conn->lastInsertId();
                         ':uid' => $user_id,
                         ':tot' => $total_amount,
                         ':sid' => $shop_id,
-                        ':pm'  => $payment_method ?? 'Cash on Delivery (COD)'
+                        ':pm'  => $payment_method
                     ]);
                 } catch (Throwable $e) {}
 
@@ -4365,7 +4373,7 @@ async function checkout() {
         payment_method: chosenPaymentMethod
     };
     
-    // Pass picked coordinates directly to order_transaction.php without text geocoding guesswork
+    // Submit the exact address, selected payment method, and current cart to the checkout endpoint.
     fetch('customer_dashboard.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -6510,6 +6518,8 @@ function dispatchOrderPlacement(method, address) {
     fd.append('payment_method', chosenMethod);
     fd.append('address', chosenAddress);
     fd.append('delivery_address', chosenAddress);
+    fd.append('cart', JSON.stringify(cart));
+    fd.append('delivery_fee', '30');
 
     fetch('api_orders.php', {
         method: 'POST',
