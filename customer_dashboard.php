@@ -285,7 +285,7 @@ $new_order_id = (int)$conn->lastInsertId();
                         ':name'  => $ci['name'],
                         ':store' => $ci['store'],
                         ':qty'   => $ci['qty'],
-    ':price' => isset(\['price']) ? floatval(\['price']) : 100.00,
+    ':price' => 100.00,
                         ':line'  => $line_total,
                         ':icon'  => $ci['icon'],
                     ]);
