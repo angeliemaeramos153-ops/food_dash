@@ -127,33 +127,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
     // Dynamic Delivery Location from submitted payload
     $delivery_address = trim((string)($payload['delivery_address'] ?? $payload['address'] ?? ''));
     if ($delivery_address === '') {
-        $delivery_address = 'Western Leyte College';
+        http_response_code(422);
+        echo json_encode([
+            'success' => false,
+            'message' => 'A delivery address is required.'
+        ]);
+        exit;
     }
-
-    $id = null;
-    $delivery_lng = null;
-
-    if (!empty($payload['delivery_lat_lng']) && is_string($payload['delivery_lat_lng'])) {
-        $coords_parts = explode(',', $payload['delivery_lat_lng']);
-        if (count($coords_parts) === 2) {
-            $plat = trim($coords_parts[0]);
-            $plng = trim($coords_parts[1]);
-            if (is_numeric($plat) && is_numeric($plng)) {
-                $id = (float)$plat;
-                $delivery_lng = (float)$plng;
-            }
-        }
-    }
-    if ($id === null && isset($payload['id']) && is_numeric($payload['id'])) {
-        $id = (float)$payload['id'];
-    }
-    if ($delivery_lng === null && isset($payload['delivery_lng']) && is_numeric($payload['delivery_lng'])) {
-        $delivery_lng = (float)$payload['delivery_lng'];
-    }
-    if ($id === null) $id = 11.01039;
-    if ($delivery_lng === null) $delivery_lng = 124.61788;
-    $customer_lat = $id;
-    $customer_lng = $delivery_lng;
 
     // Dynamic Cart / Items Summary
     $cart = $payload['cart'] ?? null;

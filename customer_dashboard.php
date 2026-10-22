@@ -167,27 +167,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'checkout' || $action === 'create_order') {
         $cart_items = $input['cart'] ?? [];
         $delivery_fee = (float)($input['delivery_fee'] ?? 30.00);
-        $delivery_address = trim((string)($input['delivery_address'] ?? ''));
-        $id = isset($input['id']) && is_numeric($input['id']) ? (float)$input['id'] : (isset($input['customer_lat']) && is_numeric($input['customer_lat']) ? (float)$input['customer_lat'] : null);
-        $delivery_lng = isset($input['delivery_lng']) && is_numeric($input['delivery_lng']) ? (float)$input['delivery_lng'] : (isset($input['customer_lng']) && is_numeric($input['customer_lng']) ? (float)$input['customer_lng'] : null);
-
-        if ($id !== null && ($id < -90 || $id > 90)) $id = null;
-        if ($delivery_lng !== null && ($delivery_lng < -180 || $delivery_lng > 180)) $delivery_lng = null;
-
-        // Fallback geocoding lookup using address string instead of hardcoding downtown Ormoc coordinates
-        if (($id === null || $delivery_lng === null) && !empty($delivery_address)) {
-            $fallback_geo = geocode_address_fallback($delivery_address);
-            if ($fallback_geo && isset($fallback_geo['lat'], $fallback_geo['lng'])) {
-                $id = $fallback_geo['lat'];
-                $delivery_lng = $fallback_geo['lng'];
-            }
-        }
-
-        $customer_lat = $id;
-        $customer_lng = $delivery_lng;
+        $delivery_address = trim((string)($input['delivery_address'] ?? $input['address'] ?? ''));
         
         if (empty($cart_items)) {
             api_response(['success' => false, 'message' => 'Your cart is empty.'], 400);
+        }
+        if ($delivery_address === '') {
+            api_response(['success' => false, 'message' => 'A delivery address is required.'], 422);
         }
         
         // Group cart items by store
@@ -255,27 +241,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $unique_ref = '#FD-' . date('ymd') . '-' . random_int(1000, 9999);
                 $cname = !empty($full_name) ? $full_name : 'Customer';
 
-                // Snapshot store coordinates from shops table
-                $store_lat = null;
-                $store_lng = null;
-                if ($shop_id > 0) {
-                    $sc_stmt = $conn->prepare("SELECT lat, lng, lat, lng FROM shops WHERE shop_id = :sid LIMIT 1");
-                    $sc_stmt->execute([':sid' => $shop_id]);
-                    $sc_row = $sc_stmt->fetch(PDO::FETCH_ASSOC);
-                    if ($sc_row) {
-                        $store_lat = (!empty($sc_row['lat']) && is_numeric($sc_row['lat'])) ? (float)$sc_row['lat'] : ((!empty($sc_row['lat']) && is_numeric($sc_row['lat'])) ? (float)$sc_row['lat'] : null);
-                        $store_lng = (!empty($sc_row['lng']) && is_numeric($sc_row['lng'])) ? (float)$sc_row['lng'] : ((!empty($sc_row['lng']) && is_numeric($sc_row['lng'])) ? (float)$sc_row['lng'] : null);
-                    }
-                }
-                if (($store_lat === null || $store_lng === null) && !empty($store_name)) {
-                    $sc_stmt2 = $conn->prepare("SELECT lat, lng, lat, lng FROM shops WHERE LOWER(TRIM(shop_name)) = LOWER(TRIM(:sname)) OR LOWER(shop_name) LIKE :slike LIMIT 1");
-                    $sc_stmt2->execute([':sname' => $store_name, ':slike' => '%' . strtolower(trim($store_name)) . '%']);
-                    $sc_row2 = $sc_stmt2->fetch(PDO::FETCH_ASSOC);
-                    if ($sc_row2) {
-                        $store_lat = (!empty($sc_row2['lat']) && is_numeric($sc_row2['lat'])) ? (float)$sc_row2['lat'] : ((!empty($sc_row2['lat']) && is_numeric($sc_row2['lat'])) ? (float)$sc_row2['lat'] : null);
-                        $store_lng = (!empty($sc_row2['lng']) && is_numeric($sc_row2['lng'])) ? (float)$sc_row2['lng'] : ((!empty($sc_row2['lng']) && is_numeric($sc_row2['lng'])) ? (float)$sc_row2['lng'] : null);
-                    }
-                }
                 // Insert order with initial status 'PENDING'
 $stmt = $conn->prepare("
     INSERT INTO food_orders (
@@ -299,7 +264,7 @@ $stmt->execute([
     ':delivery_fee'     => $delivery_fee,
     ':total_amount'     => $total_amount,
     ':payment_method'   => $payment_method ?? 'Cash on Delivery (COD)',
-    ':delivery_address' => !empty($delivery_address) ? $delivery_address : (!empty($input['delivery_address']) ? trim($input['delivery_address']) : 'Customer Address')
+    ':delivery_address' => $delivery_address
 ]);
 $new_order_id = (int)$conn->lastInsertId();
                 // Insert items into food_order_items
@@ -3997,41 +3962,6 @@ async function geocodeAddressNominatim(query) {
         console.warn('Nominatim client geocode network error:', e);
     }
 
-    // 3. Client-side Ormoc landmarks & barangay dictionary fallback if network is restricted
-    const localDict = {
-        'western leyte college': [11.0093834, 124.6092918],
-        'wlc': [11.0093834, 124.6092918],
-        'alta vista': [11.0118026, 124.6203237],
-        'altavista': [11.0118026, 124.6203237],
-        'cogon': [11.0233014, 124.6040868],
-        'valencia': [11.1071389, 124.5782215],
-        'ipil': [10.9754111, 124.6331304],
-        'san pedro': [11.0057362, 124.6108008],
-        'linao': [11.0159798, 124.5908042],
-        'camp downes': [10.9966183, 124.6182589],
-        'bantigue': [10.9895862, 124.6222361],
-        'tambulilid': [11.0231637, 124.5846183],
-        'can-adieng': [11.0025430, 124.6139237],
-        'can adieng': [11.0025430, 124.6139237],
-        'canadieng': [11.0025430, 124.6139237],
-        'punta': [11.0092018, 124.6003072],
-        'alegria': [11.0055905, 124.6038316],
-        'san pablo': [11.0150000, 124.6050000],
-        'don felipe': [11.0120000, 124.6150000],
-        'sabang': [11.0030000, 124.6090000],
-        'ormoc': [11.0090349, 124.6093940],
-    };
-
-    for (const [name, coords] of Object.entries(localDict)) {
-        if (normKey.includes(name)) {
-            lastGeocodedAddress = normKey;
-            if (activeMap) activeMap.setView([coords[0], coords[1]], 17);
-            if (activeMarker) activeMarker.setLatLng([coords[0], coords[1]]);
-            setDeliveryCoordinates(coords[0], coords[1], 'nominatim');
-            return { lat: coords[0], lon: coords[1], lng: coords[1] };
-        }
-    }
-
     return null;
 }
 
@@ -4425,25 +4355,6 @@ async function checkout() {
         btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Placing Order...';
     }
 
-    const latInput = document.getElementById('id') || document.getElementById('deliveryLatInput') || document.getElementById('modal_delivery_lat');
-    const lngInput = document.getElementById('delivery_lng') || document.getElementById('deliveryLngInput') || document.getElementById('modal_delivery_lng');
-
-    let dLat = (latInput && latInput.value) ? parseFloat(latInput.value) : currentCustomerLat;
-    let dLng = (lngInput && lngInput.value) ? parseFloat(lngInput.value) : currentCustomerLng;
-
-    // Only if coordinates are STILL missing, fallback to geocoding
-    if ((dLat == null || dLng == null || isNaN(dLat) || isNaN(dLng)) && address) {
-        try {
-            const geo = await geocodeAddressNominatim(address);
-            if (geo && geo.lat && geo.lng) {
-                dLat = geo.lat;
-                dLng = geo.lng;
-            }
-        } catch (e) {
-            console.warn('Pre-checkout geocoding failed:', e);
-        }
-    }
-
     const deliveryFee = 30;
     const payInput = document.getElementById('selectedPaymentMethod');
     const chosenPaymentMethod = payInput ? payInput.value : 'Cash on Delivery (COD)';
@@ -4453,11 +4364,7 @@ async function checkout() {
         cart: cart,
         delivery_fee: deliveryFee,
         delivery_address: address,
-        payment_method: chosenPaymentMethod,
-        id: (dLat !== null && !isNaN(dLat)) ? dLat : null,
-        delivery_lng: (dLng !== null && !isNaN(dLng)) ? dLng : null,
-        customer_lat: (dLat !== null && !isNaN(dLat)) ? dLat : null,
-        customer_lng: (dLng !== null && !isNaN(dLng)) ? dLng : null
+        payment_method: chosenPaymentMethod
     };
     
     // Pass picked coordinates directly to order_transaction.php without text geocoding guesswork
@@ -6592,18 +6499,19 @@ function triggerCheckout(event) {
     return false;
 }
 
-function dispatchOrderPlacement(method, address, coords) {
+function dispatchOrderPlacement(method, address) {
     var chosenMethod = method || 'cod';
-    var chosenAddress = address || 'Western Leyte College';
-    var chosenCoords = coords || '11.01039, 124.61788';
+    var chosenAddress = String(address || '').trim();
+    if (!chosenAddress) {
+        toast('Please enter a delivery address.', 'error');
+        return;
+    }
 
     var fd = new FormData();
     fd.append('action', 'create_order');
     fd.append('payment_method', chosenMethod);
     fd.append('address', chosenAddress);
     fd.append('delivery_address', chosenAddress);
-    fd.append('lat_lng', chosenCoords);
-    fd.append('delivery_lat_lng', chosenCoords);
 
     fetch('api_orders.php', {
         method: 'POST',
