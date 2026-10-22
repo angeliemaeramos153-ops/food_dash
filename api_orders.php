@@ -190,14 +190,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
     $initial_status = ($payment_status === 'paid') ? 'PREPARING' : 'PENDING';
 
     try {
-        $stmt = $conn->prepare("INSERT INTO food_orders 
-            (shop_id, customer_id, user_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, payment_status, delivery_address, , , status, delivery_status, order_type, created_at) 
-            VALUES 
+        $stmt = $conn->prepare("INSERT INTO food_orders " .
+            "(shop_id, customer_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, status, delivery_status, order_type, created_at) " .
+            "VALUES (:shop_id, :cust_id, :cust_name, :ref, :store, :summary, :subtotal, :fee, :total, :status, 'waiting', 'Delivery', NOW())"
+        );
 
         $stmt->execute([
             ':shop_id'   => $shop_id,
             ':cust_id'   => $user_id,
-            ':uid'       => $user_id,
             ':cust_name' => $customer_name,
             ':ref'       => $order_ref,
             ':store'     => $store_name,
@@ -205,9 +205,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
             ':subtotal'  => $subtotal,
             ':fee'       => $delivery_fee,
             ':total'     => $total,
-            ':pm'        => $payment_method,
-            ':pstatus'   => $payment_status,
-            ':addr'      => $delivery_address,
             ':status'    => $initial_status
         ]);
 
@@ -217,15 +214,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
         try {
             $is_pgsql = ($conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql');
             if ($is_pgsql) {
+                $orders_sql = "INSERT INTO orders " .
+                    "(order_id, user_id, status, total_price, payment_method, shop_id, created_at) " .
+                    "VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, NOW()) " .
+                    "ON CONFLICT (order_id) DO UPDATE SET " .
+                    "payment_method = EXCLUDED.payment_method, total_price = EXCLUDED.total_price";
             } else {
+                $orders_sql = "INSERT INTO orders " .
+                    "(order_id, user_id, status, total_price, payment_method, shop_id, created_at) " .
+                    "VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, NOW()) " .
+                    "ON DUPLICATE KEY UPDATE " .
+                    "payment_method = VALUES(payment_method), total_price = VALUES(total_price)";
             }
+
+            $orders_stmt = $conn->prepare($orders_sql);
             $orders_stmt->execute([
                 ':oid'     => $order_id,
                 ':uid'     => $user_id,
                 ':total'   => $total,
                 ':pm'      => $payment_method,
-                ':shop_id' => $shop_id,
-                ':addr'    => $delivery_address,
+                ':shop_id' => $shop_id
             ]);
         } catch (Throwable $e) {}
 
