@@ -285,7 +285,7 @@ $new_order_id = (int)$conn->lastInsertId();
                         ':name'  => $ci['name'],
                         ':store' => $ci['store'],
                         ':qty'   => $ci['qty'],
-                        ':price' => $unit_price,
+                        ':price' => isset(\['price']) && floatval(\['price']) > 0 ? floatval(\['price']) : (isset(\['unit_price']) && floatval(\['unit_price']) > 0 ? floatval(\['unit_price']) : (isset(\['line_total']) && isset(\['qty']) && \['qty'] > 0 ? floatval(\['line_total'])/floatval(\['qty']) : 100.00)),
                         ':line'  => $line_total,
                         ':icon'  => $ci['icon'],
                     ]);
@@ -300,7 +300,7 @@ $new_order_id = (int)$conn->lastInsertId();
                         ':oid'   => $new_order_id,
                         ':name'  => $ci['name'],
                         ':qty'   => $ci['qty'],
-                        ':price' => $unit_price,
+                        ':price' => isset(\['price']) && floatval(\['price']) > 0 ? floatval(\['price']) : (isset(\['unit_price']) && floatval(\['unit_price']) > 0 ? floatval(\['unit_price']) : (isset(\['line_total']) && isset(\['qty']) && \['qty'] > 0 ? floatval(\['line_total'])/floatval(\['qty']) : 100.00)),
                         ':line'  => $line_total
                     ]);
                 }
@@ -6585,6 +6585,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <?php require_once 'gmail_simulator_modal.php'; ?>
 </body>
 </html>
+
 
 
 

@@ -230,7 +230,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
                 ':name' => $item['name'],
                 ':store' => $store_name,
                 ':qty' => $item['quantity'],
-                ':price' => $unit_price,
+                ':price' => isset(\['price']) && floatval(\['price']) > 0 ? floatval(\['price']) : (isset(\['unit_price']) && floatval(\['unit_price']) > 0 ? floatval(\['unit_price']) : (isset(\['line_total']) && isset(\['qty']) && \['qty'] > 0 ? floatval(\['line_total'])/floatval(\['qty']) : 100.00)),
                 ':line' => $line_total,
                 ':icon' => $item['icon']
             ]);
@@ -238,7 +238,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
                 ':oid' => $order_id,
                 ':name' => $item['name'],
                 ':qty' => $item['quantity'],
-                ':price' => $unit_price,
+                ':price' => isset(\['price']) && floatval(\['price']) > 0 ? floatval(\['price']) : (isset(\['unit_price']) && floatval(\['unit_price']) > 0 ? floatval(\['unit_price']) : (isset(\['line_total']) && isset(\['qty']) && \['qty'] > 0 ? floatval(\['line_total'])/floatval(\['qty']) : 100.00)),
                 ':line' => $line_total
             ]);
         }
@@ -303,5 +303,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
 
 echo json_encode(['status' => 'online', 'service' => 'api_orders']);
 exit;
+
 
 
