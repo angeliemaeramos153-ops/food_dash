@@ -431,9 +431,21 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       overflow: visible;
     }
     .mobile-card.show-register .forms-wrapper {
-      min-height: 540px;
-      overflow: hidden;
+      height: min(540px, calc(100dvh - 260px));
+      min-height: 280px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      padding-bottom: 100px;
+      scroll-padding-bottom: 100px;
     }
+
+    .mobile-card.show-register #register-section.active {
+      position: relative;
+      min-height: 100%;
+    }
+
+    #reg-form { padding-bottom: 100px; }
 
     .form-section {
       position: absolute;
