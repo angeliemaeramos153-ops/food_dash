@@ -444,7 +444,6 @@ if ($menu_items_res) {
         ];
     }
 }
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2377,7 +2376,6 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
         $p_logo = !empty($ps['logo_url']) ? $ps['logo_url'] : 'assets/shops/default_store.png';
         $p_name = $ps['shop_name'];
         $p_cat = $ps['category'] ?? 'Restaurant';
-    ?>
     <div class="store" onclick="openStore('<?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars(addslashes($p_name)); ?>', '<?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); } echo htmlspecialchars(addslashes($p_logo)); ?>')">
@@ -2432,7 +2430,6 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
       $sh_logo = !empty($sh['logo_url']) ? $sh['logo_url'] : 'assets/shops/default_store.png';
       $sh_name = $sh['shop_name'];
       $sh_cat = $sh['category'] ?? 'Specialty Food';
-    ?>
     <div class="row-card" data-name="<?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); } echo strtolower(htmlspecialchars($sh_name)); ?>" data-category="<?php
 if (session_status() === PHP_SESSION_NONE) { session_start(); } echo strtolower(htmlspecialchars($sh_cat)); ?>" onclick="openStore('<?php
@@ -2614,4 +2611,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } if (empty($db_or
       <div class="empty-state-card" id="noOrders" style="text-align: center; padding: 36px 18px; background: #ffffff; border-radius: 14px; margin: 12px 0; border: 1.5px dashed #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
         <div style="font-size: 42px; margin-bottom: 10px; line-height: 1;">ðŸ›ï¸</div>
 }
+endif;
+endif;
+endif;
 ?>
