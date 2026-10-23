@@ -2345,19 +2345,13 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } if ($ontheway_co
   <button type="button" onclick="event.stopPropagation(); openCustomerTrackingModal(<?= (int)$active_tracking_order['order_id'] ?>)">View</button>
 </div>
 <?php
-?>
-<div class="notice-bar" id="dynamicOnTheWayBanner" onclick="showScreen('orders')" style="cursor:pointer;">
-  <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!</span>
-  <button type="button" onclick="showScreen('orders')">View</button>
-</div>
-<?php
-if (session_status() === PHP_SESSION_NONE) { session_start(); } else: ?>
+else: ?>
 <div class="notice-bar" id="dynamicOnTheWayBanner" style="display:none; cursor:pointer;" onclick="openCustomerTrackingModal(activeCustomerTrackingOrderId || 0)">
   <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!</span>
   <button type="button" onclick="event.stopPropagation(); openCustomerTrackingModal(activeCustomerTrackingOrderId || 0)">View</button>
 </div>
 <?php
-if (session_status() === PHP_SESSION_NONE) { session_start(); } endif; ?>
+endif; ?>
 
 <section id="home" class="screen active">
   <div class="greeting"><small>Good Morning,</small><h1><?php
