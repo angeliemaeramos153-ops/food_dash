@@ -2345,7 +2345,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } if ($ontheway_co
   <button type="button" onclick="event.stopPropagation(); openCustomerTrackingModal(<?= (int)$active_tracking_order['order_id'] ?>)">View</button>
 </div>
 <?php
-if (session_status() === PHP_SESSION_NONE) { session_start(); } elseif ($ontheway_count > 0): ?>
+     = 100.00; // Fixed syntax error
 <div class="notice-bar" id="dynamicOnTheWayBanner" onclick="showScreen('orders')" style="cursor:pointer;">
   <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!</span>
   <button type="button" onclick="showScreen('orders')">View</button>
