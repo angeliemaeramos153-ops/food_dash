@@ -2613,6 +2613,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); } endforeach; ?>
 if (session_status() === PHP_SESSION_NONE) { session_start(); } if (empty($db_orders)): ?>
       <div class="empty-state-card" id="noOrders" style="text-align: center; padding: 36px 18px; background: #ffffff; border-radius: 14px; margin: 12px 0; border: 1.5px dashed #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
         <div style="font-size: 42px; margin-bottom: 10px; line-height: 1;">ðŸ›ï¸</div>
-?>
+endif;
+endif;
 endif;
 ?>
