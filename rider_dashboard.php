@@ -2021,9 +2021,12 @@ let isManualSimulationActive = false;
 let autoDriveTimer = null;
 let autoDriveWaypoints = [];
 let autoDriveIndex = 0;
-const AUTO_DRIVE_INTERVAL_MS = 250; // Smooth 250ms interval along OSRM street network (200-300ms)
 let isTapRelocateActive = false;
 let simHasTriggeredArrival = false;
+let liveBroadcastInterval = null;
+let latestRiderLat = null;
+let latestRiderLng = null;
+let lastGpsBroadcastTimestamp = 0;
 
 // PC Testing Simulator Controls
 function shouldShowSimulator() {
@@ -2583,6 +2586,9 @@ function handleRiderPositionUpdate(lat, lng, source = 'gps', accuracy = null) {
   const numLng = parseFloat(lng);
   if (isNaN(numLat) || isNaN(numLng)) return;
 
+  latestRiderLat = numLat;
+  latestRiderLng = numLng;
+
   const greenRiderIcon = createRiderIcon(false);
 
   // Update or create rider marker
@@ -2819,7 +2825,12 @@ async function initDeliveryMap(data) {
   }, 250);
 }
 
-async function sendRiderLocation(orderId, lat, lng) {
+async function sendRiderLocation(orderId, lat, lng, isImmediate = false) {
+  const now = Date.now();
+  if (!isImmediate && (now - lastGpsBroadcastTimestamp < 800)) {
+    return; // Throttle dense auto-drive steps to ~800ms-1s for clean network telemetry
+  }
+  lastGpsBroadcastTimestamp = now;
   try {
     const r = await fetch('tracking_api.php', {
       method: 'POST',
@@ -2873,6 +2884,10 @@ function stopLiveLocation() {
   if (isTapRelocateActive) {
     toggleMapTapRelocate();
   }
+  if (liveBroadcastInterval !== null) {
+    clearInterval(liveBroadcastInterval);
+    liveBroadcastInterval = null;
+  }
   if (gpsWatchId !== null) {
     navigator.geolocation.clearWatch(gpsWatchId);
     gpsWatchId = null;
@@ -2894,11 +2909,15 @@ function stopLiveLocation() {
   toastRider('Live GPS sharing stopped');
 }
 
-// 2. True Live Rider GPS (Hardware-driven over HTTPS, with non-blocking manual simulation fallback)
+// 2. True Live Rider GPS (Hardware-driven over HTTPS, with periodic 3.5s telemetry broadcast and simulator fallback)
 function startLiveLocation(orderId) {
   stopAutoDriveSimulation();
   if (isTapRelocateActive) {
     toggleMapTapRelocate();
+  }
+  if (liveBroadcastInterval !== null) {
+    clearInterval(liveBroadcastInterval);
+    liveBroadcastInterval = null;
   }
   if (gpsWatchId !== null) {
     navigator.geolocation.clearWatch(gpsWatchId);
@@ -2910,6 +2929,23 @@ function startLiveLocation(orderId) {
   
   activeGpsOrderId = orderId;
   hideGpsNotice();
+
+  // Send immediate location fix if marker or store position is available
+  const curLat = latestRiderLat || (riderMarker ? riderMarker.getLatLng().lat : (activeDeliveryData ? activeDeliveryData.store_lat : null));
+  const curLng = latestRiderLng || (riderMarker ? riderMarker.getLatLng().lng : (activeDeliveryData ? activeDeliveryData.store_lng : null));
+  if (curLat !== null && curLng !== null && !isNaN(curLat) && !isNaN(curLng)) {
+    sendRiderLocation(orderId, parseFloat(curLat), parseFloat(curLng), true);
+  }
+
+  // Periodic 3.5-second live GPS broadcast to database
+  liveBroadcastInterval = setInterval(() => {
+    const targetOrderId = activeGpsOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
+    const bLat = latestRiderLat || (riderMarker ? riderMarker.getLatLng().lat : null);
+    const bLng = latestRiderLng || (riderMarker ? riderMarker.getLatLng().lng : null);
+    if (targetOrderId && bLat !== null && bLng !== null && !isNaN(bLat) && !isNaN(bLng)) {
+      sendRiderLocation(targetOrderId, parseFloat(bLat), parseFloat(bLng), true);
+    }
+  }, 3500);
 
   // If geolocation service is unsupported
   if (!navigator.geolocation) {

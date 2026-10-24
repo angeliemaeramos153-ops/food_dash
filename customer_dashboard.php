@@ -2476,6 +2476,13 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
   background: #f3f4f6;
   border-color: #9ca3af;
 }
+.cust-tracking-map, #cust-tracking-map {
+  height: 250px !important;
+  min-height: 250px !important;
+  width: 100% !important;
+  display: block !important;
+  background: #f3f4f6 !important;
+}
 </style>
 </head>
 <body>
@@ -2996,7 +3003,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
       </div>
 
       <!-- Interactive Leaflet Live Tracking Map -->
-      <div id="cust-tracking-map" class="cust-tracking-map" style="width: 100%; border-radius: 12px; margin-top: 10px; border: 1.5px solid var(--sandstone); position:relative;"></div>
+      <div id="cust-tracking-map" class="cust-tracking-map" style="width: 100%; height: 250px; min-height: 250px; border-radius: 12px; margin-top: 10px; border: 1.5px solid var(--sandstone); position:relative;"></div>
 
       <!-- Legend -->
       <div class="cust-map-legend">
@@ -5620,10 +5627,10 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     const riderLat = parseFloat(data.rider_lat ?? data.lat ?? data.lat ?? ord.rider_lat);
     const riderLng = parseFloat(data.rider_lng ?? data.lng ?? data.lng ?? ord.rider_lng);
 
-    // Update Rider info with non-null fallbacks
-    currentTrackingRiderName = data.rider_name || ord.rider_name || 'Alex Rider';
-    const riderPhoneRaw = data.rider_phone || ord.rider_phone || '+63 917 555 0192';
-    const riderDial = riderPhoneRaw.replace(/[^\+0-9]/g, '') || '+639175550192';
+    // Update Rider info dynamically from database
+    currentTrackingRiderName = data.rider_name || ord.rider_name || 'Assigned Rider';
+    const riderPhoneRaw = data.rider_phone || ord.rider_phone || '';
+    const riderDial = riderPhoneRaw ? riderPhoneRaw.replace(/[^\+0-9]/g, '') : '';
     currentTrackingRiderPhone = riderDial;
 
     const nameEl = document.getElementById('custTrackRiderName');

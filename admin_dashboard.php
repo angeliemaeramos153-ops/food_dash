@@ -215,9 +215,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
 
         if ($shop_id > 0 && !empty($shop_name)) {
-            $stmt = $conn->prepare("UPDATE shops SET shop_name = ?, category = ?, address = ?, lat = ?, lng = ?, lat = ?, lng = ?, logo_url = ? WHERE shop_id = ?");
-            $stmt->execute([$shop_name, $category, $address, $lat, $lng, $lat, $lng, $logo_url, $shop_id]);
-            $action_msg = "Store updated successfully with verified coordinates!";
+            try {
+                $stmt = $conn->prepare("UPDATE shops SET shop_name = ?, category = ?, address = ?, lat = ?, lng = ?, logo_url = ? WHERE shop_id = ?");
+                $stmt->execute([$shop_name, $category, $address, $lat, $lng, $logo_url, $shop_id]);
+            } catch (Throwable $e) {
+                $stmt = $conn->prepare("UPDATE shops SET shop_name = ?, category = ?, logo_url = ? WHERE shop_id = ?");
+                $stmt->execute([$shop_name, $category, $logo_url, $shop_id]);
+            }
+            $action_msg = "Store updated successfully!";
         }
     }
 

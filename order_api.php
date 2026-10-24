@@ -265,23 +265,25 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
 
     $stmt = $conn->prepare("SELECT 
         o.order_id, o.order_ref, o.customer_id, o.customer_name,
-        '+63 928 555 0148' AS customer_phone,
+        COALESCE(cu.phone, o.customer_phone, ord.customer_phone, '') AS customer_phone,
         o.store_name, o.delivery_address,
         o.status, o.delivery_status, o.near_notified_at, o.location_updated_at,
-        COALESCE(o.store_lat, 11.006500) AS store_lat,
-        COALESCE(o.store_lng, 124.607500) AS store_lng,
-        COALESCE(o.delivery_lat, o.customer_lat, 11.004200) AS destination_lat,
-        COALESCE(o.delivery_lng, o.customer_lng, 124.605000) AS destination_lng,
+        COALESCE(o.store_lat, ord.store_lat, NULL) AS store_lat,
+        COALESCE(o.store_lng, ord.store_lng, NULL) AS store_lng,
+        COALESCE(o.delivery_lat, o.customer_lat, ord.delivery_lat, NULL) AS destination_lat,
+        COALESCE(o.delivery_lng, o.customer_lng, ord.delivery_lng, NULL) AS destination_lng,
         o.customer_lat, o.customer_lng,
         o.rider_id,
-        COALESCE(o.rider_lat, 11.006500) AS rider_lat,
-        COALESCE(o.rider_lng, 124.607500) AS rider_lng,
-        COALESCE(r.rider_name, ru.full_name, 'Alex Rider') AS rider_name,
-        '+63 917 555 0192' AS rider_phone
+        COALESCE(ord.current_lat, o.rider_lat, ord.rider_lat, NULL) AS rider_lat,
+        COALESCE(ord.current_lng, o.rider_lng, ord.rider_lng, NULL) AS rider_lng,
+        COALESCE(r.rider_name, ru.full_name, ord.rider_name, '') AS rider_name,
+        COALESCE(ru.phone, ord.rider_phone, '') AS rider_phone
     FROM food_orders o
+    LEFT JOIN orders ord ON (o.order_id = ord.id OR o.order_id = ord.order_id)
     LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name))))
     LEFT JOIN riders r ON (o.rider_id = r.rider_id)
     LEFT JOIN users ru ON (r.user_id = ru.user_id)
+    LEFT JOIN users cu ON (o.customer_id = cu.user_id)
     WHERE o.order_id = :oid AND {$scope_single}
     LIMIT 1");
     $stmt->execute([':oid' => $order_id, ':cid' => $user_id, ':uid' => $user_id, ':is_admin' => ($role === 'admin' ? 1 : 0)]);
@@ -291,20 +293,23 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
         order_api_out(false, 'Order not found.', [], 404);
     }
 
-    $rider_lat = (isset($o['rider_lat']) && is_numeric($o['rider_lat'])) ? round((float)$o['rider_lat'], 7) : 11.0065;
-    $rider_lng = (isset($o['rider_lng']) && is_numeric($o['rider_lng'])) ? round((float)$o['rider_lng'], 7) : 124.6075;
-    $dest_lat  = (isset($o['destination_lat']) && is_numeric($o['destination_lat'])) ? round((float)$o['destination_lat'], 7) : 11.0042;
-    $dest_lng  = (isset($o['destination_lng']) && is_numeric($o['destination_lng'])) ? round((float)$o['destination_lng'], 7) : 124.6050;
-    $store_lat = (isset($o['store_lat']) && is_numeric($o['store_lat'])) ? round((float)$o['store_lat'], 7) : 11.0065;
-    $store_lng = (isset($o['store_lng']) && is_numeric($o['store_lng'])) ? round((float)$o['store_lng'], 7) : 124.6075;
+    $rider_lat = (isset($o['rider_lat']) && is_numeric($o['rider_lat'])) ? round((float)$o['rider_lat'], 7) : null;
+    $rider_lng = (isset($o['rider_lng']) && is_numeric($o['rider_lng'])) ? round((float)$o['rider_lng'], 7) : null;
+    $dest_lat  = (isset($o['destination_lat']) && is_numeric($o['destination_lat'])) ? round((float)$o['destination_lat'], 7) : null;
+    $dest_lng  = (isset($o['destination_lng']) && is_numeric($o['destination_lng'])) ? round((float)$o['destination_lng'], 7) : null;
+    $store_lat = (isset($o['store_lat']) && is_numeric($o['store_lat'])) ? round((float)$o['store_lat'], 7) : null;
+    $store_lng = (isset($o['store_lng']) && is_numeric($o['store_lng'])) ? round((float)$o['store_lng'], 7) : null;
 
     // Haversine distance
-    $r = 6371.0088;
-    $p = pi() / 180;
-    $dlat = ($dest_lat - $rider_lat) * $p;
-    $dlon = ($dest_lng - $rider_lng) * $p;
-    $a = sin($dlat / 2) ** 2 + cos($rider_lat * $p) * cos($dest_lat * $p) * sin($dlon / 2) ** 2;
-    $distance_km = round($r * 2 * asin(min(1, sqrt($a))), 3);
+    $distance_km = null;
+    if ($dest_lat !== null && $dest_lng !== null && $rider_lat !== null && $rider_lng !== null) {
+        $r = 6371.0088;
+        $p = pi() / 180;
+        $dlat = ($dest_lat - $rider_lat) * $p;
+        $dlon = ($dest_lng - $rider_lng) * $p;
+        $a = sin($dlat / 2) ** 2 + cos($rider_lat * $p) * cos($dest_lat * $p) * sin($dlon / 2) ** 2;
+        $distance_km = round($r * 2 * asin(min(1, sqrt($a))), 3);
+    }
 
     // Active call on this order
     $active_call = null;
@@ -331,16 +336,16 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
         'order_ref'       => '#' . ltrim($o['order_ref'] ?: ('FD-' . $o['order_id']), '#'),
         'lat'             => $rider_lat,
         'lng'             => $rider_lng,
-        'lat'        => $rider_lat,
-        'lng'       => $rider_lng,
+        'current_lat'     => $rider_lat,
+        'current_lng'     => $rider_lng,
         'rider_lat'       => $rider_lat,
         'rider_lng'       => $rider_lng,
+        'store_lat'       => $store_lat,
+        'store_lng'       => $store_lng,
         'destination_lat' => $dest_lat,
         'destination_lng' => $dest_lng,
         'dest_lat'        => $dest_lat,
         'dest_lng'        => $dest_lng,
-        
-        
         'distance_km'     => $distance_km,
         'status'          => $o['status'],
         'delivery_status' => $o['delivery_status'],

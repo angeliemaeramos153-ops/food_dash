@@ -136,7 +136,7 @@ if ($method === 'POST') {
         $store_lng = null;
 
         if ($shop_id > 0) {
-            $s_stmt = $conn->prepare("SELECT shop_id, lat, lng, lat, lng FROM shops WHERE shop_id = :sid LIMIT 1");
+            $s_stmt = $conn->prepare("SELECT shop_id, shop_name FROM shops WHERE shop_id = :sid LIMIT 1");
             $s_stmt->execute([':sid' => $shop_id]);
             $s_res = $s_stmt->fetch(PDO::FETCH_ASSOC);
             if ($s_res) {
@@ -152,14 +152,14 @@ if ($method === 'POST') {
         if ($store_lat === null || $store_lng === null) {
             $first_store = array_key_first($stores) ?: $store_name;
             if ($first_store) {
-                $s_stmt = $conn->prepare("SELECT shop_id, lat, lng, lat, lng FROM shops WHERE LOWER(TRIM(shop_name)) = LOWER(TRIM(:sname)) LIMIT 1");
+                $s_stmt = $conn->prepare("SELECT shop_id, shop_name FROM shops WHERE LOWER(TRIM(shop_name)) = LOWER(TRIM(:sname)) LIMIT 1");
                 $s_stmt->execute([':sname' => $first_store]);
                 $s_res = $s_stmt->fetch(PDO::FETCH_ASSOC);
 
                 // Fallback partial match if exact name didn't hit
                 if (!$s_res) {
                     $s_like = '%' . strtolower(trim($first_store)) . '%';
-                    $s_stmt2 = $conn->prepare("SELECT shop_id, lat, lng, lat, lng FROM shops WHERE LOWER(shop_name) LIKE :slike LIMIT 1");
+                    $s_stmt2 = $conn->prepare("SELECT shop_id, shop_name FROM shops WHERE LOWER(shop_name) LIKE :slike LIMIT 1");
                     $s_stmt2->execute([':slike' => $s_like]);
                     $s_res = $s_stmt2->fetch(PDO::FETCH_ASSOC);
                 }
@@ -490,9 +490,9 @@ if ($method === 'POST') {
                 if ($new_delivery_status === 'near_customer') {
                     create_notification($conn, $cust_id, 'rider_near', 'Rider is Near You', "Your rider is arriving shortly with {$ref}.", $order_id);
                 } elseif ($new_delivery_status === 'on_the_way') {
-                    create_notification($conn, $cust_id, 'rider_on_way', 'Rider on the Way', "Your rider has picked up {$ref} and is on the way.", $order_id);
+                    create_notification($conn, $cust_id, 'rider_on_way', 'Order Out for Delivery', "Your order #{$ref} has been picked up and is on the way! Total amount: ₱" . number_format((float)($order['total_amount'] ?? 0), 2), $order_id);
                 } else {
-                    create_notification($conn, $cust_id, 'rider_assigned', 'Rider Out for Delivery', "A rider has claimed {$ref} and is out for delivery.", $order_id);
+                    create_notification($conn, $cust_id, 'rider_assigned', 'Order Out for Delivery', "Your order #{$ref} has been picked up and is on the way! Total amount: ₱" . number_format((float)($order['total_amount'] ?? 0), 2), $order_id);
                 }
                 log_activity($conn, $user_id, 'ORDER_DISPATCHED', "Order {$ref} dispatched ({$new_delivery_status}) with rider {$user_name}.");
 

@@ -78,6 +78,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $conn->prepare("UPDATE food_orders SET rider_lat = :lat, rider_lng = :lng, location_updated_at = NOW() WHERE order_id = :oid");
         $stmt->execute([':lat' => $lat, ':lng' => $lng, ':oid' => $order_id]);
 
+        // 1. RIDER GPS BROADCAST: Update orders table with current_lat and current_lng
+        try {
+            $stmtOrd = $conn->prepare("UPDATE orders SET current_lat = :lat, current_lng = :lng, rider_lat = :lat2, rider_lng = :lng2 WHERE id = :oid OR order_id = :oid2");
+            $stmtOrd->execute([':lat' => $lat, ':lng' => $lng, ':lat2' => $lat, ':lng2' => $lng, ':oid' => $order_id, ':oid2' => $order_id]);
+        } catch (Throwable $e) {}
+
+        // 2. Insert into rider_locations table linked to order_id
+        try {
+            $stmtLoc = $conn->prepare("INSERT INTO rider_locations (order_id, rider_id, current_lat, current_lng, lat, lng, updated_at) VALUES (:oid, :rid, :lat, :lng, :lat2, :lng2, NOW())");
+            $stmtLoc->execute([':oid' => $order_id, ':rid' => $rider_id, ':lat' => $lat, ':lng' => $lng, ':lat2' => $lat, ':lng2' => $lng]);
+        } catch (Throwable $e) {}
+
         if ($rider_id > 0) {
             try {
                 $stmtR = $conn->prepare("UPDATE riders SET current_lat = :lat, current_lng = :lng WHERE rider_id = :rid");
@@ -340,21 +352,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
 
     $stmt = $conn->prepare("SELECT 
         o.order_id, o.order_ref, o.customer_id, o.customer_name, 
-        COALESCE(o.customer_phone, cu.phone, '+63 928 555 0148') AS customer_phone,
+        COALESCE(cu.phone, o.customer_phone) AS customer_phone,
         o.store_name, o.delivery_address, 
         o.status, o.delivery_status, o.near_notified_at, o.location_updated_at,
-        COALESCE(o.store_lat, s.lat, s.lat) AS store_lat,
-        COALESCE(o.store_lng, s.lng, s.lng) AS store_lng,
-        COALESCE(o.id, o.customer_lat) AS destination_lat,
-        COALESCE(o.delivery_lng, o.customer_lng) AS destination_lng,
+        o.store_lat,
+        o.store_lng,
+        COALESCE(o.delivery_lat, o.customer_lat, ord.delivery_lat) AS destination_lat,
+        COALESCE(o.delivery_lng, o.customer_lng, ord.delivery_lng) AS destination_lng,
         o.customer_lat, o.customer_lng,
         o.rider_id,
-        COALESCE(o.rider_lat, r.current_lat) AS rider_lat,
-        COALESCE(o.rider_lng, r.current_lng) AS rider_lng,
-        COALESCE(r.rider_name, ru.full_name, 'Alex Rider') AS rider_name,
-        COALESCE(o.rider_phone, r.phone, ru.phone, '+63 917 555 0192') AS rider_phone
+        COALESCE(o.rider_lat, ord.current_lat, ord.rider_lat) AS rider_lat,
+        COALESCE(o.rider_lng, ord.current_lng, ord.rider_lng) AS rider_lng,
+        COALESCE(r.rider_name, ru.full_name, ord.rider_name) AS rider_name,
+        COALESCE(ru.phone, ord.rider_phone) AS rider_phone
     FROM food_orders o
-    LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
+    LEFT JOIN orders ord ON (o.order_id = ord.id OR o.order_id = ord.order_id)
+    LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name))))
     LEFT JOIN riders r ON (o.rider_id = r.rider_id)
     LEFT JOIN users ru ON (r.user_id = ru.user_id)
     LEFT JOIN users cu ON (o.customer_id = cu.user_id)
@@ -392,9 +405,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     $o['lat']  = $rider_lat;
     $o['lng'] = $rider_lng;
 
-    // Fallback phones guaranteed non-null
-    if (empty($o['customer_phone'])) $o['customer_phone'] = '+63 917 123 4567';
-    if (empty($o['rider_phone'])) $o['rider_phone'] = '+63 917 555 0192';
+    // Ensure customer and rider phones are strings
+    if (empty($o['customer_phone'])) $o['customer_phone'] = '';
+    if (empty($o['rider_phone'])) $o['rider_phone'] = '';
 
     // Check for active call within the last 45 seconds
     $active_call = null;
