@@ -353,33 +353,109 @@ $new_order_id = (int)$conn->lastInsertId();
     api_response(['success' => false, 'message' => 'Unknown action: ' . $action], 400);
 }
 
-// Fetch customer's orders from food_orders table
+// Fetch customer's orders dynamically from orders and food_orders tables
 $db_orders = [];
 $ontheway_count = 0;
 $active_tracking_order = null;
 
-// Dynamically query strictly the authenticated user's orders (empty for fresh new accounts)
 try {
-    $stmt = $conn->prepare("
-        SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, created_at 
-        FROM food_orders 
-        WHERE customer_id = :cid
-          AND status != 'CANCELLED'
-          AND COALESCE(rider_cleared, 0) = 0 
-        ORDER BY order_id DESC LIMIT 50
-    ");
-    if ($stmt) {
-        $stmt->execute([':cid' => $user_id]);
+    $driver = $conn->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'pgsql') {
+        $stmt = $conn->prepare("
+            SELECT 
+                o.id AS order_id,
+                o.id,
+                o.order_number AS order_ref,
+                COALESCE(s.shop_name, 'Partner Store') AS store_name,
+                COALESCE(
+                    (SELECT string_agg(CONCAT(oi.quantity, 'x ', oi.item_name), ', ') FROM order_items oi WHERE oi.order_id = o.id),
+                    'Food Dash Items'
+                ) AS items_summary,
+                COALESCE(o.total_amount, 0.00) AS total_amount,
+                COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
+                COALESCE(o.status, 'pending') AS status,
+                COALESCE(o.status, 'pending') AS delivery_status,
+                'delivery' AS order_type,
+                COALESCE(o.delivery_address, '') AS delivery_address,
+                o.delivery_lat,
+                o.delivery_lng,
+                o.rider_name,
+                o.rider_phone,
+                o.current_lat,
+                o.current_lng,
+                o.created_at,
+                COALESCE(o.rider_cleared, 0) AS rider_cleared
+            FROM orders o
+            LEFT JOIN shops s ON o.store_id = s.shop_id
+            WHERE (o.user_id = :uid OR o.customer_id::text = :uid_str)
+              AND UPPER(COALESCE(o.status, '')) != 'CANCELLED'
+              AND COALESCE(o.rider_cleared, 0) = 0
+            ORDER BY o.id DESC LIMIT 50
+        ");
+        $stmt->execute([':uid' => $user_id, ':uid_str' => (string)$user_id]);
         $db_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $stmt = $conn->prepare("
+            SELECT 
+                COALESCE(o.id, o.order_id) AS order_id,
+                COALESCE(o.id, o.order_id) AS id,
+                COALESCE(o.order_number, CONCAT('#FD-', COALESCE(o.id, o.order_id))) AS order_ref,
+                COALESCE(s.shop_name, o.store_name, 'Partner Store') AS store_name,
+                COALESCE(o.items_summary, 'Food Dash Items') AS items_summary,
+                COALESCE(o.total_price, 0.00) AS total_amount,
+                COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
+                COALESCE(o.status, 'Pending') AS status,
+                COALESCE(o.status, 'Pending') AS delivery_status,
+                'delivery' AS order_type,
+                COALESCE(o.delivery_address, '') AS delivery_address,
+                o.delivery_lat,
+                o.delivery_lng,
+                o.rider_name,
+                o.rider_phone,
+                o.current_lat,
+                o.current_lng,
+                o.created_at,
+                COALESCE(o.rider_cleared, 0) AS rider_cleared
+            FROM orders o
+            LEFT JOIN shops s ON (o.store_id = s.shop_id OR o.shop_id = s.shop_id)
+            WHERE (o.user_id = :uid OR o.customer_id = :uid2)
+              AND UPPER(COALESCE(o.status, '')) != 'CANCELLED'
+              AND COALESCE(o.rider_cleared, 0) = 0
+            ORDER BY o.order_id DESC LIMIT 50
+        ");
+        $stmt->execute([':uid' => $user_id, ':uid2' => $user_id]);
+        $db_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // Fallback to food_orders table if no orders found in main orders table
+    if (empty($db_orders)) {
+        $f_stmt = $conn->prepare("
+            SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, created_at, COALESCE(rider_cleared, 0) AS rider_cleared
+            FROM food_orders 
+            WHERE customer_id = :cid
+              AND UPPER(COALESCE(status, '')) != 'CANCELLED'
+              AND COALESCE(rider_cleared, 0) = 0 
+            ORDER BY order_id DESC LIMIT 50
+        ");
+        $f_stmt->execute([':cid' => $user_id]);
+        $db_orders = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 } catch (Throwable $e) {
     $db_orders = [];
 }
 
+// Normalize order_ref for display (e.g., #FD-261024-8117)
+foreach ($db_orders as &$ord_ref_item) {
+    $ord_ref_item['order_ref'] = '#' . ltrim($ord_ref_item['order_ref'] ?? ('FD-' . ($ord_ref_item['order_id'] ?? $ord_ref_item['id'])), '#');
+}
+unset($ord_ref_item);
+
 // Find active tracking order (prioritizing active deliveries over historical orders)
 foreach ($db_orders as $row) {
-    $st = strtoupper(trim(str_replace([' ', '-'], '_', $row['status'])));
-    if (in_array($st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'])) {
+    $st = strtoupper(trim(str_replace([' ', '-'], '_', $row['status'] ?? '')));
+    $del_st = strtoupper(trim(str_replace([' ', '-'], '_', $row['delivery_status'] ?? '')));
+    if (in_array($st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED']) ||
+        in_array($del_st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'])) {
         $ontheway_count++;
         if (!$active_tracking_order) {
             $active_tracking_order = $row;
@@ -3561,6 +3637,7 @@ function showScreen(id){
   document.getElementById(id).classList.add('active');
   document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active', n.dataset.screen===id));
   if(id==='cart') renderCart();
+  if(id==='orders' && typeof loadCustomerOrdersLive === 'function') loadCustomerOrdersLive();
 }
 
 function toast(msg){
@@ -4649,6 +4726,224 @@ function filterOrders(status, btn) {
   });
 }
 
+function escapeCustHtml(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function escapeCustAttr(str) {
+  return String(str || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function loadCustomerOrdersLive() {
+  try {
+    const res = await fetch(`order_api.php?action=get_orders&_t=${Date.now()}`, { cache: 'no-store' });
+    const data = await res.json();
+    if (!data.success || !Array.isArray(data.orders)) return;
+
+    const orders = data.orders;
+    const listEl = document.getElementById('orderList');
+    if (!listEl) return;
+
+    // Check if active delivery exists to update banner
+    let activeDeliveryOrder = null;
+    let onTheWayCount = 0;
+
+    orders.forEach(ord => {
+      const st = String(ord.status || '').toUpperCase().replace(/[ -]/g, '_');
+      const delSt = String(ord.delivery_status || '').toUpperCase().replace(/[ -]/g, '_');
+      if (['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'].includes(st) ||
+          ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'].includes(delSt)) {
+        onTheWayCount++;
+        if (!activeDeliveryOrder) activeDeliveryOrder = ord;
+      }
+    });
+
+    // Update the on-the-way notice banner dynamically
+    const banner = document.getElementById('dynamicOnTheWayBanner');
+    if (banner) {
+      if (activeDeliveryOrder) {
+        banner.style.display = 'flex';
+        const targetId = activeDeliveryOrder.order_id || activeDeliveryOrder.id;
+        banner.onclick = () => openCustomerTrackingModal(targetId);
+        const span = banner.querySelector('span');
+        if (span) {
+          span.innerHTML = `<i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food! (${escapeCustHtml(activeDeliveryOrder.order_ref)})`;
+        }
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
+    if (orders.length === 0) {
+      listEl.innerHTML = `
+        <div class="empty-state-card" id="noOrders" style="text-align: center; padding: 36px 18px; background: #ffffff; border-radius: 14px; margin: 12px 0; border: 1.5px dashed #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+          <div style="font-size: 42px; margin-bottom: 10px; line-height: 1;">🛍️</div>
+          <strong style="display: block; font-size: 16px; color: var(--olive-dark, #2f341d); margin-bottom: 6px;">No orders placed yet!</strong>
+          <p style="font-size: 12px; color: var(--muted, #64748b); margin-bottom: 16px; max-width: 280px; margin-left: auto; margin-right: auto; line-height: 1.4;">
+            Your order history is clean. Discover our partner stores and order delicious meals today!
+          </p>
+          <button type="button" class="btn-browse-stores-main" onclick="showScreen('stores')" style="display: inline-flex; align-items: center; gap: 8px; background: var(--harvest-sun, #c5a059); color: #ffffff; padding: 10px 22px; border-radius: 10px; font-weight: 700; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(197, 160, 89, 0.35);">
+            <i class="fa-solid fa-store"></i> Browse Stores
+          </button>
+        </div>`;
+      return;
+    }
+
+    // Determine currently active filter chip
+    const activeChip = document.querySelector('#orderFilters .chip.active');
+    const currentFilter = activeChip ? (activeChip.getAttribute('onclick') || '').replace(/.*filterOrders\('([^']+)'[^\)]*\).*/, '$1') || 'all' : 'all';
+
+    let html = '';
+    orders.forEach(ord => {
+      const raw_status = String(ord.status || '').toUpperCase().replace(/[ -]/g, '_');
+      const del_status = String(ord.delivery_status || '').toLowerCase().trim();
+      const status_lower = String(ord.status || '').toLowerCase().trim();
+
+      const is_arrived = (raw_status === 'ARRIVED' || del_status === 'arrived' || status_lower === 'arrived');
+      const is_near = (raw_status === 'NEAR_CUSTOMER' || del_status === 'near_customer' || status_lower === 'near_customer');
+      const is_ontheway = ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'].includes(raw_status)
+                  || ['on_the_way', 'on_delivery', 'picked_up'].includes(del_status)
+                  || ['out_for_delivery', 'on_the_way', 'on_delivery'].includes(status_lower)
+                  || is_near || is_arrived;
+
+      const is_delivered = (raw_status === 'DELIVERED' || raw_status === 'COMPLETED' || del_status === 'delivered' || status_lower === 'delivered' || status_lower === 'completed');
+      const is_settled = (raw_status === 'SETTLED' || status_lower === 'settled');
+      const is_prep = ['PREPARING', 'ACCEPTED', 'COOKING', 'IN_KITCHEN', 'PREP'].includes(raw_status)
+                  || ['preparing', 'accepted', 'cooking', 'in_kitchen', 'prep'].includes(status_lower)
+                  || ['preparing', 'cooking', 'in_kitchen', 'accepted'].includes(del_status);
+      const is_pending = ['PENDING', 'SUBMITTED'].includes(raw_status) || ['pending', 'submitted'].includes(status_lower);
+      const is_cancelled = (raw_status === 'CANCELLED' || del_status === 'cancelled' || status_lower === 'cancelled');
+      const can_cancel = (is_pending || is_prep) && !is_ontheway && !is_delivered && !is_cancelled;
+
+      let status_label = '';
+      let norm_status = '';
+      if (is_arrived) {
+        status_label = 'Arrived';
+        norm_status = 'arrived';
+      } else if (is_near) {
+        status_label = 'Near Customer';
+        norm_status = 'near_customer';
+      } else if (is_ontheway) {
+        status_label = 'On Delivery';
+        norm_status = 'on_delivery';
+      } else if (raw_status === 'READY_FOR_PICKUP' || status_lower === 'ready_for_pickup' || status_lower === 'ready') {
+        status_label = 'Ready for Pickup';
+        norm_status = 'ready_for_pickup';
+      } else if (is_prep) {
+        status_label = 'Preparing';
+        norm_status = 'preparing';
+      } else if (is_pending) {
+        status_label = 'Pending';
+        norm_status = 'pending';
+      } else {
+        status_label = raw_status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        norm_status = raw_status.toLowerCase();
+      }
+
+      const clean_card_ref = '#' + String(ord.order_ref || ('FD-' + (ord.order_id || ord.id))).replace(/^#+/, '');
+      const storeNameSafe = escapeCustHtml(ord.store_name || 'Store');
+      const itemsSummarySafe = escapeCustHtml(ord.items_summary || 'Food Dash Items');
+      const totalAmountNum = parseFloat(ord.total_amount || ord.total_price || 0).toFixed(2);
+      const formattedTotal = '₱' + Number(totalAmountNum).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      const orderDateStr = ord.created_at ? new Date(ord.created_at).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+      const orderId = parseInt(ord.order_id || ord.id, 10);
+      const paymentMethod = ord.payment_method || 'Cash on Delivery (COD)';
+
+      let iconHtml = '🛍️';
+      let iconClass = 'green';
+      if (is_cancelled) { iconHtml = '🚫'; iconClass = 'grey'; }
+      else if (is_ontheway) { iconHtml = '🛵'; iconClass = 'jolli'; }
+      else if (is_settled) { iconHtml = '🛡️'; iconClass = 'settled-icon'; }
+      else if (is_delivered) { iconHtml = '📦'; iconClass = 'green'; }
+      else if (is_prep) { iconHtml = '🍳'; iconClass = 'green'; }
+
+      let actionsHtml = '';
+      if (can_cancel) {
+        actionsHtml = `
+          <div style="margin-top:8px;" id="cancel-wrap-${orderId}" class="order-actions-wrap">
+            <button type="button" class="btn-cancel-order" id="btn-cancel-${orderId}" onclick="event.stopPropagation(); promptCancelOrder(${orderId}, '${escapeCustAttr(clean_card_ref)}', '${escapeCustAttr(status_label)}')">
+              <i class="fa-solid fa-ban"></i> Cancel Order
+            </button>
+          </div>`;
+      } else if (is_cancelled) {
+        actionsHtml = `
+          <div style="font-size: 12px; color: #dc2626; font-weight:700; margin-top:6px;">
+            <i class="fa-solid fa-circle-xmark"></i> Cancelled by Customer
+          </div>`;
+      }
+
+      if (is_ontheway || is_near || is_arrived) {
+        let subMsg = '';
+        if (is_arrived) subMsg = '<i class="fa-solid fa-bell fa-shake"></i> Rider has arrived at your location!';
+        else if (is_near) subMsg = '<i class="fa-solid fa-person-biking fa-beat"></i> Rider is near your location (&lt; 200m)!';
+        
+        actionsHtml += `
+          <div style="font-size: 12px; color: var(--harvest-sun); font-weight:600; margin-top:6px;">
+            ${subMsg}
+          </div>
+          <div id="track-actions-${orderId}" class="order-actions-wrap" style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+            <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(${orderId})" title="Tap to view live delivery map">
+              <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
+            </button>
+            <button class="confirm-btn" id="confirm-btn-${orderId}" onclick="event.stopPropagation(); confirmOrderReceived(${orderId})">
+              <i class="fa-solid fa-box-open"></i> 📦 Received
+            </button>
+          </div>`;
+      } else if (is_delivered && !is_settled) {
+        actionsHtml += `
+          <div style="font-size: 12px; color: var(--sagebrush); font-weight:600; margin-top:6px;">
+            <i class="fa-solid fa-circle-check"></i> Order Delivered. Awaiting admin settlement.
+          </div>`;
+      }
+
+      const rowClick = is_ontheway ? `onclick="openTrackingModal(${orderId})" style="cursor:pointer;" title="Tap to view live delivery tracking map"` : '';
+
+      html += `
+        <div class="row-card order-row ${is_ontheway ? 'on-the-way-card' : ''}" data-status="${escapeCustAttr(norm_status)}" id="order-card-${orderId}" ${rowClick}>
+          <div class="row-icon ${iconClass}">${iconHtml}</div>
+          <div class="info">
+            <strong class="order-ref">${escapeCustHtml(clean_card_ref)}</strong>
+            <small class="order-store-items">${storeNameSafe} • ${itemsSummarySafe}</small>
+            <small class="order-meta order-date-price">${escapeCustHtml(orderDateStr)} • ${formattedTotal}</small>
+            ${ord.delivery_address ? `<small class="order-meta order-address" style="color: #64748b; font-weight: 500; font-size: 12px; margin-top: 2px; white-space: normal; line-height: 1.35;"><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> ${escapeCustHtml(ord.delivery_address)}</small>` : ''}
+            <div style="margin-top: 8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+              <span class="status-badge status-${escapeCustAttr(norm_status)}" id="status-tag-${orderId}">
+                ${is_arrived ? '<i class="fa-solid fa-bell fa-shake"></i> ' : (is_near ? '<i class="fa-solid fa-person-biking fa-beat"></i> ' : '')}${escapeCustHtml(status_label)}
+              </span>
+              <span class="status-badge" style="background:#f1f5f9; color:#475569; font-size:11px;">
+                <i class="fa-solid fa-credit-card"></i> ${escapeCustHtml(paymentMethod)}
+              </span>
+              ${is_settled ? '<span class="settled-tag"><i class="fa-solid fa-circle-check"></i> Reconciled</span>' : ''}
+            </div>
+            ${actionsHtml}
+          </div>
+        </div>`;
+    });
+
+    listEl.innerHTML = html;
+
+    // Reapply filter if one was selected
+    if (currentFilter && currentFilter !== 'all' && activeChip) {
+      filterOrders(currentFilter, activeChip);
+    }
+  } catch (e) {
+    console.warn('loadCustomerOrdersLive error:', e);
+  }
+}
+window.loadCustomerOrdersLive = loadCustomerOrdersLive;
+
+// Background polling for live orders updates every 4 seconds
+setInterval(() => {
+  const ordersScreen = document.getElementById('orders');
+  if (ordersScreen && ordersScreen.classList.contains('active')) {
+    loadCustomerOrdersLive();
+  }
+}, 4000);
+
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(loadCustomerOrdersLive, 500);
+});
+
 function accountNotice(section) {
   toast(section + ' clicked');
 }
@@ -5692,11 +5987,14 @@ function renderCustomerMap(opts) {
   const mapContainer = document.getElementById('cust-tracking-map');
   if (!mapContainer || typeof L === 'undefined') return;
 
+  // Ormoc City default center
+  const defaultCenter = [11.00938, 124.60929];
+
   const validStore = !isNaN(opts.storeLat) && !isNaN(opts.storeLng) && opts.storeLat !== 0;
   const validDest = !isNaN(opts.destLat) && !isNaN(opts.destLng) && opts.destLat !== 0;
   const validRider = !isNaN(opts.riderLat) && !isNaN(opts.riderLng) && opts.riderLat !== 0;
 
-  // Requirement 4: Ensure map initializes and centers on rider's active coordinates
+  // Requirement: Ensure map initializes and centers on rider's active coordinates or Ormoc City
   const center = validRider ? [opts.riderLat, opts.riderLng] : (validDest ? [opts.destLat, opts.destLng] : (validStore ? [opts.storeLat, opts.storeLng] : defaultCenter));
 
   if (!custTrackingMap) {
@@ -5712,10 +6010,16 @@ function renderCustomerMap(opts) {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19
     }).addTo(custTrackingMap);
+
+    // Staggered size invalidation to guarantee full tile rendering
+    [30, 100, 250, 500, 1000, 1800].forEach(delay => {
+      setTimeout(() => { if (custTrackingMap) custTrackingMap.invalidateSize(); }, delay);
+    });
   } else {
     window.custTrackingMap = custTrackingMap;
     window.trackingMap = custTrackingMap;
     window.map = custTrackingMap;
+    setTimeout(() => { if (custTrackingMap) custTrackingMap.invalidateSize(); }, 50);
   }
 
   // Icons

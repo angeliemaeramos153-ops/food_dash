@@ -161,40 +161,112 @@ if ($action === 'cancel_order' || $action === 'cancel') {
 }
 
 // 2. GET CUSTOMER ORDERS
-if ($action === 'get_orders' || $action === 'my_orders' || ($method === 'GET' && empty($action))) {
-    // Strictly scope query to the authenticated customer session
-    $stmt = $conn->prepare("SELECT * FROM orders WHERE customer_id = :uid ORDER BY created_at DESC");
-    $stmt->execute([':uid' => $user_id]);
-    $raw_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+if ($action === 'get_orders' || $action === 'my_orders' || $action === 'get_customer_orders' || ($method === 'GET' && empty($action))) {
+    $driver = $conn->getAttribute(PDO::ATTR_DRIVER_NAME);
+    $orders = [];
 
-    // Also fetch food_orders details strictly for this authenticated customer
-    $f_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, rider_id, delivery_address, created_at 
-        FROM food_orders 
-        WHERE customer_id = :cid 
-        ORDER BY order_id DESC LIMIT 50");
-    $f_stmt->execute([':cid' => $user_id]);
-    $food_orders = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
-    $fo_map = [];
-    foreach ($food_orders as $fo) {
-        $fo['order_ref'] = '#' . ltrim($fo['order_ref'] ?: ('FD-' . $fo['order_id']), '#');
-        $fo_map[(int)$fo['order_id']] = $fo;
+    if ($driver === 'pgsql') {
+        try {
+            $stmt = $conn->prepare("
+                SELECT 
+                    o.id AS order_id,
+                    o.id,
+                    o.order_number AS order_ref,
+                    COALESCE(s.shop_name, 'Partner Store') AS store_name,
+                    COALESCE(
+                        (SELECT string_agg(CONCAT(oi.quantity, 'x ', oi.item_name), ', ') FROM order_items oi WHERE oi.order_id = o.id),
+                        'Food Dash Items'
+                    ) AS items_summary,
+                    COALESCE(o.total_amount, 0.00) AS total_amount,
+                    COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
+                    COALESCE(o.status, 'pending') AS status,
+                    COALESCE(o.status, 'pending') AS delivery_status,
+                    'delivery' AS order_type,
+                    COALESCE(o.delivery_address, '') AS delivery_address,
+                    o.delivery_lat,
+                    o.delivery_lng,
+                    o.rider_name,
+                    o.rider_phone,
+                    o.current_lat,
+                    o.current_lng,
+                    o.created_at,
+                    COALESCE(o.rider_cleared, 0) AS rider_cleared
+                FROM orders o
+                LEFT JOIN shops s ON o.store_id = s.shop_id
+                WHERE (o.user_id = :uid OR o.customer_id::text = :uid_str)
+                  AND UPPER(COALESCE(o.status, '')) != 'CANCELLED'
+                  AND COALESCE(o.rider_cleared, 0) = 0
+                ORDER BY o.id DESC LIMIT 50
+            ");
+            $stmt->execute([':uid' => $user_id, ':uid_str' => (string)$user_id]);
+            $raw_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($raw_orders as $ro) {
+                $ro['order_ref'] = '#' . ltrim($ro['order_ref'] ?? ('FD-' . $ro['order_id']), '#');
+                $ro['payment_meta'] = get_payment_method_meta($ro['payment_method'] ?? 'Cash on Delivery (COD)');
+                $orders[] = $ro;
+            }
+        } catch (Throwable $e) {
+            $orders = [];
+        }
+    } else {
+        try {
+            $stmt = $conn->prepare("
+                SELECT 
+                    COALESCE(o.id, o.order_id) AS order_id,
+                    COALESCE(o.id, o.order_id) AS id,
+                    COALESCE(o.order_number, CONCAT('#FD-', COALESCE(o.id, o.order_id))) AS order_ref,
+                    COALESCE(s.shop_name, o.store_name, 'Partner Store') AS store_name,
+                    COALESCE(o.items_summary, 'Food Dash Items') AS items_summary,
+                    COALESCE(o.total_price, 0.00) AS total_amount,
+                    COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
+                    COALESCE(o.status, 'Pending') AS status,
+                    COALESCE(o.status, 'Pending') AS delivery_status,
+                    'delivery' AS order_type,
+                    COALESCE(o.delivery_address, '') AS delivery_address,
+                    o.delivery_lat,
+                    o.delivery_lng,
+                    o.rider_name,
+                    o.rider_phone,
+                    o.current_lat,
+                    o.current_lng,
+                    o.created_at,
+                    COALESCE(o.rider_cleared, 0) AS rider_cleared
+                FROM orders o
+                LEFT JOIN shops s ON (o.store_id = s.shop_id OR o.shop_id = s.shop_id)
+                WHERE (o.user_id = :uid OR o.customer_id = :uid2)
+                  AND UPPER(COALESCE(o.status, '')) != 'CANCELLED'
+                  AND COALESCE(o.rider_cleared, 0) = 0
+                ORDER BY o.order_id DESC LIMIT 50
+            ");
+            $stmt->execute([':uid' => $user_id, ':uid2' => $user_id]);
+            $raw_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($raw_orders as $ro) {
+                $ro['order_ref'] = '#' . ltrim($ro['order_ref'] ?? ('FD-' . $ro['order_id']), '#');
+                $ro['payment_meta'] = get_payment_method_meta($ro['payment_method'] ?? 'Cash on Delivery (COD)');
+                $orders[] = $ro;
+            }
+        } catch (Throwable $e) {
+            $orders = [];
+        }
     }
 
-    $orders = [];
-    if (!empty($raw_orders)) {
-        foreach ($raw_orders as $ro) {
-            $oid = (int)($ro['order_id'] ?? $ro['id'] ?? 0);
-            $merged = isset($fo_map[$oid]) ? array_merge($fo_map[$oid], $ro) : $ro;
-            $merged['order_ref'] = '#' . ltrim($merged['order_ref'] ?? ('FD-' . $oid), '#');
-            $merged['payment_meta'] = get_payment_method_meta($merged['payment_method'] ?? 'Cash on Delivery (COD)');
-            $orders[] = $merged;
-        }
-    } elseif (!empty($food_orders)) {
-        foreach ($food_orders as $fo) {
-            $fo['order_ref'] = '#' . ltrim($fo['order_ref'] ?: ('FD-' . $fo['order_id']), '#');
-            $fo['payment_meta'] = get_payment_method_meta($fo['payment_method'] ?? 'Cash on Delivery (COD)');
-            $orders[] = $fo;
-        }
+    // Fallback to food_orders if orders table had zero results
+    if (empty($orders)) {
+        try {
+            $f_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, rider_id, delivery_address, created_at 
+                FROM food_orders 
+                WHERE customer_id = :cid 
+                  AND UPPER(COALESCE(status, '')) != 'CANCELLED'
+                  AND COALESCE(rider_cleared, 0) = 0 
+                ORDER BY order_id DESC LIMIT 50");
+            $f_stmt->execute([':cid' => $user_id]);
+            $food_orders = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($food_orders as $fo) {
+                $fo['order_ref'] = '#' . ltrim($fo['order_ref'] ?: ('FD-' . $fo['order_id']), '#');
+                $fo['payment_meta'] = get_payment_method_meta($fo['payment_method'] ?? 'Cash on Delivery (COD)');
+                $orders[] = $fo;
+            }
+        } catch (Throwable $e) {}
     }
 
     $is_empty = empty($orders);
