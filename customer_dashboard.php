@@ -508,40 +508,70 @@ if ($menu_items_res) {
   box-sizing: border-box !important;
 }
 
-html, body {
-  max-width: 100% !important;
-  overflow-x: hidden !important;
-  width: 100% !important;
+html {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  width: 100%;
+  min-height: 100%;
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  min-height: 100%;
-  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 15% 10%, rgba(216,143,42,.12), transparent 30%),
     radial-gradient(circle at 85% 90%, rgba(75,83,32,.13), transparent 35%),
     #f4f0df;
   color: #20241a;
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
   font-family: 'Poppins', Arial, sans-serif;
+  touch-action: manipulation;
 }
 
-button,input{font:inherit}
-button{cursor:pointer}
+button, input { font: inherit; }
+button { cursor: pointer; touch-action: manipulation; }
 
-.app{
+/* Ensure all interactive buttons and touch targets are responsive and clickable */
+button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .hero button, .icon-btn {
+  pointer-events: auto !important;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Guarantee inactive modals and hidden floating elements never block clicks */
+.sim-modal[style*="display:none"],
+.sim-modal[style*="display: none"],
+.fd-modal:not(.show):not([style*="display: flex"]),
+.logout-modal:not(.show):not([style*="display: flex"]),
+.incoming-call-modal[style*="display:none"],
+.incoming-call-modal[style*="display: none"],
+.customer-floating-banner[style*="display:none"],
+.customer-floating-banner[style*="display: none"] {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+.app {
   width: 100% !important;
-  max-width: 100% !important;
+  max-width: 440px;
+  min-height: 100vh;
   box-sizing: border-box !important;
   overflow-x: hidden !important;
-  min-height: 100vh;
   background: var(--paper);
   position: relative;
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   margin: 0 auto;
 }
 
@@ -555,15 +585,19 @@ button{cursor:pointer}
 }
 
 #orders.screen, .screen {
+  width: 100% !important;
+  box-sizing: border-box !important;
   padding-top: 14px !important;
   padding-bottom: 90px !important;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media(min-width:600px){
   body {
     padding: 20px 0;
   }
-  .app{
+  .app {
     max-width: 440px !important;
     min-height: 720px;
     height: auto;
@@ -576,14 +610,12 @@ button{cursor:pointer}
 
 @media(max-width:599px){
   html, body {
-    max-width: 100% !important;
-    overflow-x: hidden !important;
     width: 100% !important;
+    max-width: 100% !important;
     min-height: 100%;
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
-    -webkit-text-size-adjust: 100%;
+    display: block !important;
   }
   .app {
     border: none;
@@ -592,6 +624,7 @@ button{cursor:pointer}
     min-height: 100vh;
     width: 100% !important;
     max-width: 100% !important;
+    margin: 0 !important;
     overflow-x: hidden !important;
   }
 }
@@ -4427,7 +4460,6 @@ function syncCustomerPaymentMethod(method) {
 }
 
 async function executeOrderSubmission() {
-    async function checkoutInternal() {
     if (!cart.length) {
         toast('Cart is empty');
         return;
@@ -4508,9 +4540,9 @@ async function executeOrderSubmission() {
         console.error('Checkout error:', err);
         var safeMsg = (err && err.message && !err.message.includes('pattern')) ? err.message : 'Processing order...';
         toast(safeMsg);
-        setTimeout(() => { if (typeof handlePayAction === 'function') { handlePayAction(); } }, 500);
     });
 }
+const checkout = executeOrderSubmission;
 
 function filterStores() {
   const query = document.getElementById('storeSearch').value.toLowerCase();
