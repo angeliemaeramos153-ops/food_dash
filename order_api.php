@@ -159,23 +159,17 @@ if ($action === 'cancel_order' || $action === 'cancel') {
 
 // 2. GET CUSTOMER ORDERS
 if ($action === 'get_orders' || $action === 'my_orders' || ($method === 'GET' && empty($action))) {
-    $is_demo = ($user_id === 15 || $user_id === 26 || strtolower($user_name) === 'customer');
-    
-    // Strictly scope query to the logged-in user (or demo accounts):
-    $scope_orders = $is_demo ? "(customer_id = :uid OR customer_id IN (15, 26, 0))" : "(customer_id = :uid)";
-    $stmt = $conn->prepare("SELECT * FROM orders WHERE {$scope_orders} ORDER BY created_at DESC");
+    // Strictly scope query to the authenticated customer session
+    $stmt = $conn->prepare("SELECT * FROM orders WHERE customer_id = :uid ORDER BY created_at DESC");
     $stmt->execute([':uid' => $user_id]);
     $raw_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Also fetch food_orders details if available to enrich items_summary, store_name, delivery_address
-    $scope_food = $is_demo 
-        ? "(customer_id = :cid OR user_id = :uid OR customer_id IN (15, 26, 0) OR user_id IN (15, 26, 0))" 
-        : "(customer_id = :cid OR user_id = :uid)";
+    // Also fetch food_orders details strictly for this authenticated customer
     $f_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, rider_id, delivery_address, created_at 
         FROM food_orders 
-        WHERE {$scope_food} 
+        WHERE customer_id = :cid 
         ORDER BY order_id DESC LIMIT 50");
-    $f_stmt->execute([':cid' => $user_id, ':uid' => $user_id]);
+    $f_stmt->execute([':cid' => $user_id]);
     $food_orders = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
     $fo_map = [];
     foreach ($food_orders as $fo) {
@@ -215,13 +209,9 @@ if ($action === 'order_details') {
         order_api_out(false, 'Valid order_id is required.', [], 422);
     }
 
-    $is_demo = ($user_id === 15 || $user_id === 26 || strtolower($user_name) === 'customer');
-    $scope_single = $is_demo 
-        ? "(customer_id = :cid OR user_id = :uid OR customer_id IN (15, 26, 0) OR user_id IN (15, 26, 0) OR :is_admin = 1)" 
-        : "(customer_id = :cid OR user_id = :uid OR :is_admin = 1)";
-
+    $scope_single = "(customer_id = :cid OR :is_admin = 1)";
     $stmt = $conn->prepare("SELECT * FROM food_orders WHERE order_id = :oid AND {$scope_single} LIMIT 1");
-    $stmt->execute([':oid' => $order_id, ':cid' => $user_id, ':uid' => $user_id, ':is_admin' => ($role === 'admin' ? 1 : 0)]);
+    $stmt->execute([':oid' => $order_id, ':cid' => $user_id, ':is_admin' => ($role === 'admin' ? 1 : 0)]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$order) {

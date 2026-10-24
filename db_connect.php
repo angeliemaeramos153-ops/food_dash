@@ -44,7 +44,7 @@ try {
             $password = isset($dbParts['pass']) ? urldecode($dbParts['pass']) : $password;
         }
 
-        $dsn = "pgsql:host=$host;port=$port;dbname=$dbname;sslmode=require";
+        $dsn = "pgsql:host=$host;port=$port;dbname=$dbname;sslmode=require;options='--client_encoding=UTF8'";
 
         $conn = new PDO($dsn, $user, $password, [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
@@ -52,6 +52,10 @@ try {
             PDO::ATTR_EMULATE_PREPARES   => false,
             PDO::ATTR_TIMEOUT            => 10,
         ]);
+        try {
+            $conn->exec("SET NAMES 'UTF8'");
+            $conn->exec("SET client_encoding = 'UTF8'");
+        } catch (Throwable $ignore) {}
         $pdo = $conn;
     } else {
         $conn = new PDO("mysql:host=localhost;dbname=food_dash;charset=utf8mb4", "root", "", [
@@ -59,6 +63,9 @@ try {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
         ]);
+        try {
+            $conn->exec("SET NAMES utf8mb4");
+        } catch (Throwable $ignore) {}
         $pdo = $conn;
     }
 } catch (PDOException $e) {

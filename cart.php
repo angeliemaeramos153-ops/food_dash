@@ -6,6 +6,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+header('Content-Type: text/html; charset=utf-8');
 require_once 'db_connect.php';
 
 // 1. Session Identity: Customer ID is derived strictly from the active session
@@ -72,11 +73,11 @@ if (!empty($cart_items)) {
         $cart_subtotal += ($price * max(1, $qty));
     }
 } else {
-    $cart_subtotal = 170.00;
+    $cart_subtotal = 0.00;
 }
 
 $subtotal = (float)$cart_subtotal;
-$delivery_fee = (float)($delivery_fee ?? 30.00);
+$delivery_fee = $subtotal > 0 ? (float)($delivery_fee ?? 30.00) : 0.00;
 $grand_total = $subtotal + $delivery_fee;
 ?>
 <!DOCTYPE html>
@@ -500,7 +501,7 @@ $grand_total = $subtotal + $delivery_fee;
   <header class="checkout-header">
     <a href="customer_dashboard.php#cart" class="back-btn"><i class="fa-solid fa-chevron-left"></i></a>
     <h1><i class="fa-solid fa-bag-shopping" style="color:var(--harvest-sun);"></i> Order Checkout</h1>
-    <span id="cartHeaderCount" style="font-size:12px; font-weight:700; color:var(--olive);"><?= !empty($cart_items) ? count($cart_items) . ' Item(s)' : '1 Item' ?></span>
+    <span id="cartHeaderCount" style="font-size:12px; font-weight:700; color:var(--olive);"><?= !empty($cart_items) ? count($cart_items) . ' Item(s)' : '0 Items' ?></span>
   </header>
 
   <!-- 2. Form with novalidate and onsubmit="return false;" - ZERO pattern attributes, standard type="text" -->
@@ -515,7 +516,7 @@ $grand_total = $subtotal + $delivery_fee;
     <input type="text" style="display:none;" name="delivery_lng" id="delivery_lng" value="<?= htmlspecialchars((string)$default_lng) ?>">
     <input type="text" style="display:none;" name="customer_lat" id="customer_lat" value="<?= htmlspecialchars((string)$default_lat) ?>">
     <input type="text" style="display:none;" name="customer_lng" id="customer_lng" value="<?= htmlspecialchars((string)$default_lng) ?>">
-    <input type="text" style="display:none;" name="cart" id="cart_json_input" value="<?= htmlspecialchars(json_encode(!empty($cart_items) ? $cart_items : [['name' => 'Signature Meal Combo', 'store' => 'Food Dash Grill', 'price' => 170.00, 'qty' => 1, 'icon' => '🍱']])) ?>">
+    <input type="text" style="display:none;" name="cart" id="cart_json_input" value="<?= htmlspecialchars(json_encode(!empty($cart_items) ? $cart_items : [])) ?>">
     <input type="text" style="display:none;" name="payment_method_val" id="selectedPaymentMethod" value="gcash">
     <input type="text" style="display:none;" name="payment_method" id="formPaymentMethod" value="gcash">
 
@@ -523,7 +524,7 @@ $grand_total = $subtotal + $delivery_fee;
     <div class="checkout-card">
       <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
         <span><i class="fa-solid fa-utensils"></i> Order Summary</span>
-        <span id="orderItemCount" style="font-size:12px; font-weight:700; color:var(--olive);"><?= !empty($cart_items) ? count($cart_items) . ' Item(s)' : '1 Item' ?></span>
+        <span id="orderItemCount" style="font-size:12px; font-weight:700; color:var(--olive);"><?= !empty($cart_items) ? count($cart_items) . ' Item(s)' : '0 Items' ?></span>
       </div>
       <div id="orderSummaryItems">
         <?php if (!empty($cart_items)): ?>
@@ -540,15 +541,13 @@ $grand_total = $subtotal + $delivery_fee;
             </div>
           <?php endforeach; ?>
         <?php else: ?>
-          <div class="order-item-row">
-            <div class="order-item-desc">
-              <div class="item-icon">🍱</div>
-              <div>
-                <strong style="display:block; font-size:13px;">Signature Meal Combo</strong>
-                <small style="color:#6b7280;">Food Dash Grill • 1x</small>
-              </div>
-            </div>
-            <span style="font-weight:700; font-size:14px;">₱170.00</span>
+          <div class="order-item-row empty-cart-box" style="text-align:center; padding:24px 12px; display:block; border:1px dashed #cbd5e1; border-radius:12px; background:#f8fafc; margin:6px 0;">
+            <div style="font-size:32px; margin-bottom:8px;">🛒</div>
+            <strong style="display:block; font-size:14px; color:#334155;">Your cart is empty</strong>
+            <small style="color:#64748b; display:block; margin:4px 0 12px;">Add delicious meals from partner stores to begin checkout.</small>
+            <a href="customer_dashboard.php#stores" style="display:inline-flex; align-items:center; gap:6px; background:#283d23; color:#ffffff; padding:8px 16px; border-radius:8px; font-size:12px; font-weight:700; text-decoration:none;">
+              <i class="fa-solid fa-store"></i> Browse Stores
+            </a>
           </div>
         <?php endif; ?>
       </div>

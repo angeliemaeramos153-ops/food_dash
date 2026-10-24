@@ -57,28 +57,17 @@ if ($resolved_user_id) {
     } catch (Throwable $e) {}
 }
 
-// Dynamic fallback if no session exists: find latest registered customer - NEVER hardcode user 26 or Noah
+// Strictly require an authenticated customer session
 if (empty($resolved_user_id)) {
-    try {
-        $st = $conn->prepare("SELECT user_id, username, full_name, role FROM users WHERE role = 'customer' ORDER BY user_id DESC LIMIT 1");
-        $st->execute();
-        $u = $st->fetch(PDO::FETCH_ASSOC);
-        if ($u && !empty($u['user_id'])) {
-            $resolved_user_id = (int)$u['user_id'];
-            $resolved_username = $u['username'];
-            $resolved_fullname = $u['full_name'] ?: $u['username'];
-        }
-    } catch (Throwable $e) {}
+    http_response_code(401);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Unauthorized. Please log in to place an order.'
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
-if (!empty($resolved_user_id)) {
-    $_SESSION['user_id'] = $resolved_user_id;
-    if ($resolved_username) $_SESSION['username'] = $resolved_username;
-    if ($resolved_fullname) $_SESSION['full_name'] = $resolved_fullname;
-    $_SESSION['role'] = 'customer';
-}
-
-$user_id = $resolved_user_id ?: 0;
+$user_id = (int)$resolved_user_id;
 $customer_name = $resolved_fullname ?: ($resolved_username ?: 'Customer');
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
@@ -230,7 +219,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
                 ':name' => $item['name'],
                 ':store' => $store_name,
                 ':qty' => $item['quantity'],
-                ':price' => isset(\['price']) && floatval(\['price']) > 0 ? floatval(\['price']) : (isset(\['unit_price']) && floatval(\['unit_price']) > 0 ? floatval(\['unit_price']) : (isset(\['line_total']) && isset(\['qty']) && \['qty'] > 0 ? floatval(\['line_total'])/floatval(\['qty']) : 100.00)),
+                ':price' => $unit_price,
                 ':line' => $line_total,
                 ':icon' => $item['icon']
             ]);
@@ -238,7 +227,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
                 ':oid' => $order_id,
                 ':name' => $item['name'],
                 ':qty' => $item['quantity'],
-                ':price' => isset(\['price']) && floatval(\['price']) > 0 ? floatval(\['price']) : (isset(\['unit_price']) && floatval(\['unit_price']) > 0 ? floatval(\['unit_price']) : (isset(\['line_total']) && isset(\['qty']) && \['qty'] > 0 ? floatval(\['line_total'])/floatval(\['qty']) : 100.00)),
+                ':price' => $unit_price,
                 ':line' => $line_total
             ]);
         }

@@ -137,7 +137,7 @@ if ($method === 'POST') {
         if ($receiver_id <= 0) $receiver_id = 17; // Alex Gonzaga user_id
     } else {
         $receiver_id = (int)($order['customer_id'] ?? 0);
-        if ($receiver_id <= 0) $receiver_id = 26; // Noah demo user_id
+        // receiver_id must remain 0 or resolved
     }
 
     $ins = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at) VALUES (:oid, :role, :uid, :rec, :name, :txt, NOW())");

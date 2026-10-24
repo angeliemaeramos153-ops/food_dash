@@ -263,7 +263,7 @@ if ($method === 'POST') {
                     ':name'  => $x['name'],
                     ':store' => $x['store'],
                     ':qty'   => $x['qty'],
-                    ':price' => isset(\['price']) && floatval(\['price']) > 0 ? floatval(\['price']) : (isset(\['unit_price']) && floatval(\['unit_price']) > 0 ? floatval(\['unit_price']) : (isset(\['line_total']) && isset(\['qty']) && \['qty'] > 0 ? floatval(\['line_total'])/floatval(\['qty']) : 100.00)),
+                    ':price' => (float)($x['price'] ?? 0),
                     ':line'  => $x['line'],
                     ':icon'  => $x['icon'],
                 ]);
@@ -276,7 +276,7 @@ if ($method === 'POST') {
                     ':oid'   => $order_id,
                     ':name'  => $x['name'],
                     ':qty'   => $x['qty'],
-                    ':price' => isset(\['price']) && floatval(\['price']) > 0 ? floatval(\['price']) : (isset(\['unit_price']) && floatval(\['unit_price']) > 0 ? floatval(\['unit_price']) : (isset(\['line_total']) && isset(\['qty']) && \['qty'] > 0 ? floatval(\['line_total'])/floatval(\['qty']) : 100.00)),
+                    ':price' => (float)($x['price'] ?? 0),
                     ':line'  => $x['line']
                 ]);
             }
