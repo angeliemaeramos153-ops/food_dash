@@ -203,10 +203,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
             "(order_id, item_name, store_name, quantity, unit_price, line_total, icon) " .
             "VALUES (:oid, :name, :store, :qty, :price, :line, :icon)"
         );
-        $compat_item_stmt = $conn->prepare("INSERT INTO order_items " .
-            "(order_id, item_name, quantity, unit_price, line_total) " .
-            "VALUES (:oid, :name, :qty, :price, :line)"
-        );
         foreach ($clean_items as $item) {
             $unit_price = isset($item['unit_price']) && is_numeric($item['unit_price'])
                 ? (float)$item['unit_price']
@@ -223,13 +219,41 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
                 ':line' => $line_total,
                 ':icon' => $item['icon']
             ]);
-            $compat_item_stmt->execute([
-                ':oid' => $order_id,
-                ':name' => $item['name'],
-                ':qty' => $item['quantity'],
-                ':price' => $unit_price,
-                ':line' => $line_total
-            ]);
+
+            // Explicitly pass unit 'price' for Supabase order_items table constraint
+            try {
+                $compat_item_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, store_name, price, unit_price, quantity, line_total) VALUES (:oid, :name, :store, :price, :price, :qty, :line)");
+                $compat_item_stmt->execute([
+                    ':oid'   => $order_id,
+                    ':name'  => $item['name'],
+                    ':store' => $store_name,
+                    ':price' => $unit_price,
+                    ':qty'   => $item['quantity'],
+                    ':line'  => $line_total
+                ]);
+            } catch (Throwable $e1) {
+                try {
+                    $compat_item_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, price, quantity, line_total) VALUES (:oid, :name, :price, :qty, :line)");
+                    $compat_item_stmt->execute([
+                        ':oid'   => $order_id,
+                        ':name'  => $item['name'],
+                        ':price' => $unit_price,
+                        ':qty'   => $item['quantity'],
+                        ':line'  => $line_total
+                    ]);
+                } catch (Throwable $e2) {
+                    try {
+                        $compat_item_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, quantity, unit_price, line_total) VALUES (:oid, :name, :qty, :price, :line)");
+                        $compat_item_stmt->execute([
+                            ':oid'   => $order_id,
+                            ':name'  => $item['name'],
+                            ':qty'   => $item['quantity'],
+                            ':price' => $unit_price,
+                            ':line'  => $line_total
+                        ]);
+                    } catch (Throwable $e3) {}
+                }
+            }
         }
 
         // Mirror into orders table

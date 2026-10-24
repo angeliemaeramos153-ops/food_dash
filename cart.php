@@ -50,12 +50,10 @@ if ($user_id) {
     } catch (Throwable $e) {}
 }
 
-// Fallback if address or coords are completely blank
+// Address and coords start completely empty for fresh user accounts
 if (empty($default_address)) {
-    $default_address = 'Western Leyte College';
+    $default_address = '';
 }
-if ($default_lat === null) $default_lat = 11.01039;
-if ($default_lng === null) $default_lng = 124.61788;
 
 // 2. Dynamic Financial Calculations: Compute subtotal, delivery fee, and grand total dynamically from the actual active cart
 $cart_items = [];
@@ -561,7 +559,7 @@ $grand_total = $subtotal + $delivery_fee;
       
       <div class="coords-badge">
         <i class="fa-solid fa-circle-check"></i>
-        <span>Exact Live GPS Pin: <b id="coordsDisplay"><?= htmlspecialchars("{$default_lat}, {$default_lng}") ?></b></span>
+        <span>Exact Live GPS Pin: <b id="coordsDisplay"><?= htmlspecialchars($default_lat && $default_lng ? "{$default_lat}, {$default_lng}" : "Not set (Tap on Map)") ?></b></span>
       </div>
     </div>
 
@@ -870,11 +868,11 @@ function syncCartFromLocalStorage() {
         var savedAddr = localStorage.getItem('foodDashDeliveryAddress');
         if (savedAddr) {
             var addrEl = document.getElementById('delivery_address');
-            if (addrEl && (!addrEl.value || addrEl.value === 'Western Leyte College')) {
+            if (addrEl && !addrEl.value) {
                 addrEl.value = savedAddr;
             }
             var addrSec = document.getElementById('deliveryAddressInput');
-            if (addrSec && (!addrSec.value || addrSec.value === 'Western Leyte College')) {
+            if (addrSec && !addrSec.value) {
                 addrSec.value = savedAddr;
             }
         }
@@ -1015,8 +1013,8 @@ function openPaymentPopup(event) {
     }
 
     // Do not run regex validation on the coordinate string
-    var latLng = document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
-    var address = document.getElementById('delivery_address')?.value || 'Western Leyte College';
+    var latLng = document.getElementById('delivery_lat_lng')?.value || '';
+    var address = (document.getElementById('delivery_address')?.value || '').trim();
 
     var appleModalDest = document.getElementById('appleModalDest');
     if (appleModalDest) appleModalDest.textContent = address;
@@ -1054,9 +1052,16 @@ var handleCheckoutClick = openPaymentPopup;
 var triggerCheckout = openPaymentPopup;
 
 function finalizeOrder(method, address, coords) {
+    var checkAddr = String(address || document.getElementById('delivery_address')?.value || '').trim();
+    if (!checkAddr) {
+        alert('Please enter your delivery address before confirming your order.');
+        var addrInput = document.getElementById('delivery_address');
+        if (addrInput) addrInput.focus();
+        return;
+    }
     var chosenMethod = method || activePaymentMethod || 'cod';
-    var chosenAddress = address || document.getElementById('delivery_address')?.value || 'Western Leyte College';
-    var chosenCoords = coords || document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
+    var chosenAddress = String(address || document.getElementById('delivery_address')?.value || '').trim();
+    var chosenCoords = coords || document.getElementById('delivery_lat_lng')?.value || '';
 
     var fd = new FormData();
     fd.append('action', 'create_order');
@@ -1163,8 +1168,8 @@ function startApplePayScan() {
         } catch(e) {}
 
         setTimeout(function() {
-            var latLng = document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
-            var address = document.getElementById('delivery_address')?.value || 'Western Leyte College';
+            var latLng = document.getElementById('delivery_lat_lng')?.value || '';
+            var address = (document.getElementById('delivery_address')?.value || '').trim();
             finalizeOrder('apple_pay', address, latLng);
         }, 700);
     }, 1200);

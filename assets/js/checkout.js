@@ -142,8 +142,8 @@ function openPaymentPopup(event) {
     }
 
     // Do not run regex validation on the coordinate string
-    var latLng = document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
-    var address = document.getElementById('delivery_address')?.value || 'Western Leyte College';
+    var latLng = document.getElementById('delivery_lat_lng')?.value || '';
+    var address = document.getElementById('delivery_address')?.value || '';
 
     var appleModalDest = document.getElementById('appleModalDest');
     if (appleModalDest) appleModalDest.textContent = address;
@@ -182,8 +182,8 @@ var triggerCheckout = openPaymentPopup;
 
 function finalizeOrder(method, address, coords) {
     var chosenMethod = method || activePaymentMethod || 'cod';
-    var chosenAddress = address || document.getElementById('delivery_address')?.value || 'Western Leyte College';
-    var chosenCoords = coords || document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
+    var chosenAddress = address || document.getElementById('delivery_address')?.value || '';
+    var chosenCoords = coords || document.getElementById('delivery_lat_lng')?.value || '';
 
     var fd = new FormData();
     fd.append('action', 'create_order');
@@ -286,8 +286,8 @@ function startApplePayScan() {
         } catch(e) {}
 
         setTimeout(function() {
-            var latLng = document.getElementById('delivery_lat_lng')?.value || '11.01039, 124.61788';
-            var address = document.getElementById('delivery_address')?.value || 'Western Leyte College';
+            var latLng = document.getElementById('delivery_lat_lng')?.value || '';
+            var address = document.getElementById('delivery_address')?.value || '';
             finalizeOrder('apple_pay', address, latLng);
         }, 700);
     }, 1200);

@@ -283,18 +283,43 @@ $new_order_id = (int)$conn->lastInsertId();
                     ]);
                 }
 
-                // Insert into order_items compatibility table
-                $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, quantity, unit_price, line_total) VALUES (:oid, :name, :qty, :price, :line)");
+                // Insert into order_items compatibility table with explicit unit 'price' for Supabase
                 foreach ($clean_items as $ci) {
                     $unit_price = isset($ci['price']) && is_numeric($ci['price']) ? (float)$ci['price'] : 0.00;
                     $line_total = isset($ci['line']) && is_numeric($ci['line']) ? (float)$ci['line'] : round($unit_price * (int)$ci['qty'], 2);
-                    $co_stmt->execute([
-                        ':oid'   => $new_order_id,
-                        ':name'  => $ci['name'],
-                        ':qty'   => $ci['qty'],
-                        ':price' => $unit_price,
-                        ':line'  => $line_total
-                    ]);
+                    try {
+                        $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, store_name, price, unit_price, quantity, line_total) VALUES (:oid, :name, :store, :price, :price, :qty, :line)");
+                        $co_stmt->execute([
+                            ':oid'   => $new_order_id,
+                            ':name'  => $ci['name'],
+                            ':store' => $ci['store'],
+                            ':price' => $unit_price,
+                            ':qty'   => $ci['qty'],
+                            ':line'  => $line_total
+                        ]);
+                    } catch (Throwable $e1) {
+                        try {
+                            $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, price, quantity, line_total) VALUES (:oid, :name, :price, :qty, :line)");
+                            $co_stmt->execute([
+                                ':oid'   => $new_order_id,
+                                ':name'  => $ci['name'],
+                                ':price' => $unit_price,
+                                ':qty'   => $ci['qty'],
+                                ':line'  => $line_total
+                            ]);
+                        } catch (Throwable $e2) {
+                            try {
+                                $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, quantity, unit_price, line_total) VALUES (:oid, :name, :qty, :price, :line)");
+                                $co_stmt->execute([
+                                    ':oid'   => $new_order_id,
+                                    ':name'  => $ci['name'],
+                                    ':qty'   => $ci['qty'],
+                                    ':price' => $unit_price,
+                                    ':line'  => $line_total
+                                ]);
+                            } catch (Throwable $e3) {}
+                        }
+                    }
                 }
 
                 // Sync into orders compatibility table
@@ -2302,6 +2327,91 @@ button{cursor:pointer}
   background: #f9fafb;
 }
 </style>
+<style>
+.sim-modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(8px);
+  z-index: 999999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sim-sheet {
+  width: 100%;
+  max-width: 480px;
+  border-radius: 26px 26px 0 0;
+  box-shadow: 0 -10px 40px rgba(0,0,0,0.35);
+  animation: slideUpSheet 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+@keyframes slideUpSheet {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.sheet-grabber {
+  width: 40px; height: 5px;
+  background: #d1d5db;
+  border-radius: 10px;
+  margin: 10px auto 4px auto;
+}
+.face-id-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 18px 0;
+}
+.face-id-box {
+  width: 90px; height: 90px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 22px;
+  background: #2c2c2e;
+}
+.face-id-corner {
+  position: absolute;
+  width: 16px; height: 16px;
+  border-color: #007aff;
+  border-style: solid;
+}
+.face-id-corner.top-left { top: 6px; left: 6px; border-width: 3px 0 0 3px; border-top-left-radius: 8px; }
+.face-id-corner.top-right { top: 6px; right: 6px; border-width: 3px 3px 0 0; border-top-right-radius: 8px; }
+.face-id-corner.bottom-left { bottom: 6px; left: 6px; border-width: 0 0 3px 3px; border-bottom-left-radius: 8px; }
+.face-id-corner.bottom-right { bottom: 6px; right: 6px; border-width: 0 3px 3px 0; border-bottom-right-radius: 8px; }
+.face-id-box.success .face-id-corner { border-color: #30d158; }
+.face-id-scan-line {
+  position: absolute;
+  top: 10px; left: 10px; right: 10px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #007aff, transparent);
+  box-shadow: 0 0 10px #007aff;
+  animation: scanRadar 1.2s infinite alternate ease-in-out;
+}
+@keyframes scanRadar {
+  0% { transform: translateY(0px); opacity: 0.3; }
+  100% { transform: translateY(68px); opacity: 1; }
+}
+.btn-qty-minus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+  font-size: 11px;
+  cursor: pointer;
+  line-height: 1;
+}
+.btn-qty-minus:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+</style>
 </head>
 <body>
 <div class="app">
@@ -2435,7 +2545,7 @@ button{cursor:pointer}
   <div class="section-title"><button class="icon-btn" onclick="showScreen('store')"><i class="fa-solid fa-arrow-left"></i></button><h3>Item Details</h3><i class="fa-regular fa-heart"></i></div>
   <div class="item-detail">
     <div class="item-art" id="itemArt">🍔</div>
-    <div class="item-info"><h2 id="itemName">Big Mac</h2><p id="itemDesc">Two beef patties, special sauce, lettuce and cheese.</p><div class="item-price" id="itemPrice">₱179.00</div><div class="qty"><button onclick="changeQty(-1)">âˆ’</button><span id="itemQty">1</span><button onclick="changeQty(1)">+</button></div><button class="primary" style="margin-top:13px" onclick="addCurrentItem()">Add to Cart</button></div>
+    <div class="item-info"><h2 id="itemName">Big Mac</h2><p id="itemDesc">Two beef patties, special sauce, lettuce and cheese.</p><div class="item-price" id="itemPrice">₱179.00</div><div class="qty"><button type="button" class="btn-qty-minus" onclick="changeQty(-1)" aria-label="Decrease quantity"><i class="fa-solid fa-minus"></i></button><span id="itemQty">1</span><button onclick="changeQty(1)">+</button></div><button class="primary" style="margin-top:13px" onclick="addCurrentItem()">Add to Cart</button></div>
   </div>
 </section>
 
@@ -3729,7 +3839,7 @@ function renderCart(){
         <div class="cart-bottom">
           <span style="font-size:10px;font-weight:700;color:var(--olive-dark)">${money(item.price * item.qty)}</span>
           <div class="qty">
-            <button onclick="updateCartQty(${index}, -1)">âˆ’</button>
+            <button type="button" class="btn-qty-minus" onclick="updateCartQty(${index}, -1)" aria-label="Decrease quantity"><i class="fa-solid fa-minus"></i></button>
             <span>${item.qty}</span>
             <button onclick="updateCartQty(${index}, 1)">+</button>
           </div>
@@ -4138,6 +4248,8 @@ function initCheckoutMap() {
 
 // "Use My Exact Location" Button Action
 function useMyExactLocation() {
+    if (window._isLocatingGps) return;
+    window._isLocatingGps = true;
     const btn = document.getElementById('modalBtnLocateMe') || document.getElementById('btnDetectGps');
     const statusEl = document.getElementById('modalGpsStatus') || document.getElementById('gpsLocationStatus');
 
@@ -4162,8 +4274,9 @@ function useMyExactLocation() {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Use My Exact Location';
             }
-            const lat = position.coords.lat;
-            const lng = position.coords.lng;
+            window._isLocatingGps = false;
+            const lat = position.coords.latitude || position.coords.lat;
+            const lng = position.coords.longitude || position.coords.lng;
 
             // Move the map view and draggable marker to their device's live coordinates
             if (checkoutMap) {
@@ -4186,6 +4299,7 @@ function useMyExactLocation() {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Use My Exact Location';
             }
+            window._isLocatingGps = false;
             let errMsg = 'Location permission denied or unavailable.';
             if (error.code === error.PERMISSION_DENIED) {
                 errMsg = 'Location permission denied. Please drag the pin on the map.';
@@ -4266,7 +4380,7 @@ async function confirmModalAddressAndCheckout() {
     }
 
     closeAddressPromptModal();
-    checkout();
+    openCustomerPaymentConfirmationModal();
 }
 
 function setCustomerPaymentMethod(method, elem) {
@@ -4312,7 +4426,8 @@ function syncCustomerPaymentMethod(method) {
     });
 }
 
-async function checkout() {
+async function executeOrderSubmission() {
+    async function checkoutInternal() {
     if (!cart.length) {
         toast('Cart is empty');
         return;
@@ -5077,7 +5192,7 @@ loadNotifications();
 setInterval(loadNotifications, 6000);
 
 // Auto-request live location if allowed by browser
-requestLiveGpsIfAllowed();
+// Geolocation only runs on-demand when user clicks 'Locate Me' or 'Pin on Map'
 
 // Wire up typing and blur/change geocoding events for delivery address inputs (no duplicate attachments)
 if (document.readyState === 'loading') {
@@ -6556,7 +6671,324 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch(e) {}
 });
 </script>
+<!-- ============================================== -->
+<!-- UNIFIED PAYMENT CONFIRMATION MODALS (5 METHODS) -->
+<!-- ============================================== -->
+
+<!-- 1. APPLE PAY NATIVE IOS BIOMETRIC MODAL -->
+<div class="sim-modal" id="customerApplePayModal" style="display:none;" onclick="if(event.target===this)closeCustomerPaymentModal('customerApplePayModal')">
+  <div class="sim-sheet" style="background:#1c1c1e; color:#ffffff;">
+    <div class="sheet-grabber" style="background:#3a3a3c;"></div>
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:4px 22px 14px 22px; border-bottom:1px solid #2c2c2e;">
+      <div style="display:flex; align-items:center; gap:6px; font-size:20px; font-weight:700;">
+        <span style="font-size:22px;"></span><span>Pay</span>
+      </div>
+      <button type="button" onclick="closeCustomerPaymentModal('customerApplePayModal')" style="background:transparent; border:none; color:#0a84ff; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
+    </div>
+
+    <div style="padding:18px 22px 28px 22px;">
+      <div style="background:#2c2c2e; border-radius:18px; padding:16px; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; font-size:13px; color:#8e8e93; margin-bottom:6px;">
+          <span>Merchant</span><b style="color:#ffffff;">Food Dash</b>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:13px; color:#8e8e93; margin-bottom:6px;">
+          <span>Card</span><b style="color:#ffffff;">Apple Card (•••• 8821)</b>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:13px; color:#8e8e93; margin-bottom:10px;">
+          <span>Deliver To</span><b style="color:#ffffff;" id="custAppleModalDest">Your Address</b>
+        </div>
+        <div style="height:1px; background:#3a3a3c; margin:8px 0;"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:15px; font-weight:700;">Total</span>
+          <span style="font-size:22px; font-weight:800; color:#30d158;" id="custAppleModalTotal">₱0.00</span>
+        </div>
+      </div>
+
+      <!-- Face ID Radar Viewfinder Animation Container -->
+      <div class="face-id-wrapper">
+        <div class="face-id-box" id="custAppleFaceIdBox">
+          <div class="face-id-corner top-left"></div>
+          <div class="face-id-corner top-right"></div>
+          <div class="face-id-corner bottom-left"></div>
+          <div class="face-id-corner bottom-right"></div>
+          <svg id="custAppleFaceIdSvg" viewBox="0 0 48 48" width="46" height="46">
+            <circle cx="16" cy="18" r="2.2" fill="#007aff"/>
+            <circle cx="32" cy="18" r="2.2" fill="#007aff"/>
+            <path d="M 24,18 L 24,26 L 20.5,26" fill="none" stroke="#007aff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M 15,31 C 18,36 30,36 33,31" fill="none" stroke="#007aff" stroke-width="2.4" stroke-linecap="round"/>
+          </svg>
+          <div id="custAppleFaceIdCheck" style="display:none;">
+            <i class="fa-solid fa-circle-check check-pop" style="font-size: 48px; color: #30d158;"></i>
+          </div>
+          <div class="face-id-scan-line" id="custAppleFaceIdScanLine" style="display:none;"></div>
+        </div>
+        <div id="custFaceIdStatus" style="font-size:14px; font-weight:700; color:#8e8e93; margin-top:12px;">
+          Scanning Face...
+        </div>
+      </div>
+
+      <button type="button" class="btn-submit-order checkout-btn" id="btnCustApplePayTrigger" onclick="startCustomerApplePayScan()" style="background:#333336; color:#8e8e93; margin-top:16px;" disabled>
+        <span style="font-size:18px;"></span> Scanning Face...
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 2. DIGITAL WALLET QUICKPAY MODAL (GCash / Maya / GoTyme) -->
+<div class="sim-modal" id="customerWalletModal" style="display:none;" onclick="if(event.target===this)closeCustomerPaymentModal('customerWalletModal')">
+  <div class="sim-sheet" style="background:#ffffff;">
+    <div id="custWalletHeader" style="background:#007DFE; color:#ffffff; padding:16px 20px 18px 20px;">
+      <div class="sheet-grabber"></div>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <img id="custWalletLogo" src="assets/logos/gcash.svg" alt="Wallet" style="height:26px; border-radius:6px; background:#fff; padding:2px;">
+          <div>
+            <div id="custWalletTitle" style="font-size:16px; font-weight:800; line-height:1.2;">GCash QuickPay</div>
+            <small id="custWalletSub" style="font-size:11px; opacity:0.85;">Official Digital Payment</small>
+          </div>
+        </div>
+        <button type="button" onclick="closeCustomerPaymentModal('customerWalletModal')" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:20px; cursor:pointer;">Cancel</button>
+      </div>
+    </div>
+    <div style="padding:22px; background:#ffffff;">
+      <div style="text-align:center; margin-bottom:16px;">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Payment Authorization</div>
+        <h2 style="font-size:22px; font-weight:800; color:#111827;">Total: <span id="custWalletTotal" style="color:#007DFE;">₱0.00</span></h2>
+      </div>
+      <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:16px; padding:12px 16px; margin-bottom:14px;">
+        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+          <i class="fa-solid fa-location-dot" style="color:#ef4444;"></i> Delivery Destination:
+        </div>
+        <div style="font-size:14px; font-weight:700; color:#1e293b;" id="custWalletDest">Your Address</div>
+      </div>
+      <div style="background:#fdfbf7; border:1px solid #e8decb; border-radius:16px; padding:16px; margin-bottom:18px; text-align:center;">
+        <label id="custWalletPinLabel" style="display:block; font-size:12px; font-weight:700; color:#374151; margin-bottom:8px;">
+          <i class="fa-solid fa-lock" style="color:#007DFE;"></i> Enter 4-Digit MPIN / Security OTP:
+        </label>
+        <div style="display:flex; justify-content:center; margin-bottom:6px;">
+          <input type="password" id="custWalletPinInput" maxlength="6" value="1234" autocomplete="off" style="width:170px; height:46px; text-align:center; font-size:24px; letter-spacing:10px; border-radius:12px; border:2px solid #007DFE; font-family:monospace; font-weight:800; outline:none; background:#ffffff; color:#1e293b;">
+        </div>
+        <small style="color:#6b7280; font-size:11px;"><i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Security Verified • Instant Processing</small>
+      </div>
+      <button type="button" class="btn-submit-order checkout-btn" id="custWalletSubmitBtn" onclick="executeFinalOrderFromModal()" style="background:#007DFE; color:#ffffff; margin-top:0;">
+        <i class="fa-solid fa-shield-halved"></i> Confirm & Pay • <span id="custWalletBtnTotal">₱0.00</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 3. CASH ON DELIVERY (COD) ORDER SUMMARY MODAL -->
+<div class="sim-modal" id="customerCodModal" style="display:none;" onclick="if(event.target===this)closeCustomerPaymentModal('customerCodModal')">
+  <div class="sim-sheet" style="background:#ffffff;">
+    <div style="background:#283d23; color:#ffffff; padding:16px 20px 18px 20px;">
+      <div class="sheet-grabber"></div>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <img src="assets/logos/cod.svg" alt="COD" style="height:26px; border-radius:6px; background:#fff; padding:2px;">
+          <div>
+            <div style="font-size:16px; font-weight:800; line-height:1.2;">Cash on Delivery</div>
+            <small style="font-size:11px; opacity:0.85;">Pay upon arrival</small>
+          </div>
+        </div>
+        <button type="button" onclick="closeCustomerPaymentModal('customerCodModal')" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:20px; cursor:pointer;">Cancel</button>
+      </div>
+    </div>
+    <div style="padding:22px; background:#ffffff;">
+      <div style="text-align:center; margin-bottom:16px;">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Order Summary</div>
+        <h2 style="font-size:22px; font-weight:800; color:#111827;">Total Amount: <span id="custCodTotal" style="color:#283d23;">₱0.00</span></h2>
+      </div>
+      <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:16px; padding:12px 16px; margin-bottom:14px;">
+        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+          <i class="fa-solid fa-location-dot" style="color:#ef4444;"></i> Delivery Destination:
+        </div>
+        <div style="font-size:14px; font-weight:700; color:#1e293b;" id="custCodDest">Your Address</div>
+      </div>
+      <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:14px; padding:14px; margin-bottom:18px; font-size:12px; color:#166534; display:flex; align-items:center; gap:10px;">
+        <i class="fa-solid fa-money-bill-wave" style="font-size:20px; color:#15803d;"></i>
+        <span>Please prepare exact cash of <b id="custCodCashAmt">₱0.00</b> upon arrival for swift handover.</span>
+      </div>
+      <button type="button" class="btn-submit-order checkout-btn" id="custCodSubmitBtn" onclick="executeFinalOrderFromModal()" style="background:#283d23; color:#ffffff; margin-top:0;">
+        <i class="fa-solid fa-check"></i> Confirm Order • <span id="custCodBtnTotal">₱0.00</span>
+      </button>
+    </div>
+  </div>
+</div>
 <?php require_once 'gmail_simulator_modal.php'; ?>
+<script>
+function closeCustomerPaymentModal(modalId) {
+    const el = document.getElementById(modalId);
+    if (el) el.style.display = 'none';
+}
+
+function openCustomerPaymentConfirmationModal() {
+    if (!cart || !cart.length) {
+        toast('Your cart is empty. Add items to checkout.');
+        return;
+    }
+    const addrInput = document.getElementById('deliveryAddressInput');
+    const address = (addrInput ? addrInput.value : '').trim();
+    if (!address) {
+        openAddressPromptModal();
+        return;
+    }
+
+    const payInput = document.getElementById('selectedPaymentMethod');
+    const chosenRaw = payInput ? payInput.value : 'Cash on Delivery (COD)';
+    const m = chosenRaw.toLowerCase();
+
+    // Calculate dynamic totals
+    const subtotal = cart.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 1)), 0);
+    const deliveryFee = 30;
+    const grandTotal = subtotal + deliveryFee;
+    const totalFormatted = '₱' + grandTotal.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+    if (m.includes('apple')) {
+        const dest = document.getElementById('custAppleModalDest');
+        if (dest) dest.textContent = address;
+        const tot = document.getElementById('custAppleModalTotal');
+        if (tot) tot.textContent = totalFormatted;
+        const modal = document.getElementById('customerApplePayModal');
+        if (modal) {
+            modal.style.display = 'flex';
+            startCustomerApplePayScan();
+        }
+    } else if (m.includes('gcash') || m.includes('maya') || m.includes('tyme')) {
+        updateCustomerWalletTheme(m, totalFormatted, address);
+        const modal = document.getElementById('customerWalletModal');
+        if (modal) modal.style.display = 'flex';
+    } else {
+        // Cash on Delivery (COD)
+        const dest = document.getElementById('custCodDest');
+        if (dest) dest.textContent = address;
+        const tot = document.getElementById('custCodTotal');
+        if (tot) tot.textContent = totalFormatted;
+        const cashAmt = document.getElementById('custCodCashAmt');
+        if (cashAmt) cashAmt.textContent = totalFormatted;
+        const btnTot = document.getElementById('custCodBtnTotal');
+        if (btnTot) btnTot.textContent = totalFormatted;
+        const modal = document.getElementById('customerCodModal');
+        if (modal) modal.style.display = 'flex';
+    }
+}
+
+function updateCustomerWalletTheme(method, totalFormatted, address) {
+    const header = document.getElementById('custWalletHeader');
+    const title = document.getElementById('custWalletTitle');
+    const sub = document.getElementById('custWalletSub');
+    const logo = document.getElementById('custWalletLogo');
+    const tot = document.getElementById('custWalletTotal');
+    const dest = document.getElementById('custWalletDest');
+    const btnTot = document.getElementById('custWalletBtnTotal');
+    const label = document.getElementById('custWalletPinLabel');
+    const pinIn = document.getElementById('custWalletPinInput');
+    const submitBtn = document.getElementById('custWalletSubmitBtn');
+
+    if (dest) dest.textContent = address;
+    if (tot) tot.textContent = totalFormatted;
+    if (btnTot) btnTot.textContent = totalFormatted;
+
+    if (method.includes('gcash')) {
+        if (header) header.style.background = '#007DFE';
+        if (title) title.textContent = 'GCash QuickPay';
+        if (sub) sub.textContent = 'Official Digital Payment';
+        if (logo) logo.src = 'assets/logos/gcash.svg';
+        if (label) label.innerHTML = '<i class="fa-solid fa-lock" style="color:#007DFE;"></i> Enter 4-Digit MPIN / Security OTP:';
+        if (pinIn) { pinIn.style.borderColor = '#007DFE'; pinIn.maxLength = 4; pinIn.value = '1234'; }
+        if (submitBtn) {
+            submitBtn.style.setProperty('background-color', '#007DFE', 'important');
+            submitBtn.style.setProperty('color', '#ffffff', 'important');
+        }
+    } else if (method.includes('maya')) {
+        if (header) header.style.background = '#023a2b';
+        if (title) title.textContent = 'Maya Checkout';
+        if (sub) sub.textContent = 'Maya Wallet & Digital Card';
+        if (logo) logo.src = 'assets/logos/maya.svg';
+        if (label) label.innerHTML = '<i class="fa-solid fa-lock" style="color:#05B851;"></i> Enter Maya OTP / Security Code:';
+        if (pinIn) { pinIn.style.borderColor = '#05B851'; pinIn.maxLength = 6; pinIn.value = '654321'; }
+        if (submitBtn) {
+            submitBtn.style.setProperty('background-color', '#023a2b', 'important');
+            submitBtn.style.setProperty('color', '#05B851', 'important');
+        }
+    } else if (method.includes('tyme')) {
+        if (header) header.style.background = '#0a2540';
+        if (title) title.textContent = 'GoTyme Bank Transfer';
+        if (sub) sub.textContent = 'Everyday Account (•••• 4920)';
+        if (logo) logo.src = 'assets/logos/gotyme.svg';
+        if (label) label.innerHTML = '<i class="fa-solid fa-building-columns" style="color:#00d2ff;"></i> Enter GoTyme Authorization PIN:';
+        if (pinIn) { pinIn.style.borderColor = '#00d2ff'; pinIn.maxLength = 6; pinIn.value = '882190'; }
+        if (submitBtn) {
+            submitBtn.style.setProperty('background-color', '#0a2540', 'important');
+            submitBtn.style.setProperty('color', '#00d2ff', 'important');
+        }
+    }
+}
+
+function startCustomerApplePayScan() {
+    const scanLine = document.getElementById('custAppleFaceIdScanLine');
+    const svg = document.getElementById('custAppleFaceIdSvg');
+    const check = document.getElementById('custAppleFaceIdCheck');
+    const box = document.getElementById('custAppleFaceIdBox');
+    const status = document.getElementById('custFaceIdStatus');
+    const btn = document.getElementById('btnCustApplePayTrigger');
+
+    if (btn) {
+        btn.disabled = true;
+        btn.style.background = '#333336';
+        btn.style.color = '#8e8e93';
+        btn.innerHTML = '<span style="font-size:18px;"></span> Scanning Face...';
+    }
+    if (scanLine) scanLine.style.display = 'block';
+    if (svg) svg.style.display = 'block';
+    if (check) check.style.display = 'none';
+    if (box) {
+        box.classList.remove('success');
+        box.classList.add('scanning');
+    }
+    if (status) {
+        status.innerHTML = '<span style="color:#007aff; font-size:14px; font-weight:700;"><i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Scanning Face...</span>';
+    }
+
+    setTimeout(function() {
+        if (scanLine) scanLine.style.display = 'none';
+        if (svg) svg.style.display = 'none';
+        if (check) check.style.display = 'block';
+        if (box) {
+            box.classList.remove('scanning');
+            box.classList.add('success');
+        }
+        if (status) {
+            status.innerHTML = '<span style="color:#30d158; font-size:16px; font-weight:800; display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-check"></i> Verified</span>';
+        }
+        if (btn) {
+            btn.style.background = '#30d158';
+            btn.style.color = '#ffffff';
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Authorized';
+        }
+        try {
+            if (navigator.vibrate) navigator.vibrate([35, 45, 35]);
+        } catch(e) {}
+
+        setTimeout(function() {
+            closeCustomerPaymentModal('customerApplePayModal');
+            executeFinalOrderFromModal();
+        }, 800);
+    }, 1300);
+}
+
+function executeFinalOrderFromModal() {
+    closeCustomerPaymentModal('customerWalletModal');
+    closeCustomerPaymentModal('customerCodModal');
+    closeCustomerPaymentModal('customerApplePayModal');
+    executeOrderSubmission();
+}
+
+function handlePayAction(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    openCustomerPaymentConfirmationModal();
+    return false;
+}
+</script>
 </body>
 </html>
 
