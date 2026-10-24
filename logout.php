@@ -30,7 +30,7 @@ if (ini_get("session.use_cookies")) {
 }
 session_destroy();
 echo '<!doctype html><html><head><meta charset="utf-8"></head><body><script>' .
-    'try { localStorage.removeItem("foodDashCart"); } catch (error) {} ' .
+    'try { localStorage.removeItem("foodDashCart"); localStorage.removeItem("foodDashDeliveryAddress"); localStorage.removeItem("foodDashDeliveryCoords"); } catch (error) {} ' .
     'window.location.replace("index.php?msg=logged_out");' .
     '</script></body></html>';
 exit();

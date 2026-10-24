@@ -51,8 +51,10 @@ if ($user_id) {
 }
 
 // Address and coords start completely empty for fresh user accounts
-if (empty($default_address)) {
+if (empty($default_address) || stripos($default_address, 'western leyte') !== false) {
     $default_address = '';
+    $default_lat = null;
+    $default_lng = null;
 }
 
 // 2. Dynamic Financial Calculations: Compute subtotal, delivery fee, and grand total dynamically from the actual active cart
@@ -381,12 +383,27 @@ $grand_total = $subtotal + $delivery_fee;
     .sim-sheet {
       width: 100%;
       max-width: 480px;
+      max-height: 92vh;
       border-radius: 28px 28px 0 0;
       box-shadow: 0 -12px 40px rgba(0,0,0,0.5);
       animation: sheetSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       box-sizing: border-box;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
       background: #ffffff;
+    }
+    .sim-sheet-header {
+      flex-shrink: 0;
+    }
+    .sim-sheet-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 20px 22px max(28px, env(safe-area-inset-bottom, 28px)) 22px !important;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
     }
     @keyframes sheetSlideUp {
       from { transform: translateY(100%); }
@@ -651,15 +668,17 @@ $grand_total = $subtotal + $delivery_fee;
 <!-- ============================================== -->
 <div class="sim-modal" id="applePayModal" style="display:none;" onclick="if(event.target===this)closeModal('applePayModal')">
   <div class="sim-sheet" style="background:#1c1c1e; color:#ffffff;">
-    <div class="sheet-grabber" style="background:#3a3a3c;"></div>
-    <div style="display:flex; align-items:center; justify-content:space-between; padding:4px 22px 14px 22px; border-bottom:1px solid #2c2c2e;">
-      <div style="display:flex; align-items:center; gap:6px; font-size:20px; font-weight:700;">
-        <span style="font-size:22px;"></span><span>Pay</span>
+    <div class="sim-sheet-header" style="padding:10px 22px 14px 22px; border-bottom:1px solid #2c2c2e;">
+      <div class="sheet-grabber" style="background:#3a3a3c; margin:0 auto 10px auto;"></div>
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:6px; font-size:20px; font-weight:700;">
+          <span style="font-size:22px;"></span><span>Pay</span>
+        </div>
+        <button type="button" onclick="closeModal('applePayModal')" style="background:transparent; border:none; color:#0a84ff; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
       </div>
-      <button type="button" onclick="closeModal('applePayModal')" style="background:transparent; border:none; color:#0a84ff; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
 
-    <div style="padding:18px 22px 28px 22px;">
+    <div class="sim-sheet-body" style="background:#1c1c1e;">
       <div style="background:#2c2c2e; border-radius:18px; padding:16px; margin-bottom:16px;">
         <div style="display:flex; justify-content:space-between; font-size:13px; color:#8e8e93; margin-bottom:6px;">
           <span>Merchant</span><b style="color:#ffffff;">Food Dash</b>
@@ -713,7 +732,7 @@ $grand_total = $subtotal + $delivery_fee;
 <!-- ============================================== -->
 <div class="sim-modal" id="walletModal" style="display:none;" onclick="if(event.target===this)closeModal('walletModal')">
   <div class="sim-sheet" style="background:#ffffff;">
-    <div id="walletHeader" style="background:#007DFE; color:#ffffff; padding:16px 20px 18px 20px;">
+    <div id="walletHeader" class="sim-sheet-header" style="background:#007DFE; color:#ffffff; padding:16px 20px 18px 20px;">
       <div class="sheet-grabber"></div>
       <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
         <div style="display:flex; align-items:center; gap:10px;">
@@ -726,7 +745,7 @@ $grand_total = $subtotal + $delivery_fee;
         <button type="button" onclick="closeModal('walletModal')" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:20px; cursor:pointer;">Cancel</button>
       </div>
     </div>
-    <div style="padding:22px; background:#ffffff;">
+    <div class="sim-sheet-body" style="background:#ffffff;">
       <div style="text-align:center; margin-bottom:16px;">
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Payment Authorization</div>
         <h2 style="font-size:22px; font-weight:800; color:#111827;">Total: <span id="walletTotal" style="color:#007DFE;">₱<?= number_format($grand_total, 2) ?></span></h2>
@@ -761,7 +780,7 @@ $grand_total = $subtotal + $delivery_fee;
 <!-- ============================================== -->
 <div class="sim-modal" id="modal-cod" style="display:none;" onclick="if(event.target===this)closeModal('modal-cod')">
   <div class="sim-sheet" style="background:#ffffff;">
-    <div style="background:#283d23; color:#ffffff; padding:16px 20px 18px 20px;">
+    <div class="sim-sheet-header" style="background:#283d23; color:#ffffff; padding:16px 20px 18px 20px;">
       <div class="sheet-grabber"></div>
       <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
         <div style="display:flex; align-items:center; gap:10px;">
@@ -774,7 +793,7 @@ $grand_total = $subtotal + $delivery_fee;
         <button type="button" onclick="closeModal('modal-cod')" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:20px; cursor:pointer;">Cancel</button>
       </div>
     </div>
-    <div style="padding:22px; background:#ffffff;">
+    <div class="sim-sheet-body" style="background:#ffffff;">
       <div style="text-align:center; margin-bottom:16px;">
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Order Summary</div>
         <h2 style="font-size:22px; font-weight:800; color:#111827;">Total Amount: <span id="codTotal" style="color:#283d23;">₱<?= number_format($grand_total, 2) ?></span></h2>
@@ -866,7 +885,7 @@ function syncCartFromLocalStorage() {
         }
         
         var savedAddr = localStorage.getItem('foodDashDeliveryAddress');
-        if (savedAddr) {
+        if (savedAddr && savedAddr.trim() !== '' && !savedAddr.toLowerCase().includes('western leyte')) {
             var addrEl = document.getElementById('delivery_address');
             if (addrEl && !addrEl.value) {
                 addrEl.value = savedAddr;
@@ -875,6 +894,9 @@ function syncCartFromLocalStorage() {
             if (addrSec && !addrSec.value) {
                 addrSec.value = savedAddr;
             }
+        } else if (savedAddr && savedAddr.toLowerCase().includes('western leyte')) {
+            localStorage.removeItem('foodDashDeliveryAddress');
+            localStorage.removeItem('foodDashDeliveryCoords');
         }
     } catch(e) {
         console.error('Cart sync error:', e);

@@ -12,7 +12,7 @@ require_once __DIR__ . '/notification_lib.php';
 function redirect_after_auth_cart_reset(string $destination): void {
     $safe_destination = json_encode($destination, JSON_UNESCAPED_SLASHES);
     echo '<!doctype html><html><head><meta charset="utf-8"></head><body><script>' .
-        'try { localStorage.removeItem("foodDashCart"); } catch (error) {} ' .
+        'try { localStorage.removeItem("foodDashCart"); localStorage.removeItem("foodDashDeliveryAddress"); localStorage.removeItem("foodDashDeliveryCoords"); } catch (error) {} ' .
         'window.location.replace(' . $safe_destination . ');' .
         '</script></body></html>';
     exit;

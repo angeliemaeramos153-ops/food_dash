@@ -219,68 +219,58 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
                 ':line' => $line_total,
                 ':icon' => $item['icon']
             ]);
-
-            // Explicitly pass unit 'price' for Supabase order_items table constraint
-            try {
-                $compat_item_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, store_name, price, unit_price, quantity, line_total) VALUES (:oid, :name, :store, :price, :price, :qty, :line)");
-                $compat_item_stmt->execute([
-                    ':oid'   => $order_id,
-                    ':name'  => $item['name'],
-                    ':store' => $store_name,
-                    ':price' => $unit_price,
-                    ':qty'   => $item['quantity'],
-                    ':line'  => $line_total
-                ]);
-            } catch (Throwable $e1) {
-                try {
-                    $compat_item_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, price, quantity, line_total) VALUES (:oid, :name, :price, :qty, :line)");
-                    $compat_item_stmt->execute([
-                        ':oid'   => $order_id,
-                        ':name'  => $item['name'],
-                        ':price' => $unit_price,
-                        ':qty'   => $item['quantity'],
-                        ':line'  => $line_total
-                    ]);
-                } catch (Throwable $e2) {
-                    try {
-                        $compat_item_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, quantity, unit_price, line_total) VALUES (:oid, :name, :qty, :price, :line)");
-                        $compat_item_stmt->execute([
-                            ':oid'   => $order_id,
-                            ':name'  => $item['name'],
-                            ':qty'   => $item['quantity'],
-                            ':price' => $unit_price,
-                            ':line'  => $line_total
-                        ]);
-                    } catch (Throwable $e3) {}
-                }
-            }
         }
 
-        // Mirror into orders table
+        // 1. Sync into orders compatibility table FIRST so foreign keys in order_items are satisfied!
         try {
             $is_pgsql = ($conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql');
             if ($is_pgsql) {
                 $orders_sql = "INSERT INTO orders " .
-                    "(order_id, user_id, status, total_price, payment_method, shop_id, created_at) " .
-                    "VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, NOW()) " .
-                    "ON CONFLICT (order_id) DO UPDATE SET " .
-                    "payment_method = EXCLUDED.payment_method, total_price = EXCLUDED.total_price";
+                    "(id, order_id, order_number, user_id, status, total_amount, payment_method, delivery_address, created_at) " .
+                    "VALUES (:id, :oid, :onum, :uid, 'pending', :total, :pm, :addr, NOW()) " .
+                    "ON CONFLICT (id) DO UPDATE SET total_amount = EXCLUDED.total_amount, order_number = EXCLUDED.order_number, payment_method = EXCLUDED.payment_method";
+                $orders_stmt = $conn->prepare($orders_sql);
+                $orders_stmt->execute([
+                    ':id'    => $order_id,
+                    ':oid'   => $order_id,
+                    ':onum'  => $order_ref,
+                    ':uid'   => $user_id,
+                    ':total' => $total,
+                    ':pm'    => $payment_method,
+                    ':addr'  => $delivery_address
+                ]);
             } else {
                 $orders_sql = "INSERT INTO orders " .
                     "(order_id, user_id, status, total_price, payment_method, shop_id, created_at) " .
                     "VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, NOW()) " .
                     "ON DUPLICATE KEY UPDATE " .
                     "payment_method = VALUES(payment_method), total_price = VALUES(total_price)";
+                $orders_stmt = $conn->prepare($orders_sql);
+                $orders_stmt->execute([
+                    ':oid'     => $order_id,
+                    ':uid'     => $user_id,
+                    ':total'   => $total,
+                    ':pm'      => $payment_method,
+                    ':shop_id' => $shop_id
+                ]);
             }
+        } catch (Throwable $e) {}
 
-            $orders_stmt = $conn->prepare($orders_sql);
-            $orders_stmt->execute([
-                ':oid'     => $order_id,
-                ':uid'     => $user_id,
-                ':total'   => $total,
-                ':pm'      => $payment_method,
-                ':shop_id' => $shop_id
-            ]);
+        // 2. NOW insert into order_items compatibility table with explicit unit 'price' for Supabase
+        try {
+            $compat_item_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, price, unit_price, quantity, line_total, store_name) VALUES (:oid, :name, :price, :price, :qty, :line, :store)");
+            foreach ($clean_items as $item) {
+                $unit_price = isset($item['unit_price']) && is_numeric($item['unit_price']) ? (float)$item['unit_price'] : 0.00;
+                $line_total = isset($item['line_total']) && is_numeric($item['line_total']) ? (float)$item['line_total'] : round($unit_price * (int)$item['quantity'], 2);
+                $compat_item_stmt->execute([
+                    ':oid'   => $order_id,
+                    ':name'  => $item['name'],
+                    ':price' => $unit_price,
+                    ':qty'   => $item['quantity'],
+                    ':line'  => $line_total,
+                    ':store' => $store_name
+                ]);
+            }
         } catch (Throwable $e) {}
 
         // Mirror into payments table

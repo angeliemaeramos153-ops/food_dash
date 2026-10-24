@@ -283,48 +283,25 @@ $new_order_id = (int)$conn->lastInsertId();
                     ]);
                 }
 
-                // Insert into order_items compatibility table with explicit unit 'price' for Supabase
-                foreach ($clean_items as $ci) {
-                    $unit_price = isset($ci['price']) && is_numeric($ci['price']) ? (float)$ci['price'] : 0.00;
-                    $line_total = isset($ci['line']) && is_numeric($ci['line']) ? (float)$ci['line'] : round($unit_price * (int)$ci['qty'], 2);
-                    try {
-                        $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, store_name, price, unit_price, quantity, line_total) VALUES (:oid, :name, :store, :price, :price, :qty, :line)");
-                        $co_stmt->execute([
-                            ':oid'   => $new_order_id,
-                            ':name'  => $ci['name'],
-                            ':store' => $ci['store'],
-                            ':price' => $unit_price,
-                            ':qty'   => $ci['qty'],
-                            ':line'  => $line_total
-                        ]);
-                    } catch (Throwable $e1) {
-                        try {
-                            $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, price, quantity, line_total) VALUES (:oid, :name, :price, :qty, :line)");
-                            $co_stmt->execute([
-                                ':oid'   => $new_order_id,
-                                ':name'  => $ci['name'],
-                                ':price' => $unit_price,
-                                ':qty'   => $ci['qty'],
-                                ':line'  => $line_total
-                            ]);
-                        } catch (Throwable $e2) {
-                            try {
-                                $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, quantity, unit_price, line_total) VALUES (:oid, :name, :qty, :price, :line)");
-                                $co_stmt->execute([
-                                    ':oid'   => $new_order_id,
-                                    ':name'  => $ci['name'],
-                                    ':qty'   => $ci['qty'],
-                                    ':price' => $unit_price,
-                                    ':line'  => $line_total
-                                ]);
-                            } catch (Throwable $e3) {}
-                        }
-                    }
-                }
-
-                // Sync into orders compatibility table
-                try {
-                    $ins_ord = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, shop_id, payment_method, created_at) VALUES (:oid, :uid, 'Pending', :tot, :sid, :pm, NOW()) ON DUPLICATE KEY UPDATE status='Pending', total_price=:tot");
+                // 1. Sync into orders compatibility table FIRST so foreign keys in order_items are satisfied!
+                $is_pgsql = ($conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql');
+                if ($is_pgsql) {
+                    $ins_ord = $conn->prepare("INSERT INTO orders (id, order_id, order_number, user_id, status, total_amount, payment_method, delivery_address, created_at) " .
+                        "VALUES (:id, :oid, :onum, :uid, 'pending', :tot, :pm, :addr, NOW()) " .
+                        "ON CONFLICT (id) DO UPDATE SET total_amount = EXCLUDED.total_amount, order_number = EXCLUDED.order_number, payment_method = EXCLUDED.payment_method");
+                    $ins_ord->execute([
+                        ':id'   => $new_order_id,
+                        ':oid'  => $new_order_id,
+                        ':onum' => $unique_ref,
+                        ':uid'  => $user_id,
+                        ':tot'  => $total_amount,
+                        ':pm'   => $payment_method,
+                        ':addr' => $delivery_address
+                    ]);
+                } else {
+                    $ins_ord = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, shop_id, payment_method, created_at) " .
+                        "VALUES (:oid, :uid, 'Pending', :tot, :sid, :pm, NOW()) " .
+                        "ON DUPLICATE KEY UPDATE status='Pending', total_price=VALUES(total_price)");
                     $ins_ord->execute([
                         ':oid' => $new_order_id,
                         ':uid' => $user_id,
@@ -332,7 +309,22 @@ $new_order_id = (int)$conn->lastInsertId();
                         ':sid' => $shop_id,
                         ':pm'  => $payment_method
                     ]);
-                } catch (Throwable $e) {}
+                }
+
+                // 2. NOW insert into order_items compatibility table with explicit unit 'price' and valid order_id reference
+                $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, price, unit_price, quantity, line_total, store_name) VALUES (:oid, :name, :price, :price, :qty, :line, :store)");
+                foreach ($clean_items as $ci) {
+                    $unit_price = isset($ci['price']) && is_numeric($ci['price']) ? (float)$ci['price'] : 0.00;
+                    $line_total = isset($ci['line']) && is_numeric($ci['line']) ? (float)$ci['line'] : round($unit_price * (int)$ci['qty'], 2);
+                    $co_stmt->execute([
+                        ':oid'   => $new_order_id,
+                        ':name'  => $ci['name'],
+                        ':price' => $unit_price,
+                        ':qty'   => $ci['qty'],
+                        ':line'  => $line_total,
+                        ':store' => $ci['store']
+                    ]);
+                }
 
                 // Record audit log for PENDING
                 record_order_audit_log($conn, $new_order_id, null, 'PENDING', $user_id, 'customer', 'Order submitted by customer');
@@ -2370,14 +2362,54 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  box-sizing: border-box;
 }
 .sim-sheet {
   width: 100%;
   max-width: 480px;
+  max-height: 92vh;
   border-radius: 26px 26px 0 0;
   box-shadow: 0 -10px 40px rgba(0,0,0,0.35);
   animation: slideUpSheet 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+.sim-sheet-header {
+  flex-shrink: 0;
+}
+.sim-sheet-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 22px max(28px, env(safe-area-inset-bottom, 28px)) 22px !important;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+.btn-submit-order, .checkout-btn {
+  width: 100% !important;
+  min-height: 52px !important;
+  height: 52px !important;
+  border: none !important;
+  border-radius: 14px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18) !important;
+  margin-top: 14px !important;
+  margin-bottom: 6px !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+}
+.btn-submit-order:active, .checkout-btn:active {
+  transform: scale(0.98);
 }
 @keyframes slideUpSheet {
   from { transform: translateY(100%); }
@@ -6769,7 +6801,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- 2. DIGITAL WALLET QUICKPAY MODAL (GCash / Maya / GoTyme) -->
 <div class="sim-modal" id="customerWalletModal" style="display:none;" onclick="if(event.target===this)closeCustomerPaymentModal('customerWalletModal')">
   <div class="sim-sheet" style="background:#ffffff;">
-    <div id="custWalletHeader" style="background:#007DFE; color:#ffffff; padding:16px 20px 18px 20px;">
+    <div id="custWalletHeader" class="sim-sheet-header" style="background:#007DFE; color:#ffffff; padding:16px 20px 18px 20px;">
       <div class="sheet-grabber"></div>
       <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
         <div style="display:flex; align-items:center; gap:10px;">
@@ -6782,7 +6814,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button type="button" onclick="closeCustomerPaymentModal('customerWalletModal')" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:20px; cursor:pointer;">Cancel</button>
       </div>
     </div>
-    <div style="padding:22px; background:#ffffff;">
+    <div class="sim-sheet-body" style="background:#ffffff;">
       <div style="text-align:center; margin-bottom:16px;">
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Payment Authorization</div>
         <h2 style="font-size:22px; font-weight:800; color:#111827;">Total: <span id="custWalletTotal" style="color:#007DFE;">₱0.00</span></h2>
@@ -6812,7 +6844,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- 3. CASH ON DELIVERY (COD) ORDER SUMMARY MODAL -->
 <div class="sim-modal" id="customerCodModal" style="display:none;" onclick="if(event.target===this)closeCustomerPaymentModal('customerCodModal')">
   <div class="sim-sheet" style="background:#ffffff;">
-    <div style="background:#283d23; color:#ffffff; padding:16px 20px 18px 20px;">
+    <div class="sim-sheet-header" style="background:#283d23; color:#ffffff; padding:16px 20px 18px 20px;">
       <div class="sheet-grabber"></div>
       <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
         <div style="display:flex; align-items:center; gap:10px;">
@@ -6825,7 +6857,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button type="button" onclick="closeCustomerPaymentModal('customerCodModal')" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:20px; cursor:pointer;">Cancel</button>
       </div>
     </div>
-    <div style="padding:22px; background:#ffffff;">
+    <div class="sim-sheet-body" style="background:#ffffff;">
       <div style="text-align:center; margin-bottom:16px;">
         <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; margin-bottom:4px;">Order Summary</div>
         <h2 style="font-size:22px; font-weight:800; color:#111827;">Total Amount: <span id="custCodTotal" style="color:#283d23;">₱0.00</span></h2>
