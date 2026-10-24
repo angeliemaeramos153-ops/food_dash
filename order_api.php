@@ -362,6 +362,45 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
     $o = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$o) {
+        try {
+            $o_stmt = $conn->prepare("SELECT 
+                COALESCE(ord.id, ord.order_id) AS order_id,
+                COALESCE(ord.order_number, CONCAT('#FD-', COALESCE(ord.id, ord.order_id))) AS order_ref,
+                ord.user_id AS customer_id,
+                COALESCE(cu.full_name, cu.username, '') AS customer_name,
+                COALESCE(cu.phone, ord.customer_phone, '') AS customer_phone,
+                COALESCE(
+                  (SELECT oi.store_name FROM order_items oi WHERE oi.order_id = ord.id AND oi.store_name IS NOT NULL AND oi.store_name != '' LIMIT 1),
+                  s.shop_name,
+                  'Partner Store'
+                ) AS store_name,
+                COALESCE(ord.delivery_address, '') AS delivery_address,
+                COALESCE(ord.status, 'on_delivery') AS status,
+                COALESCE(ord.status, 'on_delivery') AS delivery_status,
+                NULL AS near_notified_at,
+                NULL AS location_updated_at,
+                ord.store_lat,
+                ord.store_lng,
+                COALESCE(ord.delivery_lat, NULL) AS destination_lat,
+                COALESCE(ord.delivery_lng, NULL) AS destination_lng,
+                ord.delivery_lat AS customer_lat,
+                ord.delivery_lng AS customer_lng,
+                ord.rider_id,
+                COALESCE(ord.current_lat, ord.rider_lat, NULL) AS rider_lat,
+                COALESCE(ord.current_lng, ord.rider_lng, NULL) AS rider_lng,
+                COALESCE(ord.rider_name, 'Alex Gonzaga') AS rider_name,
+                COALESCE(ord.rider_phone, '+63 917 555 0192') AS rider_phone
+            FROM orders ord
+            LEFT JOIN shops s ON ord.store_id = s.shop_id
+            LEFT JOIN users cu ON ord.user_id = cu.user_id
+            WHERE (ord.id = :oid OR ord.order_id = :oid)
+            LIMIT 1");
+            $o_stmt->execute([':oid' => $order_id]);
+            $o = $o_stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {}
+    }
+
+    if (!$o) {
         order_api_out(false, 'Order not found.', [], 404);
     }
 

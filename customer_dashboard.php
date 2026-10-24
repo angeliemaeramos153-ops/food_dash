@@ -2876,7 +2876,16 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
       }
       $clean_card_ref = '#' . ltrim($ord['order_ref'] ?? ('FD-' . $ord['order_id']), '#');
     ?>
-      <div class="row-card order-row <?= $is_ontheway ? 'on-the-way-card' : '' ?>" data-status="<?= htmlspecialchars($norm_status) ?>" id="order-card-<?= $ord['order_id'] ?>" <?= $is_ontheway ? 'onclick="openTrackingModal(' . (int)$ord['order_id'] . ')" style="cursor:pointer;" title="Tap to view live delivery tracking map"' : '' ?>>
+      <div class="row-card order-row <?= $is_ontheway ? 'on-the-way-card' : '' ?>" 
+           data-status="<?= htmlspecialchars($norm_status) ?>" 
+           data-order-id="<?= (int)$ord['order_id'] ?>"
+           data-order-ref="<?= htmlspecialchars($clean_card_ref) ?>"
+           data-store-name="<?= htmlspecialchars($ord['store_name']) ?>"
+           data-items-summary="<?= htmlspecialchars($ord['items_summary']) ?>"
+           data-delivery-address="<?= htmlspecialchars($ord['delivery_address'] ?? '') ?>"
+           data-total-amount="<?= htmlspecialchars(number_format((float)$ord['total_amount'], 2)) ?>"
+           id="order-card-<?= $ord['order_id'] ?>" 
+           <?= $is_ontheway ? 'onclick="openTrackingModal(' . (int)$ord['order_id'] . ', { orderId: ' . (int)$ord['order_id'] . ', orderNum: \'' . htmlspecialchars(addslashes($clean_card_ref)) . '\', storeName: \'' . htmlspecialchars(addslashes($ord['store_name'])) . '\', itemsSummary: \'' . htmlspecialchars(addslashes($ord['items_summary'])) . '\', deliveryAddress: \'' . htmlspecialchars(addslashes($ord['delivery_address'] ?? '')) . '\', totalAmount: \'' . htmlspecialchars(addslashes((string)$ord['total_amount'])) . '\', orderStatus: \'' . htmlspecialchars(addslashes($norm_status)) . '\' })" style="cursor:pointer;" title="Tap to view live delivery tracking map"' : '' ?>>
         <div class="row-icon <?= $is_cancelled ? 'grey' : ($is_ontheway ? 'jolli' : ($is_settled ? 'settled-icon' : 'green')) ?>">
           <?= $is_cancelled ? '🚫' : ($is_ontheway ? '🛵' : ($is_settled ? '🛡️' : ($is_delivered ? '📦' : ($is_prep ? '🍳' : '🛍️')))) ?>
         </div>
@@ -2927,7 +2936,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
               <?= htmlspecialchars($status_label) ?>
             </span>
             <div id="track-actions-<?= $ord['order_id'] ?>" class="order-actions-wrap" style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
-              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(<?= (int)$ord['order_id'] ?>)" title="Tap to view live delivery map">
+              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(<?= (int)$ord['order_id'] ?>, { orderId: <?= (int)$ord['order_id'] ?>, orderNum: '<?= htmlspecialchars(addslashes($clean_card_ref)) ?>', storeName: '<?= htmlspecialchars(addslashes($ord['store_name'])) ?>', itemsSummary: '<?= htmlspecialchars(addslashes($ord['items_summary'])) ?>', deliveryAddress: '<?= htmlspecialchars(addslashes($ord['delivery_address'] ?? '')) ?>', totalAmount: '<?= htmlspecialchars(addslashes((string)$ord['total_amount'])) ?>', orderStatus: '<?= htmlspecialchars(addslashes($norm_status)) ?>' })" title="Tap to view live delivery map">
                 <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
               </button>
               <button class="confirm-btn" id="confirm-btn-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); confirmOrderReceived(<?= $ord['order_id'] ?>)">
@@ -4894,7 +4903,7 @@ async function loadCustomerOrdersLive() {
             ${subMsg}
           </div>
           <div id="track-actions-${orderId}" class="order-actions-wrap" style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
-            <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(${orderId})" title="Tap to view live delivery map">
+            <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(${orderId}, { orderId: ${orderId}, orderNum: '${escapeCustAttr(clean_card_ref)}', storeName: '${escapeCustAttr(ord.store_name || '')}', itemsSummary: '${escapeCustAttr(ord.items_summary || '')}', deliveryAddress: '${escapeCustAttr(ord.delivery_address || '')}', totalAmount: '${escapeCustAttr(ord.total_amount || ord.total_price || '')}', orderStatus: '${escapeCustAttr(norm_status)}' })" title="Tap to view live delivery map">
               <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
             </button>
             <button class="confirm-btn" id="confirm-btn-${orderId}" onclick="event.stopPropagation(); confirmOrderReceived(${orderId})">
@@ -4908,10 +4917,18 @@ async function loadCustomerOrdersLive() {
           </div>`;
       }
 
-      const rowClick = is_ontheway ? `onclick="openTrackingModal(${orderId})" style="cursor:pointer;" title="Tap to view live delivery tracking map"` : '';
+      const rowClick = is_ontheway ? `onclick="openTrackingModal(${orderId}, { orderId: ${orderId}, orderNum: '${escapeCustAttr(clean_card_ref)}', storeName: '${escapeCustAttr(ord.store_name || '')}', itemsSummary: '${escapeCustAttr(ord.items_summary || '')}', deliveryAddress: '${escapeCustAttr(ord.delivery_address || '')}', totalAmount: '${escapeCustAttr(ord.total_amount || ord.total_price || '')}', orderStatus: '${escapeCustAttr(norm_status)}' })" style="cursor:pointer;" title="Tap to view live delivery tracking map"` : '';
 
       html += `
-        <div class="row-card order-row ${is_ontheway ? 'on-the-way-card' : ''}" data-status="${escapeCustAttr(norm_status)}" id="order-card-${orderId}" ${rowClick}>
+        <div class="row-card order-row ${is_ontheway ? 'on-the-way-card' : ''}" 
+             data-status="${escapeCustAttr(norm_status)}" 
+             data-order-id="${orderId}"
+             data-order-ref="${escapeCustAttr(clean_card_ref)}"
+             data-store-name="${escapeCustAttr(ord.store_name || '')}"
+             data-items-summary="${escapeCustAttr(ord.items_summary || '')}"
+             data-delivery-address="${escapeCustAttr(ord.delivery_address || '')}"
+             data-total-amount="${escapeCustAttr(ord.total_amount || ord.total_price || '')}"
+             id="order-card-${orderId}" ${rowClick}>
           <div class="row-icon ${iconClass}">${iconHtml}</div>
           <div class="info">
             <strong class="order-ref">${escapeCustHtml(clean_card_ref)}</strong>
@@ -5622,8 +5639,33 @@ let activeCustChatOrderId = null;
 let custChatPollTimer = null;
 let custLastMessageId = 0;
 
-function openTrackingModal(orderId) {
-  openCustomerTrackingModal(orderId);
+function openTrackingModal(orderId, meta) {
+  var payload = (typeof meta === 'object' && meta !== null) ? Object.assign({}, meta) : {};
+  if (orderId && !payload.orderId) payload.orderId = orderId;
+
+  // Extract all metadata dynamically from the clicked card or active row
+  var card = (orderId ? document.getElementById('order-card-' + orderId) : null) ||
+             (document.activeElement ? document.activeElement.closest('.order-row') : null) ||
+             document.querySelector('.order-row.on-the-way-card');
+  if (card && card.dataset) {
+    if (!payload.orderId && card.dataset.orderId) payload.orderId = parseInt(card.dataset.orderId, 10);
+    if (!payload.orderNum && card.dataset.orderRef) payload.orderNum = card.dataset.orderRef;
+    if (!payload.storeName && card.dataset.storeName) payload.storeName = card.dataset.storeName;
+    if (!payload.itemsSummary && card.dataset.itemsSummary) payload.itemsSummary = card.dataset.itemsSummary;
+    if (!payload.deliveryAddress && card.dataset.deliveryAddress) payload.deliveryAddress = card.dataset.deliveryAddress;
+    if (!payload.totalAmount && card.dataset.totalAmount) payload.totalAmount = card.dataset.totalAmount;
+    if (!payload.orderStatus && card.dataset.status) payload.orderStatus = card.dataset.status;
+  }
+
+  // If inside Expo mobile app WebView, post message to native bridge
+  if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+    payload.type = 'OPEN_TRACKING_MODAL';
+    try {
+      window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+    } catch(e) {}
+  }
+
+  openCustomerTrackingModal(orderId || (payload && payload.orderId));
   setTimeout(() => {
     if (window.trackingMap && typeof window.trackingMap.invalidateSize === 'function') trackingMap.invalidateSize();
     if (window.map && typeof window.map.invalidateSize === 'function') map.invalidateSize();
