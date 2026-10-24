@@ -220,7 +220,7 @@ if ($method === 'POST') {
 
         $conn->beginTransaction();
         try {
-            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, customer_phone, order_ref, store_name, , items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, order_type, delivery_address, , , created_at) VALUES (:shop_id, :cust_id, :cust_name, :cust_phone, :ref, :store_name, :store_lat, :store_lng, :summary, :subtotal, :fee, :total, :pm, 'PENDING', 'waiting', 'Delivery', :addr, :dlat, :dlng, :lat, :lng, NOW())");
+            $stmt = $conn->prepare("INSERT INTO food_orders (shop_id, customer_id, customer_name, customer_phone, order_ref, store_name, store_lat, store_lng, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at) VALUES (:shop_id, :cust_id, :cust_name, :cust_phone, :ref, :store_name, :store_lat, :store_lng, :summary, :subtotal, :fee, :total, :pm, 'PENDING', 'waiting', 'Delivery', :addr, :dlat, :dlng, :lat, :lng, NOW())");
             $stmt->execute([
                 ':shop_id'    => $shop_id,
                 ':cust_id'    => $user_id,
@@ -582,7 +582,7 @@ if ($method === 'GET') {
         $scope_sql = $is_demo 
             ? "(customer_id = :cid OR user_id = :uid OR customer_id IN (15, 26, 0) OR user_id IN (15, 26, 0))" 
             : "(customer_id = :cid OR user_id = :uid)";
-        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, rider_id, delivery_address, , rider_lat, rider_lng, , {$dateSql} FROM food_orders WHERE {$scope_sql} ORDER BY order_id DESC LIMIT 40");
+        $stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, rider_id, delivery_address, rider_lat, rider_lng, {$dateSql} FROM food_orders WHERE {$scope_sql} ORDER BY order_id DESC LIMIT 40");
         $stmt->execute([':cid' => $user_id, ':uid' => $user_id]);
         $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($orders as &$ord) {

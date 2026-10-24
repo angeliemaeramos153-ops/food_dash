@@ -79,12 +79,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([':lat' => $lat, ':lng' => $lng, ':oid' => $order_id]);
 
         if ($rider_id > 0) {
-            $stmtR = $conn->prepare("UPDATE riders SET current_lat = :lat, current_lng = :lng WHERE rider_id = :rid");
-            $stmtR->execute([':lat' => $lat, ':lng' => $lng, ':rid' => $rider_id]);
+            try {
+                $stmtR = $conn->prepare("UPDATE riders SET current_lat = :lat, current_lng = :lng WHERE rider_id = :rid");
+                $stmtR->execute([':lat' => $lat, ':lng' => $lng, ':rid' => $rider_id]);
+            } catch (Throwable $e) {}
         }
 
         // Check proximity & arrival immediately
-        $stmt = $conn->prepare("SELECT customer_id, order_ref, , delivery_status, status, near_notified_at, arrived_notified_at FROM food_orders WHERE order_id = :oid LIMIT 1");
+        $stmt = $conn->prepare("SELECT customer_id, order_ref, delivery_status, status, near_notified_at, arrived_notified_at FROM food_orders WHERE order_id = :oid LIMIT 1");
         $stmt->execute([':oid' => $order_id]);
         $fresh = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -206,23 +208,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     unset($st);
 
     // 2. Query active dispatched riders (status = 'on_delivery' or current_order != 'None')
-    $rider_stmt = $conn->query("SELECT 
-        r.rider_id, r.user_id, r.rider_name,
-        COALESCE(r.phone, u.phone, '+63 917 555 0192') AS rider_phone,
-        r.status AS rider_status,
-        COALESCE(r.account_status, 'Active') AS account_status,
-        COALESCE(r.plate_number, 'ORM-8891') AS plate_number,
-        COALESCE(r.vehicle_model, 'Honda Click 125i') AS vehicle_model,
-        COALESCE(r.current_lat, 11.00650000) AS current_lat, 
-        COALESCE(r.current_lng, 124.60750000) AS current_lng, 
-        r.current_order
-    FROM riders r
-    LEFT JOIN users u ON (r.user_id = u.user_id)
-    WHERE r.status = 'on_delivery' 
-       OR (r.current_order IS NOT NULL AND r.current_order != 'None' AND r.current_order != '')
-       OR EXISTS (SELECT 1 FROM food_orders fo WHERE fo.rider_id = r.rider_id AND LOWER(TRIM(fo.status)) IN ('on_delivery', 'out_for_delivery', 'on_the_way', 'near_customer', 'arrived'))
-    ORDER BY r.rider_id ASC");
-    $raw_riders = $rider_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $raw_riders = [];
+    try {
+        $rider_stmt = $conn->query("SELECT 
+            r.rider_id, r.user_id, r.rider_name,
+            COALESCE(r.phone, u.phone, '+63 917 555 0192') AS rider_phone,
+            r.status AS rider_status,
+            COALESCE(r.account_status, 'Active') AS account_status,
+            COALESCE(r.plate_number, 'ORM-8891') AS plate_number,
+            COALESCE(r.vehicle_model, 'Honda Click 125i') AS vehicle_model,
+            COALESCE(r.current_lat, 11.00650000) AS current_lat, 
+            COALESCE(r.current_lng, 124.60750000) AS current_lng, 
+            r.current_order
+        FROM riders r
+        LEFT JOIN users u ON (r.user_id = u.user_id)
+        WHERE r.status = 'on_delivery' 
+           OR (r.current_order IS NOT NULL AND r.current_order != 'None' AND r.current_order != '')
+           OR EXISTS (SELECT 1 FROM food_orders fo WHERE fo.rider_id = r.rider_id AND LOWER(TRIM(fo.status)) IN ('on_delivery', 'out_for_delivery', 'on_the_way', 'near_customer', 'arrived'))
+        ORDER BY r.rider_id ASC");
+        if ($rider_stmt) $raw_riders = $rider_stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        $rider_stmt = $conn->query("SELECT 
+            r.rider_id, r.user_id, r.rider_name,
+            '+63 917 555 0192' AS rider_phone,
+            r.status AS rider_status,
+            'Active' AS account_status,
+            'ORM-8891' AS plate_number,
+            'Honda Click 125i' AS vehicle_model,
+            11.00650000 AS current_lat, 
+            124.60750000 AS current_lng, 
+            r.current_order
+        FROM riders r
+        WHERE r.status = 'on_delivery' 
+           OR (r.current_order IS NOT NULL AND r.current_order != 'None' AND r.current_order != '')
+           OR EXISTS (SELECT 1 FROM food_orders fo WHERE fo.rider_id = r.rider_id AND LOWER(TRIM(fo.status)) IN ('on_delivery', 'out_for_delivery', 'on_the_way', 'near_customer', 'arrived'))
+        ORDER BY r.rider_id ASC");
+        if ($rider_stmt) $raw_riders = $rider_stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 
     $riders = [];
     foreach ($raw_riders as $rd) {

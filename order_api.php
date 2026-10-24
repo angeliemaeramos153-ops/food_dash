@@ -1,5 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
+ob_start();
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
 require_once 'payment_helper.php';
@@ -7,7 +8,9 @@ require_once 'payment_helper.php';
 header('Content-Type: application/json; charset=utf-8');
 
 function order_api_out(bool $success, string $message = '', array $extra = [], int $status = 200): never {
+    if (ob_get_level()) ob_clean();
     http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
     echo json_encode(array_merge(['success' => $success, 'message' => $message], $extra), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -262,24 +265,23 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
 
     $stmt = $conn->prepare("SELECT 
         o.order_id, o.order_ref, o.customer_id, o.customer_name,
-        COALESCE(o.customer_phone, cu.phone, '+63 928 555 0148') AS customer_phone,
+        '+63 928 555 0148' AS customer_phone,
         o.store_name, o.delivery_address,
         o.status, o.delivery_status, o.near_notified_at, o.location_updated_at,
-        COALESCE(o.store_lat, s.lat, s.lat, 11.006500) AS store_lat,
-        COALESCE(o.store_lng, s.lng, s.lng, 124.607500) AS store_lng,
-        COALESCE(o.id, o.customer_lat, 11.004200) AS destination_lat,
+        COALESCE(o.store_lat, 11.006500) AS store_lat,
+        COALESCE(o.store_lng, 124.607500) AS store_lng,
+        COALESCE(o.delivery_lat, o.customer_lat, 11.004200) AS destination_lat,
         COALESCE(o.delivery_lng, o.customer_lng, 124.605000) AS destination_lng,
         o.customer_lat, o.customer_lng,
         o.rider_id,
-        COALESCE(o.rider_lat, r.current_lat, 11.006500) AS rider_lat,
-        COALESCE(o.rider_lng, r.current_lng, 124.607500) AS rider_lng,
+        COALESCE(o.rider_lat, 11.006500) AS rider_lat,
+        COALESCE(o.rider_lng, 124.607500) AS rider_lng,
         COALESCE(r.rider_name, ru.full_name, 'Alex Rider') AS rider_name,
-        COALESCE(o.rider_phone, r.phone, ru.phone, '+63 917 555 0192') AS rider_phone
+        '+63 917 555 0192' AS rider_phone
     FROM food_orders o
-    LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
+    LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name))))
     LEFT JOIN riders r ON (o.rider_id = r.rider_id)
     LEFT JOIN users ru ON (r.user_id = ru.user_id)
-    LEFT JOIN users cu ON (o.customer_id = cu.user_id)
     WHERE o.order_id = :oid AND {$scope_single}
     LIMIT 1");
     $stmt->execute([':oid' => $order_id, ':cid' => $user_id, ':uid' => $user_id, ':is_admin' => ($role === 'admin' ? 1 : 0)]);

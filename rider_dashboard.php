@@ -108,72 +108,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
     if (!is_array($input)) $input = $_POST;
     
     $is_ajax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
-        || (isset($input['ajax']) && $input['ajax'] === 'true');
+        || (isset($input['ajax']) && ($input['ajax'] === 'true' || $input['ajax'] === true))
+        || (isset($_POST['ajax']) && ($_POST['ajax'] === 'true' || $_POST['ajax'] === true))
+        || (isset($input['delivery_action']))
+        || (isset($_POST['delivery_action']));
     
-    $action = $input['delivery_action'] ?? ($input['action'] ?? '');
-    $order_id = (int)($input['order_id'] ?? 0);
+    if ($is_ajax) {
+        if (ob_get_level()) ob_clean();
+        ob_start();
+        header('Content-Type: application/json; charset=utf-8');
+    }
 
-    // Explicit Finish & Clear action by rider (handled immediately, with or without order_id)
-    if ($action === 'clear_order' || $action === 'finish_delivery') {
-        if ($order_id <= 0) {
-            $order_id = (int)($_SESSION['active_order_id'] ?? 0);
-            if ($order_id <= 0 && $r) {
-                if (!empty($r['active_order_id'])) {
-                    $order_id = (int)$r['active_order_id'];
-                } elseif (!empty($r['current_order']) && $r['current_order'] !== 'None') {
-                    $clean_ref = ltrim($r['current_order'], '#');
-                    $chk_fo = $conn->prepare("SELECT order_id FROM food_orders WHERE order_ref = :ref OR order_ref = :raw_ref OR order_id = :num_id LIMIT 1");
-                    $chk_fo->execute([':ref' => '#' . $clean_ref, ':raw_ref' => $clean_ref, ':num_id' => (int)$clean_ref]);
-                    $order_id = (int)($chk_fo->fetchColumn() ?: 0);
+    try {
+        $action = $input['delivery_action'] ?? ($input['action'] ?? '');
+        $order_id = (int)($input['order_id'] ?? 0);
+
+        // Explicit Finish & Clear action by rider (handled immediately, with or without order_id)
+        if ($action === 'clear_order' || $action === 'finish_delivery') {
+            if ($order_id <= 0) {
+                $order_id = (int)($_SESSION['active_order_id'] ?? 0);
+                if ($order_id <= 0 && $r) {
+                    if (!empty($r['active_order_id'])) {
+                        $order_id = (int)$r['active_order_id'];
+                    } elseif (!empty($r['current_order']) && $r['current_order'] !== 'None') {
+                        $clean_ref = ltrim($r['current_order'], '#');
+                        $chk_fo = $conn->prepare("SELECT order_id FROM food_orders WHERE order_ref = :ref OR order_ref = :raw_ref OR order_id = :num_id LIMIT 1");
+                        $chk_fo->execute([':ref' => '#' . $clean_ref, ':raw_ref' => $clean_ref, ':num_id' => (int)$clean_ref]);
+                        $order_id = (int)($chk_fo->fetchColumn() ?: 0);
+                    }
                 }
             }
-        }
 
-        // 1. Update order status to 'delivered' and mark rider_cleared = 1, cleared_at = NOW()
-        if ($order_id > 0) {
+            // 1. Update order status to 'delivered' and mark rider_cleared = 1, cleared_at = NOW()
+            if ($order_id > 0) {
+                try {
+                    $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', rider_cleared = 1, cleared_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND (rider_id = :rid OR :rid = 0)")->execute([':oid' => $order_id, ':rid' => $rid]);
+                    $conn->prepare("UPDATE orders SET status = 'delivered', rider_cleared = 1, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+                    record_order_audit_log($conn, $order_id, 'DELIVERED', 'DELIVERED', $user_id, 'rider', 'Delivery finished & cleared by rider ' . $user_name);
+                } catch (Throwable $e) {}
+            }
+
+            // Always archive / mark any delivered orders for this rider as rider_cleared = 1
             try {
-                $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', rider_cleared = 1, cleared_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND (rider_id = :rid OR :rid = 0)")->execute([':oid' => $order_id, ':rid' => $rid]);
-                $conn->prepare("UPDATE orders SET status = 'delivered', rider_cleared = 1, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
-                record_order_audit_log($conn, $order_id, 'DELIVERED', 'DELIVERED', $user_id, 'rider', 'Delivery finished & cleared by rider ' . $user_name);
+                $conn->prepare("UPDATE food_orders SET rider_cleared = 1, cleared_at = NOW() WHERE rider_id = :rid AND LOWER(TRIM(status)) = 'delivered' AND COALESCE(rider_cleared, 0) = 0")->execute([':rid' => $rid]);
             } catch (Throwable $e) {}
-        }
 
-        // Always archive / mark any delivered orders for this rider as rider_cleared = 1
-        try {
-            $conn->prepare("UPDATE food_orders SET rider_cleared = 1, cleared_at = NOW() WHERE rider_id = :rid AND LOWER(TRIM(status)) = 'delivered' AND COALESCE(rider_cleared, 0) = 0")->execute([':rid' => $rid]);
-        } catch (Throwable $e) {}
-
-        // 2. Unlink rider from active delivery slot, clear current_order so queries for active orders return NULL
-        try {
-            $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid OR user_id = :uid");
-            $stmt->execute([':rid' => $rid, ':uid' => $user_id]);
-        } catch (Throwable $e) {}
-
-        // 3. Clear session cache for the rider
-        unset($_SESSION['active_order_id'], $_SESSION['rider_current_order'], $_SESSION['rider_active_delivery']);
-
-        if ($is_ajax) {
-            if (ob_get_level()) ob_clean();
-            header('Content-Type: application/json');
-            echo json_encode([
-                'success' => true, 
-                'message' => 'Active delivery cleared! Ready for your next order.',
-                'cleared_order_id' => $order_id
-            ]);
-            exit();
-        } else {
-            $msg = 'Active delivery cleared! Ready for your next order.';
-        }
-    }
-    
-    if ($order_id > 0) {
-        $stmt = $conn->prepare("SELECT order_id, customer_id, customer_name, order_ref, status, delivery_status, rider_id, total_amount, payment_method, delivery_address, ,  FROM food_orders WHERE order_id = :oid LIMIT 1");
-        $stmt->execute([':oid' => $order_id]);
-        $order = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if ($is_ajax) {
+            // 2. Unlink rider from active delivery slot, clear current_order so queries for active orders return NULL
             try {
-                if (!$order) throw new Exception('Order not found');
+                $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid OR user_id = :uid");
+                $stmt->execute([':rid' => $rid, ':uid' => $user_id]);
+            } catch (Throwable $e) {}
+
+            // 3. Clear session cache for the rider
+            unset($_SESSION['active_order_id'], $_SESSION['rider_current_order'], $_SESSION['rider_active_delivery']);
+
+            if ($is_ajax) {
+                if (ob_get_level()) ob_clean();
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode([
+                    'success' => true, 
+                    'message' => 'Active delivery cleared! Ready for your next order.',
+                    'cleared_order_id' => $order_id
+                ]);
+                exit();
+            } else {
+                $msg = 'Active delivery cleared! Ready for your next order.';
+            }
+        }
+        
+        if ($order_id > 0) {
+            $stmt = $conn->prepare("SELECT order_id, customer_id, customer_name, order_ref, status, delivery_status, rider_id, total_amount, payment_method, delivery_address FROM food_orders WHERE order_id = :oid LIMIT 1");
+            $stmt->execute([':oid' => $order_id]);
+            $order = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($is_ajax) {
+                try {
+                    if (!$order) throw new Exception('Order not found');
                 $customer_id = (int)$order['customer_id'];
                 $ref = '#' . ltrim(!empty($order['order_ref']) ? $order['order_ref'] : ('FD-' . $order['order_id']), '#');
                 $old_st = strtoupper(trim($order['status'] ?? ''));
@@ -221,7 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     } catch (Throwable $e) {}
 
                     if (ob_get_level()) ob_clean();
-                    header('Content-Type: application/json');
+                    header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'message' => 'Order picked up! Status transitioned to On Delivery.', 'order_id' => $order_id]);
                     exit();
                 } elseif ($action === 'on_way') {
@@ -233,7 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     create_notification($conn, $customer_id, 'rider_on_way', 'Rider On the Way', 'Rider ' . $user_name . ' is actively heading towards your delivery address.', $order_id);
 
                     if (ob_get_level()) ob_clean();
-                    header('Content-Type: application/json');
+                    header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'message' => 'Customer notified that you are on the way.']);
                     exit();
                 } elseif ($action === 'near') {
@@ -245,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     create_notification($conn, $customer_id, 'rider_near', 'Rider Arriving Soon', 'Your rider is near your delivery address. Please prepare to receive ' . $ref . '.', $order_id);
 
                     if (ob_get_level()) ob_clean();
-                    header('Content-Type: application/json');
+                    header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'message' => 'Customer notified that you are near.']);
                     exit();
                 } elseif ($action === 'arrived') {
@@ -278,7 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     notify_role($conn, 'admin', 'Rider Arrived at Destination', "Rider {$user_name} arrived at customer address for order {$ref}.", $order_id);
 
                     if (ob_get_level()) ob_clean();
-                    header('Content-Type: application/json');
+                    header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'message' => 'Customer notified that you have arrived at destination!']);
                     exit();
                 } elseif ($action === 'delivered') {
@@ -319,7 +329,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     } catch (Throwable $e) {}
 
                     if (ob_get_level()) ob_clean();
-                    header('Content-Type: application/json');
+                    header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'message' => 'Delivery marked as delivered! Active order summary retained.']);
                     exit();
                 } elseif ($action === 'clear_order' || $action === 'finish_delivery') {
@@ -341,15 +351,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     unset($_SESSION['active_order_id'], $_SESSION['rider_current_order'], $_SESSION['rider_active_delivery']);
 
                     if (ob_get_level()) ob_clean();
-                    header('Content-Type: application/json');
+                    header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'message' => 'Active delivery cleared! Ready for your next order.', 'cleared_order_id' => $order_id]);
                     exit();
                 } else {
                     throw new Exception('Unknown delivery action.');
                 }
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 if (ob_get_level()) ob_clean();
-                header('Content-Type: application/json');
+                header('Content-Type: application/json; charset=utf-8');
                 echo json_encode(['success' => false, 'message' => $e->getMessage()]);
                 exit();
             }
@@ -472,13 +482,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
         }
     }
 
-    // Preserve the original manual rider status control.
-    if (isset($input['action_status'])) {
-        $status = ($input['status'] ?? '') === 'on_delivery' ? 'on_delivery' : 'waiting';
-        $current = trim($input['current_order'] ?? ''); if ($status==='waiting') $current='None';
-        $stmt=$conn->prepare("UPDATE riders SET status = :st, current_order = :cur WHERE rider_id = :rid");
-        $stmt->execute([':st' => $status, ':cur' => $current, ':rid' => $rid]);
-        $msg='Delivery status updated.';
+        // Preserve the original manual rider status control.
+        if (isset($input['action_status'])) {
+            $status = ($input['status'] ?? '') === 'on_delivery' ? 'on_delivery' : 'waiting';
+            $current = trim($input['current_order'] ?? ''); if ($status==='waiting') $current='None';
+            $stmt=$conn->prepare("UPDATE riders SET status = :st, current_order = :cur WHERE rider_id = :rid");
+            $stmt->execute([':st' => $status, ':cur' => $current, ':rid' => $rid]);
+            $msg='Delivery status updated.';
+        }
+    } catch (Throwable $e) {
+        if ($is_ajax) {
+            if (ob_get_level()) ob_clean();
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            exit();
+        } else {
+            $error = $e->getMessage();
+        }
     }
 }
 
