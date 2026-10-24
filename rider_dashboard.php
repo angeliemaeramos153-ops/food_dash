@@ -208,14 +208,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                         $conn->prepare("UPDATE orders SET status = 'on_delivery', rider_id = :rid WHERE order_id = :oid")->execute([':rid' => $rid, ':oid' => $order_id]);
                     } catch (Throwable $e) {}
 
+                    // 1 & 2. Dynamically query database for specific order and real calculated total amount directly from 'orders' and 'order_items'
+                    $ord_stmt = $conn->prepare("SELECT id, order_id, order_number, user_id, total_amount, status, payment_method FROM orders WHERE id = :oid OR order_id = :oid2 LIMIT 1");
+                    $ord_stmt->execute([':oid' => $order_id, ':oid2' => $order_id]);
+                    $db_order = $ord_stmt->fetch(PDO::FETCH_ASSOC);
+
+                    $item_sum_stmt = $conn->prepare("SELECT COALESCE(SUM(COALESCE(line_total, price * quantity, unit_price * quantity, 0)), 0) AS calculated_items_total FROM order_items WHERE order_id = :oid");
+                    $item_sum_stmt->execute([':oid' => $order_id]);
+                    $calculated_items_total = (float)$item_sum_stmt->fetchColumn();
+
+                    $fo_stmt = $conn->prepare("SELECT order_id, customer_id, user_id, order_ref, total_amount, subtotal, delivery_fee, payment_method FROM food_orders WHERE order_id = :oid LIMIT 1");
+                    $fo_stmt->execute([':oid' => $order_id]);
+                    $fo_order = $fo_stmt->fetch(PDO::FETCH_ASSOC);
+
+                    $actual_customer_id = (int)($db_order['user_id'] ?? $fo_order['customer_id'] ?? $fo_order['user_id'] ?? $customer_id);
+                    $raw_order_number = !empty($db_order['order_number']) 
+                        ? $db_order['order_number'] 
+                        : (!empty($fo_order['order_ref']) ? $fo_order['order_ref'] : $ref);
+                    $clean_order_number = ltrim($raw_order_number, '#');
+
+                    $delivery_fee_val = isset($fo_order['delivery_fee']) ? (float)$fo_order['delivery_fee'] : 30.00;
+                    if ($calculated_items_total > 0) {
+                        $db_order_total = (float)($db_order['total_amount'] ?? $fo_order['total_amount'] ?? 0);
+                        $real_total_amount = ($db_order_total > 0 && $db_order_total >= $calculated_items_total) 
+                            ? $db_order_total 
+                            : round($calculated_items_total + $delivery_fee_val, 2);
+                    } else {
+                        $real_total_amount = (float)($db_order['total_amount'] ?? $fo_order['total_amount'] ?? $order['total_amount'] ?? 0);
+                    }
+                    $formatted_total_amount = number_format($real_total_amount, 2);
+
+                    // 3. Programmatically construct the notification message using these live database values
+                    $dynamic_notif_title = "Order Out for Delivery";
+                    $dynamic_notif_message = "Your order #{$clean_order_number} has been picked up and is on the way! Total amount: ₱{$formatted_total_amount}";
+
                     record_order_audit_log($conn, $order_id, $old_st, 'on_delivery', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
-                    create_notification($conn, $customer_id, 'rider_assigned', 'Order Out for Delivery', 'Rider ' . $user_name . ' has picked up your order ' . $ref . ' and is on the way!', $order_id);
-                    notify_role($conn, 'admin', 'Rider Dispatched', 'Rider ' . $user_name . ' confirmed pickup and dispatched order ' . $ref, $order_id);
+
+                    // 4. Insert this dynamic notification into the database notifications table linked to customer's user_id
+                    if ($actual_customer_id > 0) {
+                        create_notification(
+                            $conn, 
+                            $actual_customer_id, 
+                            'rider_assigned', 
+                            $dynamic_notif_title, 
+                            $dynamic_notif_message, 
+                            $order_id
+                        );
+                    }
+                    notify_role($conn, 'admin', 'Rider Dispatched', "Rider {$user_name} confirmed pickup of order #{$clean_order_number} (Total: ₱{$formatted_total_amount})", $order_id);
 
                     // Automated departure & amount notification into chat
-                    $bill_amt = number_format((float)($order['total_amount'] ?? 0), 2);
-                    $bill_pm = !empty($order['payment_method']) ? trim($order['payment_method']) : 'Cash on Delivery (COD)';
-                    $auto_dep_msg = "Hello! I have picked up your order and I'm on the way. Your total bill is ₱{$bill_amt} ({$bill_pm}). Please have the payment or recipient ready!";
+                    $bill_pm = !empty($db_order['payment_method']) ? trim($db_order['payment_method']) : (!empty($fo_order['payment_method']) ? trim($fo_order['payment_method']) : (!empty($order['payment_method']) ? trim($order['payment_method']) : 'Cash on Delivery (COD)'));
+                    $auto_dep_msg = "Hello! I have picked up your order #{$clean_order_number} and I'm on the way. Your total bill is ₱{$formatted_total_amount} ({$bill_pm}). Please have the payment or recipient ready!";
 
                     try {
                         $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'rider', :uid, :rname, :txt, NOW())");
@@ -225,8 +269,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                             ':rname' => $user_name,
                             ':txt'   => $auto_dep_msg
                         ]);
-                        if ($customer_id > 0) {
-                            create_notification($conn, $customer_id, 'rider_message', 'Message from Rider (' . $user_name . ')', $auto_dep_msg, $order_id);
+                        if ($actual_customer_id > 0) {
+                            create_notification($conn, $actual_customer_id, 'rider_message', 'Message from Rider (' . $user_name . ')', $auto_dep_msg, $order_id);
                         }
                     } catch (Throwable $e) {}
 
@@ -390,13 +434,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                             $conn->prepare("UPDATE orders SET status = 'on_delivery', rider_id = :rid WHERE order_id = :oid")->execute([':rid' => $rid, ':oid' => $order_id]);
                         } catch (Throwable $e) {}
 
+                        // 1 & 2. Dynamically query database for specific order and real calculated total amount directly from 'orders' and 'order_items'
+                        $ord_stmt = $conn->prepare("SELECT id, order_id, order_number, user_id, total_amount, status, payment_method FROM orders WHERE id = :oid OR order_id = :oid2 LIMIT 1");
+                        $ord_stmt->execute([':oid' => $order_id, ':oid2' => $order_id]);
+                        $db_order = $ord_stmt->fetch(PDO::FETCH_ASSOC);
+
+                        $item_sum_stmt = $conn->prepare("SELECT COALESCE(SUM(COALESCE(line_total, price * quantity, unit_price * quantity, 0)), 0) AS calculated_items_total FROM order_items WHERE order_id = :oid");
+                        $item_sum_stmt->execute([':oid' => $order_id]);
+                        $calculated_items_total = (float)$item_sum_stmt->fetchColumn();
+
+                        $fo_stmt = $conn->prepare("SELECT order_id, customer_id, user_id, order_ref, total_amount, subtotal, delivery_fee, payment_method FROM food_orders WHERE order_id = :oid LIMIT 1");
+                        $fo_stmt->execute([':oid' => $order_id]);
+                        $fo_order = $fo_stmt->fetch(PDO::FETCH_ASSOC);
+
+                        $actual_customer_id = (int)($db_order['user_id'] ?? $fo_order['customer_id'] ?? $fo_order['user_id'] ?? $customer_id);
+                        $raw_order_number = !empty($db_order['order_number']) 
+                            ? $db_order['order_number'] 
+                            : (!empty($fo_order['order_ref']) ? $fo_order['order_ref'] : $ref);
+                        $clean_order_number = ltrim($raw_order_number, '#');
+
+                        $delivery_fee_val = isset($fo_order['delivery_fee']) ? (float)$fo_order['delivery_fee'] : 30.00;
+                        if ($calculated_items_total > 0) {
+                            $db_order_total = (float)($db_order['total_amount'] ?? $fo_order['total_amount'] ?? 0);
+                            $real_total_amount = ($db_order_total > 0 && $db_order_total >= $calculated_items_total) 
+                                ? $db_order_total 
+                                : round($calculated_items_total + $delivery_fee_val, 2);
+                        } else {
+                            $real_total_amount = (float)($db_order['total_amount'] ?? $fo_order['total_amount'] ?? $order['total_amount'] ?? 0);
+                        }
+                        $formatted_total_amount = number_format($real_total_amount, 2);
+
+                        // 3. Programmatically construct the notification message using these live database values
+                        $dynamic_notif_title = "Order Out for Delivery";
+                        $dynamic_notif_message = "Your order #{$clean_order_number} has been picked up and is on the way! Total amount: ₱{$formatted_total_amount}";
+
                         record_order_audit_log($conn, $order_id, $old_st, 'on_delivery', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
-                        create_notification($conn, $customer_id, 'rider_assigned', 'Order Out for Delivery', 'Rider ' . $user_name . ' has picked up your order ' . $ref . '.', $order_id);
+
+                        // 4. Insert this dynamic notification into the database notifications table linked to customer's user_id
+                        if ($actual_customer_id > 0) {
+                            create_notification(
+                                $conn, 
+                                $actual_customer_id, 
+                                'rider_assigned', 
+                                $dynamic_notif_title, 
+                                $dynamic_notif_message, 
+                                $order_id
+                            );
+                        }
+                        notify_role($conn, 'admin', 'Rider Dispatched', "Rider {$user_name} confirmed pickup of order #{$clean_order_number} (Total: ₱{$formatted_total_amount})", $order_id);
 
                         // Automated departure & amount notification into chat
-                        $bill_amt = number_format((float)($order['total_amount'] ?? 0), 2);
-                        $bill_pm = !empty($order['payment_method']) ? trim($order['payment_method']) : 'Cash on Delivery (COD)';
-                        $auto_dep_msg = "Hello! I have picked up your order and I'm on the way. Your total bill is ₱{$bill_amt} ({$bill_pm}). Please have the payment or recipient ready!";
+                        $bill_pm = !empty($db_order['payment_method']) ? trim($db_order['payment_method']) : (!empty($fo_order['payment_method']) ? trim($fo_order['payment_method']) : (!empty($order['payment_method']) ? trim($order['payment_method']) : 'Cash on Delivery (COD)'));
+                        $auto_dep_msg = "Hello! I have picked up your order #{$clean_order_number} and I'm on the way. Your total bill is ₱{$formatted_total_amount} ({$bill_pm}). Please have the payment or recipient ready!";
 
                         try {
                             $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'rider', :uid, :rname, :txt, NOW())");
@@ -406,8 +495,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                                 ':rname' => $user_name,
                                 ':txt'   => $auto_dep_msg
                             ]);
-                            if ($customer_id > 0) {
-                                create_notification($conn, $customer_id, 'rider_message', 'Message from Rider (' . $user_name . ')', $auto_dep_msg, $order_id);
+                            if ($actual_customer_id > 0) {
+                                create_notification($conn, $actual_customer_id, 'rider_message', 'Message from Rider (' . $user_name . ')', $auto_dep_msg, $order_id);
                             }
                         } catch (Throwable $e) {}
 
