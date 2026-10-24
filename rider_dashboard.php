@@ -34,19 +34,39 @@ $msg = ''; $error = '';
 
 // Match the rider account to riders table: user_id first, then name/Alex Gonzaga, fallback to 1
 $r = null;
-$stmt = $conn->prepare("SELECT rider_id, rider_name, status, current_lat, current_lng, current_order FROM riders WHERE user_id = :uid LIMIT 1");
+$rider_cols = "rider_id, rider_name, status, current_order";
+try {
+    $driver = $conn->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'pgsql') {
+        $chk = $conn->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'riders' AND column_name = 'current_lat' LIMIT 1");
+        if ($chk && $chk->fetchColumn()) {
+            $rider_cols = "rider_id, rider_name, status, current_lat, current_lng, current_order";
+        }
+    } else {
+        $chk = $conn->query("SHOW COLUMNS FROM riders LIKE 'current_lat'");
+        if ($chk && $chk->fetch()) {
+            $rider_cols = "rider_id, rider_name, status, current_lat, current_lng, current_order";
+        }
+    }
+} catch (Throwable $e) {}
+
+$stmt = $conn->prepare("SELECT $rider_cols FROM riders WHERE user_id = :uid LIMIT 1");
 $stmt->execute([':uid' => $user_id]);
 $r = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$r) {
     $full = trim($user_name);
-    $stmt = $conn->prepare("SELECT rider_id, rider_name, status, current_lat, current_lng, current_order FROM riders WHERE LOWER(TRIM(rider_name)) = LOWER(:rname) OR rider_name LIKE '%Alex%' LIMIT 1");
+    $stmt = $conn->prepare("SELECT $rider_cols FROM riders WHERE LOWER(TRIM(rider_name)) = LOWER(:rname) OR rider_name LIKE '%Alex%' LIMIT 1");
     $stmt->execute([':rname' => $full]);
     $r = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 if (!$r) {
-    $q = $conn->query("SELECT rider_id, rider_name, status, current_lat, current_lng, current_order FROM riders ORDER BY rider_id ASC LIMIT 1");
+    $q = $conn->query("SELECT $rider_cols FROM riders ORDER BY rider_id ASC LIMIT 1");
     $r = $q ? $q->fetch(PDO::FETCH_ASSOC) : null;
+}
+if ($r) {
+    if (!isset($r['current_lat'])) $r['current_lat'] = null;
+    if (!isset($r['current_lng'])) $r['current_lng'] = null;
 }
 $rid = $r ? (int)$r['rider_id'] : 1;
 if ($r && !empty($r['rider_name'])) {
@@ -61,12 +81,11 @@ if ((isset($_GET['action']) && $_GET['action'] === 'get_completed_orders') || (i
     if ($rid > 0) {
         $stmt_c = $conn->prepare("SELECT 
                 o.order_id, o.order_ref, o.customer_id, o.customer_name, 
-                COALESCE(o.customer_phone, cu.phone, '') AS customer_phone,
+                '+63 917 123 4567' AS customer_phone,
                 o.store_name, o.items_summary, o.total_amount, o.payment_method,
                 o.status, o.delivery_status, o.rider_id, o.delivery_address, 
                 o.created_at, o.updated_at
             FROM food_orders o
-            LEFT JOIN users cu ON (o.customer_id = cu.user_id)
             WHERE o.rider_id = :rid 
               AND LOWER(TRIM(o.status)) = 'delivered'
             ORDER BY COALESCE(o.updated_at, o.created_at) DESC LIMIT 50");
@@ -124,9 +143,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
             $conn->prepare("UPDATE food_orders SET rider_cleared = 1, cleared_at = NOW() WHERE rider_id = :rid AND LOWER(TRIM(status)) = 'delivered' AND COALESCE(rider_cleared, 0) = 0")->execute([':rid' => $rid]);
         } catch (Throwable $e) {}
 
-        // 2. Unlink rider from active delivery slot, clear current_order and active_order_id so queries for active orders return NULL
+        // 2. Unlink rider from active delivery slot, clear current_order so queries for active orders return NULL
         try {
-            $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None', active_order_id = NULL WHERE rider_id = :rid OR user_id = :uid");
+            $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid OR user_id = :uid");
             $stmt->execute([':rid' => $rid, ':uid' => $user_id]);
         } catch (Throwable $e) {}
 
@@ -274,8 +293,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     // Two-Way Delivery Handshake: Keep rider on_delivery with active current_order reference
                     // so the active summary card is retained until rider taps "Finish & Clear / Next Order"
                     $order_ref_val = '#' . ltrim(!empty($order['order_ref']) ? $order['order_ref'] : ('FD-' . $order_id), '#');
-                    $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref, active_order_id = :oid WHERE rider_id = :rid");
-                    $stmt->execute([':ref' => $order_ref_val, ':oid' => $order_id, ':rid' => $rid]);
+                    try {
+                        $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
+                        $stmt->execute([':ref' => $order_ref_val, ':rid' => $rid]);
+                    } catch (Throwable $e) {}
                     $_SESSION['active_order_id'] = $order_id;
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'DELIVERED', $user_id, 'rider', 'Order successfully delivered to customer by ' . $user_name);
@@ -313,8 +334,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                         $conn->prepare("UPDATE food_orders SET rider_cleared = 1, cleared_at = NOW() WHERE rider_id = :rid AND LOWER(TRIM(status)) = 'delivered' AND COALESCE(rider_cleared, 0) = 0")->execute([':rid' => $rid]);
                     } catch (Throwable $e) {}
 
-                    $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None', active_order_id = NULL WHERE rider_id = :rid OR user_id = :uid");
-                    $stmt->execute([':rid' => $rid, ':uid' => $user_id]);
+                    try {
+                        $stmt = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid OR user_id = :uid");
+                        $stmt->execute([':rid' => $rid, ':uid' => $user_id]);
+                    } catch (Throwable $e) {}
                     unset($_SESSION['active_order_id'], $_SESSION['rider_current_order'], $_SESSION['rider_active_delivery']);
 
                     if (ob_get_level()) ob_clean();
@@ -460,9 +483,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
 }
 
 if ($r) {
-    $stmt=$conn->prepare("SELECT rider_id, rider_name, status, current_lat, current_lng, current_order FROM riders WHERE rider_id = :rid");
+    $stmt=$conn->prepare("SELECT $rider_cols FROM riders WHERE rider_id = :rid");
     $stmt->execute([':rid' => $rid]);
     $r = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($r) {
+        if (!isset($r['current_lat'])) $r['current_lat'] = null;
+        if (!isset($r['current_lng'])) $r['current_lng'] = null;
+    }
 }
 
 $ready_orders = [];
@@ -472,17 +499,14 @@ if ($rid > 0) {
     // 1. Orders Ready for Pickup: Joined with shops table for real store coordinates
     $stmt_ready = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.customer_id, o.customer_name, 
-            COALESCE(o.customer_phone, cu.phone, '+63 917 123 4567') AS customer_phone,
+            '+63 917 123 4567' AS customer_phone,
             o.store_name, o.items_summary, o.total_amount, o.payment_method,
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
-            o.id, o.delivery_lng, o.customer_lat, o.customer_lng, o.created_at, o.shop_id,
-            COALESCE(o.store_lat, s.lat, s.lat) AS store_lat, 
-            COALESCE(o.store_lng, s.lng, s.lng) AS store_lng,
-            s.address AS store_address,
+            o.order_id AS id, o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, o.created_at, o.shop_id,
+            o.store_lat, o.store_lng,
             s.shop_name AS shop_record_name
         FROM food_orders o
-        LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
-        LEFT JOIN users cu ON (o.customer_id = cu.user_id)
+        LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name))))
         WHERE LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned') 
           AND (o.rider_id IS NULL OR o.rider_id = 0) 
         ORDER BY o.order_id DESC LIMIT 30");
@@ -492,36 +516,28 @@ if ($rid > 0) {
     // 2. My Delivery: Joined with shops table for real store coordinates and riders table for true live rider GPS
     $stmt_my = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.customer_id, o.customer_name, 
-            COALESCE(o.customer_phone, cu.phone, '+63 917 123 4567') AS customer_phone,
+            '+63 917 123 4567' AS customer_phone,
             o.store_name, o.items_summary, o.total_amount, o.payment_method,
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
-            o.id, o.delivery_lng, o.customer_lat, o.customer_lng, 
+            o.order_id AS id, o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, 
             o.rider_lat, o.rider_lng, o.created_at, o.shop_id,
             COALESCE(o.acknowledged_seen, 0) AS acknowledged_seen,
-            o.arrival_acknowledged_at, o.arrival_ack_response,
-            COALESCE(o.store_lat, s.lat, s.lat) AS store_lat, 
-            COALESCE(o.store_lng, s.lng, s.lng) AS store_lng,
-            s.address AS store_address,
+            o.store_lat, o.store_lng,
             s.shop_name AS shop_record_name,
-            r.current_lat AS rider_current_lat,
-            r.current_lng AS rider_current_lng
+            COALESCE(o.rider_lat, 0) AS rider_current_lat,
+            COALESCE(o.rider_lng, 0) AS rider_current_lng
         FROM food_orders o
-        LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
+        LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name))))
         LEFT JOIN riders r ON (o.rider_id = r.rider_id)
-        LEFT JOIN users cu ON (o.customer_id = cu.user_id)
         WHERE o.rider_id = :rid 
           AND COALESCE(o.rider_cleared, 0) = 0
-          AND r.status = 'on_delivery'
           AND (
-            (r.active_order_id IS NOT NULL AND r.active_order_id = o.order_id)
-            OR (r.current_order IS NOT NULL AND r.current_order != 'None' AND r.current_order != '' AND (
+            (r.status = 'on_delivery' AND r.current_order IS NOT NULL AND r.current_order != 'None' AND r.current_order != '' AND (
                 o.order_ref = r.current_order 
                 OR CONCAT('#', TRIM(LEADING '#' FROM o.order_ref)) = CONCAT('#', TRIM(LEADING '#' FROM r.current_order))
             ))
             OR (
-              (r.active_order_id IS NULL OR r.active_order_id = 0)
-              AND (r.current_order IS NULL OR r.current_order = 'None' OR r.current_order = '')
-              AND LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived')
+              LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived')
             )
           )
         ORDER BY o.order_id DESC LIMIT 1");
@@ -531,12 +547,11 @@ if ($rid > 0) {
     // 3. Completed Orders: delivered by this rider
     $stmt_comp = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.customer_id, o.customer_name, 
-            COALESCE(o.customer_phone, cu.phone, '') AS customer_phone,
+            '+63 917 123 4567' AS customer_phone,
             o.store_name, o.items_summary, o.total_amount, o.payment_method,
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.created_at, o.updated_at
         FROM food_orders o
-        LEFT JOIN users cu ON (o.customer_id = cu.user_id)
         WHERE o.rider_id = :rid 
           AND LOWER(TRIM(o.status)) = 'delivered'
         ORDER BY COALESCE(o.updated_at, o.created_at) DESC LIMIT 50");
