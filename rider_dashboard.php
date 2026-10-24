@@ -713,13 +713,30 @@ if ($first_order) {
                 $s_lng = (float)$geo['lng'];
 
                 // Persist the verified coordinates back to database
-                if (!empty($first_order['shop_id'])) {
-                    $u_stmt = $conn->prepare("UPDATE shops SET lat = ?, lng = ?, lat = ?, lng = ? WHERE shop_id = ?");
-                    $u_stmt->execute([$s_lat, $s_lng, $s_lat, $s_lng, (int)$first_order['shop_id']]);
-                }
+                // 1. Update food_orders which has valid store_lat and store_lng columns
                 if (!empty($first_order['order_id'])) {
-                    $u_stmt2 = $conn->prepare("UPDATE food_orders SET store_lat = ?, store_lng = ? WHERE order_id = ?");
-                    $u_stmt2->execute([$s_lat, $s_lng, (int)$first_order['order_id']]);
+                    try {
+                        $u_stmt2 = $conn->prepare("UPDATE food_orders SET store_lat = ?, store_lng = ? WHERE order_id = ?");
+                        $u_stmt2->execute([$s_lat, $s_lng, (int)$first_order['order_id']]);
+                    } catch (Throwable $e) {}
+                }
+
+                // 2. Safely check if shops table has coordinate columns before updating to prevent undefined column PDOException
+                if (!empty($first_order['shop_id'])) {
+                    try {
+                        static $shops_coord_col = null;
+                        if ($shops_coord_col === null) {
+                            $chk = $conn->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'shops' AND column_name IN ('lat', 'latitude') LIMIT 1");
+                            $shops_coord_col = $chk ? (string)$chk->fetchColumn() : '';
+                        }
+                        if ($shops_coord_col === 'lat') {
+                            $u_stmt = $conn->prepare("UPDATE shops SET lat = ?, lng = ? WHERE shop_id = ?");
+                            $u_stmt->execute([$s_lat, $s_lng, (int)$first_order['shop_id']]);
+                        } elseif ($shops_coord_col === 'latitude') {
+                            $u_stmt = $conn->prepare("UPDATE shops SET latitude = ?, longitude = ? WHERE shop_id = ?");
+                            $u_stmt->execute([$s_lat, $s_lng, (int)$first_order['shop_id']]);
+                        }
+                    } catch (Throwable $e) {}
                 }
                 break;
             }
