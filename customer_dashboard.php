@@ -3035,7 +3035,10 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="font-size:18px;">🛵</span>
         <div>
-          <h3 id="trackModalOrderRef" style="margin:0; font-size:13px; color:var(--olive-shadow);">Live Delivery Tracking</h3>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <h3 id="trackModalOrderRef" style="margin:0; font-size:13px; color:var(--olive-shadow);">Live Delivery Tracking</h3>
+            <span id="trackModalStatusBadge" style="background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; padding:2px 6px; border-radius:5px;">ON THE WAY</span>
+          </div>
           <small id="trackModalStoreSubtitle" style="font-size:10px; color:var(--muted);">Store pickup & real-time GPS</small>
         </div>
       </div>
@@ -3043,6 +3046,15 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
     </div>
 
     <div class="tracking-modal-body modal-body" style="overflow-y:auto; -webkit-overflow-scrolling:touch; flex:1 1 auto;">
+      <!-- Explicit Delivery Destination Card -->
+      <div class="cust-dest-card" id="custTrackDestCard" style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:12px; padding:10px 14px; margin-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:3px;">
+          <span style="font-size:14px;">📍</span>
+          <span style="font-size:9.5px; font-weight:800; color:#dc2626; text-transform:uppercase; letter-spacing:0.6px;">DELIVERY DESTINATION</span>
+        </div>
+        <div id="custTrackDestAddress" style="font-size:13px; font-weight:700; color:#1e293b; line-height:1.35;">Western Leyte College, Ormoc City</div>
+      </div>
+
       <!-- Rider Contact Card -->
       <div class="cust-rider-card">
         <div class="cust-rider-left">
@@ -5950,7 +5962,18 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     }
 
     const subEl = document.getElementById('trackModalStoreSubtitle');
-    if (subEl) subEl.textContent = `${ord.store_name || data.store_name || 'Store'} • ${data.status || ord.status || 'On Delivery'}`;
+    if (subEl) subEl.textContent = `${ord.store_name || data.store_name || 'Store'} • Live GPS Telemetry`;
+
+    const statusBadgeEl = document.getElementById('trackModalStatusBadge');
+    if (statusBadgeEl) {
+      const rawSt = String(data.status || ord.status || 'ON THE WAY').toUpperCase().replace(/[ -]/g, ' ');
+      statusBadgeEl.textContent = rawSt;
+    }
+
+    const destAddrEl = document.getElementById('custTrackDestAddress');
+    if (destAddrEl) {
+      destAddrEl.textContent = ord.delivery_address || data.delivery_address || 'Western Leyte College, Ormoc City';
+    }
 
     // Update Distance / ETA text & badge (e.g. "500m away • ~3 mins")
     let dKm = (data.distance_km !== null && !isNaN(data.distance_km)) ? parseFloat(data.distance_km) : null;
