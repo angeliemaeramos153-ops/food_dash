@@ -2047,6 +2047,7 @@ let isManualSimulationActive = false;
 let autoDriveTimer = null;
 let autoDriveWaypoints = [];
 let autoDriveIndex = 0;
+const AUTO_DRIVE_INTERVAL_MS = 350;
 let isTapRelocateActive = false;
 let simHasTriggeredArrival = false;
 let liveBroadcastInterval = null;
@@ -2673,10 +2674,11 @@ function handleRiderPositionUpdate(lat, lng, source = 'gps', accuracy = null) {
     }
   }
 
-  // Post the updated coordinates to tracking_api.php
+  // Post the updated coordinates to backend API (api_order.php / tracking_api.php)
   const orderId = activeGpsOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
   if (orderId) {
-    sendRiderLocation(orderId, numLat, numLng);
+    const isSimMode = (source === 'simulation' || source === 'manual' || source === 'reset');
+    sendRiderLocation(orderId, numLat, numLng, isSimMode);
   }
 }
 
@@ -2854,20 +2856,42 @@ async function initDeliveryMap(data) {
 async function sendRiderLocation(orderId, lat, lng, isImmediate = false) {
   const now = Date.now();
   if (!isImmediate && (now - lastGpsBroadcastTimestamp < 800)) {
-    return; // Throttle dense auto-drive steps to ~800ms-1s for clean network telemetry
+    return; // Throttle dense hardware GPS steps
   }
   lastGpsBroadcastTimestamp = now;
   try {
-    const r = await fetch('tracking_api.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update_rider_location', order_id: orderId, lat: lat, lng: lng })
-    });
+    const payload = {
+      action: 'update_rider_location',
+      order_id: orderId,
+      lat: lat,
+      lng: lng,
+      current_lat: lat,
+      current_lng: lng,
+      is_simulation: isImmediate ? 1 : 0
+    };
+
+    // Primary: api_order.php with seamless tracking_api.php fallback
+    let r;
+    try {
+      r = await fetch('api_order.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!r.ok) throw new Error('Status ' + r.status);
+    } catch (errApi) {
+      r = await fetch('tracking_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
+
     const d = await r.json();
     const gpsStatusEl = document.getElementById('gpsStatus');
-    if (d.success) {
+    if (d && (d.success || d.status === 'ok')) {
       if (gpsStatusEl) {
-        const modeLabel = isManualSimulationActive ? 'Manual pin sharing' : 'Live GPS sharing';
+        const modeLabel = isImmediate ? 'PC Auto-Drive Simulation' : (isManualSimulationActive ? 'Manual pin sharing' : 'Live GPS sharing');
         gpsStatusEl.textContent = `${modeLabel} • ${lat.toFixed(5)}, ${lng.toFixed(5)}` + 
           (d.distance_km != null ? ` • ${(d.distance_km < 1 ? (d.distance_km * 1000).toFixed(0) + ' m' : d.distance_km.toFixed(2) + ' km')} from customer` : '');
       }

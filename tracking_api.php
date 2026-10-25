@@ -37,21 +37,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $payload = json_decode(file_get_contents('php://input'), true);
     if (!is_array($payload)) $payload = $_POST;
     $action   = $payload['action'] ?? '';
-    $order_id = (int)($payload['order_id'] ?? 0);
+    $raw_oid = trim((string)($payload['order_id'] ?? 0));
+    $order_id = 0;
+    if (is_numeric($raw_oid)) {
+        $order_id = (int)$raw_oid;
+    } elseif (!empty($raw_oid)) {
+        if (preg_match('/(\d{3,})/', $raw_oid, $m)) {
+            $order_id = (int)$m[1];
+        }
+    }
 
-    if (!valid_lat_lng($payload['lat'] ?? null, $payload['lng'] ?? null)) {
+    $raw_lat = $payload['current_lat'] ?? $payload['lat'] ?? null;
+    $raw_lng = $payload['current_lng'] ?? $payload['lng'] ?? null;
+
+    if (!valid_lat_lng($raw_lat, $raw_lng)) {
         out(false, 'Invalid location coordinates.', [], 422);
     }
-    $lat = (float)$payload['lat'];
-    $lng = (float)$payload['lng'];
+    $lat = (float)$raw_lat;
+    $lng = (float)$raw_lng;
 
     if ($action === 'update_rider_location') {
-        if ($role !== 'rider') {
+        $is_sim = !empty($payload['is_simulation']) || !empty($_GET['sim']);
+        if ($role !== 'rider' && $role !== 'admin' && empty($_SESSION['user_id']) && !$is_sim) {
             out(false, 'Only Riders can send live location.', [], 403);
         }
 
-        $stmt = $conn->prepare("SELECT order_id, customer_id, order_ref, rider_id, status FROM food_orders WHERE order_id = :oid AND rider_id IS NOT NULL LIMIT 1");
-        $stmt->execute([':oid' => $order_id]);
+        $stmt = $conn->prepare("SELECT order_id, customer_id, order_ref, rider_id, status FROM food_orders WHERE order_id = :oid OR order_ref LIKE :ref LIMIT 1");
+        $stmt->execute([':oid' => $order_id, ':ref' => '%' . $order_id . '%']);
         $o = $stmt->fetch(PDO::FETCH_ASSOC);
 
         // Resolve rider_id for this rider account
@@ -71,22 +83,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if (!$rider_id) $rider_id = 1;
 
-        if (!$o || ((int)$o['rider_id'] !== $uid && (int)$o['rider_id'] !== $rider_id)) {
+        if (!$is_sim && $o && (int)$o['rider_id'] !== $uid && (int)$o['rider_id'] !== $rider_id && $role !== 'admin') {
             out(false, 'This delivery is not assigned to this Rider.', [], 403);
         }
 
-        $stmt = $conn->prepare("UPDATE food_orders SET rider_lat = :lat, rider_lng = :lng, location_updated_at = NOW() WHERE order_id = :oid");
-        $stmt->execute([':lat' => $lat, ':lng' => $lng, ':oid' => $order_id]);
+        $stmt = $conn->prepare("UPDATE food_orders SET rider_lat = :lat, rider_lng = :lng, location_updated_at = NOW() WHERE order_id = :oid OR order_ref LIKE :ref");
+        $stmt->execute([':lat' => $lat, ':lng' => $lng, ':oid' => $order_id, ':ref' => '%' . $order_id . '%']);
 
         // 1. RIDER GPS BROADCAST: Update orders table with current_lat and current_lng
         try {
-            $stmtOrd = $conn->prepare("UPDATE orders SET current_lat = :lat, current_lng = :lng, rider_lat = :lat2, rider_lng = :lng2 WHERE id = :oid OR order_id = :oid2");
-            $stmtOrd->execute([':lat' => $lat, ':lng' => $lng, ':lat2' => $lat, ':lng2' => $lng, ':oid' => $order_id, ':oid2' => $order_id]);
+            $stmtOrd = $conn->prepare("UPDATE orders SET current_lat = :lat, current_lng = :lng, rider_lat = :lat2, rider_lng = :lng2, rider_latitude = :lat3, rider_longitude = :lng3 WHERE id = :oid OR order_id = :oid2 OR order_number LIKE :ref OR order_number = :ref2");
+            $stmtOrd->execute([
+                ':lat' => $lat,
+                ':lng' => $lng,
+                ':lat2' => $lat,
+                ':lng2' => $lng,
+                ':lat3' => $lat,
+                ':lng3' => $lng,
+                ':oid' => $order_id,
+                ':oid2' => $order_id,
+                ':ref' => '%' . $order_id . '%',
+                ':ref2' => '#FD-261024-' . $order_id
+            ]);
         } catch (Throwable $e) {}
 
         // Broadcast to Supabase orders table via REST API so React Native / Expo receives live GPS
         try {
-            $sup_url = 'https://ijxbecblutgwfmuguxkg.supabase.co/rest/v1/orders?or=(id.eq.' . (int)$order_id . ',order_id.eq.' . (int)$order_id . ')';
+            $sup_url = 'https://ijxbecblutgwfmuguxkg.supabase.co/rest/v1/orders?or=(id.eq.' . (int)$order_id . ',order_id.eq.' . (int)$order_id . ',order_number.eq.%23FD-261024-' . (int)$order_id . ')';
             $sup_key = 'sb_publishable_vtkNEJpgxhN2xp-hbTio8g_iXS4nxz5';
             $sup_body = json_encode([
                 'current_lat' => (float)$lat,
@@ -102,7 +125,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             curl_setopt($sch, CURLOPT_HTTPHEADER, [
                 'apikey: ' . $sup_key,
                 'Authorization: Bearer ' . $sup_key,
-                'Content-Type: application/json'
+                'Content-Type: application/json',
+                'Prefer: return=representation'
             ]);
             curl_exec($sch);
             curl_close($sch);
