@@ -628,7 +628,15 @@ if ($isApi) {
           $total_amount = (float)($ord['total_amount'] ?? $ord['total_price'] ?? 0);
           $created_date = !empty($ord['created_at']) ? date('M d, Y • g:i A', strtotime($ord['created_at'])) : 'Recent';
         ?>
-          <div class="order-card" id="order-card-<?= $oid ?>">
+          <div class="order-card order-row" id="order-card-<?= $oid ?>"
+               data-order-id="<?= $oid ?>"
+               data-order-ref="<?= htmlspecialchars($order_ref) ?>"
+               data-store-name="<?= htmlspecialchars($store_name) ?>"
+               data-items-summary="<?= htmlspecialchars($items_summary) ?>"
+               data-delivery-address="<?= htmlspecialchars($ord['delivery_address'] ?? '') ?>"
+               data-total-amount="<?= htmlspecialchars(number_format($total_amount, 2)) ?>"
+               data-status="<?= htmlspecialchars($norm_status) ?>"
+               onclick="if(window.openTrackingModal){openTrackingModal(<?= $oid ?>, { orderId: <?= $oid ?>, orderNum: '<?= htmlspecialchars(addslashes($order_ref)) ?>', storeName: '<?= htmlspecialchars(addslashes($store_name)) ?>', itemsSummary: '<?= htmlspecialchars(addslashes($items_summary)) ?>', deliveryAddress: '<?= htmlspecialchars(addslashes($ord['delivery_address'] ?? '')) ?>', totalAmount: '<?= htmlspecialchars(addslashes((string)$total_amount)) ?>', orderStatus: '<?= htmlspecialchars(addslashes($norm_status)) ?>' });}" style="cursor:pointer;" title="Tap to view live delivery tracking map">
             <div class="order-card-header">
               <div>
                 <div class="order-ref"><?= htmlspecialchars($order_ref) ?></div>
@@ -662,7 +670,7 @@ if ($isApi) {
 
               <?php if ($is_ontheway || $is_near || $is_arrived): ?>
                 <!-- b. Status 'on_delivery' / 'near_customer' / 'arrived': Show Live Track Rider & Received buttons -->
-                <a href="customer_dashboard.php?track=<?= $oid ?>" class="cust-track-btn" title="Open live rider GPS tracking">
+                <a href="customer_dashboard.php?track=<?= $oid ?>" class="cust-track-btn" onclick="if(window.openTrackingModal){event.preventDefault(); event.stopPropagation(); openTrackingModal(<?= $oid ?>, { orderId: <?= $oid ?>, orderNum: '<?= htmlspecialchars(addslashes($order_ref)) ?>', storeName: '<?= htmlspecialchars(addslashes($store_name)) ?>', itemsSummary: '<?= htmlspecialchars(addslashes($items_summary)) ?>', deliveryAddress: '<?= htmlspecialchars(addslashes($ord['delivery_address'] ?? '')) ?>', totalAmount: '<?= htmlspecialchars(addslashes((string)$total_amount)) ?>', orderStatus: '<?= htmlspecialchars(addslashes($norm_status)) ?>' }); return false;}" title="Open live rider GPS tracking">
                   <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
                 </a>
                 <button type="button" class="confirm-btn" onclick="confirmReceivedAction(<?= $oid ?>)">
