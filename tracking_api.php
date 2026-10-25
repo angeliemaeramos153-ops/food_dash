@@ -401,6 +401,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     $o = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$o) {
+        try {
+            $stmtOrd = $conn->prepare("SELECT 
+                ord.id AS order_id, ord.order_number AS order_ref, ord.user_id AS customer_id,
+                ord.delivery_address, ord.status, ord.store_lat, ord.store_lng,
+                ord.delivery_lat AS destination_lat, ord.delivery_lng AS destination_lng,
+                COALESCE(ord.current_lat, ord.rider_lat, 11.009035) AS rider_lat,
+                COALESCE(ord.current_lng, ord.rider_lng, 124.609394) AS rider_lng,
+                COALESCE(ord.rider_name, 'Alex Gonzaga') AS rider_name,
+                COALESCE(ord.rider_phone, '+63 917 555 0192') AS rider_phone,
+                COALESCE(ord.store_name, 'Partner Store') AS store_name
+            FROM orders ord
+            WHERE ord.id = :oid OR ord.order_id = :oid2
+            LIMIT 1");
+            $stmtOrd->execute([':oid' => $order_id, ':oid2' => $order_id]);
+            $o = $stmtOrd->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {}
+    }
+
+    if (!$o) {
         out(false, 'Order not found.', [], 404);
     }
 

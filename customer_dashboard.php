@@ -3061,7 +3061,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
           <span style="font-size:14px;">📍</span>
           <span style="font-size:9.5px; font-weight:800; color:#dc2626; text-transform:uppercase; letter-spacing:0.6px;">DELIVERY DESTINATION</span>
         </div>
-        <div id="custTrackDestAddress" style="font-size:13px; font-weight:700; color:#1e293b; line-height:1.35;">Western Leyte College, Ormoc City</div>
+        <div id="custTrackDestAddress" style="font-size:13px; font-weight:700; color:#1e293b; line-height:1.35;">Delivery Destination</div>
       </div>
 
       <!-- Rider Contact Card -->
@@ -5657,12 +5657,13 @@ function openTrackingModal(orderId, meta) {
     if (!payload.orderStatus && card.dataset.status) payload.orderStatus = card.dataset.status;
   }
 
-  // If inside Expo mobile app WebView, post message to native bridge
+  // If inside Expo mobile app WebView, post message to native bridge and do not open web modal
   if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
     payload.type = 'OPEN_TRACKING_MODAL';
     try {
       window.ReactNativeWebView.postMessage(JSON.stringify(payload));
     } catch(e) {}
+    return;
   }
 
   openCustomerTrackingModal(orderId || (payload && payload.orderId));
@@ -6014,7 +6015,7 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
 
     const destAddrEl = document.getElementById('custTrackDestAddress');
     if (destAddrEl) {
-      destAddrEl.textContent = ord.delivery_address || data.delivery_address || 'Western Leyte College, Ormoc City';
+      destAddrEl.textContent = ord.delivery_address || data.delivery_address || 'Delivery Destination';
     }
 
     // Update Distance / ETA text & badge (e.g. "500m away • ~3 mins")
