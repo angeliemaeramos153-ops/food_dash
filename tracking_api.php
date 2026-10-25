@@ -84,6 +84,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmtOrd->execute([':lat' => $lat, ':lng' => $lng, ':lat2' => $lat, ':lng2' => $lng, ':oid' => $order_id, ':oid2' => $order_id]);
         } catch (Throwable $e) {}
 
+        // Broadcast to Supabase orders table via REST API so React Native / Expo receives live GPS
+        try {
+            $sup_url = 'https://ijxbecblutgwfmuguxkg.supabase.co/rest/v1/orders?or=(id.eq.' . (int)$order_id . ',order_id.eq.' . (int)$order_id . ')';
+            $sup_key = 'sb_publishable_vtkNEJpgxhN2xp-hbTio8g_iXS4nxz5';
+            $sup_body = json_encode([
+                'current_lat' => (float)$lat,
+                'current_lng' => (float)$lng,
+                'rider_lat'   => (float)$lat,
+                'rider_lng'   => (float)$lng
+            ]);
+            $sch = curl_init($sup_url);
+            curl_setopt($sch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($sch, CURLOPT_POSTFIELDS, $sup_body);
+            curl_setopt($sch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($sch, CURLOPT_TIMEOUT, 2);
+            curl_setopt($sch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . $sup_key,
+                'Authorization: Bearer ' . $sup_key,
+                'Content-Type: application/json'
+            ]);
+            curl_exec($sch);
+            curl_close($sch);
+        } catch (Throwable $e) {}
+
         // 2. Insert into rider_locations table linked to order_id
         try {
             $stmtLoc = $conn->prepare("INSERT INTO rider_locations (order_id, rider_id, current_lat, current_lng, lat, lng, updated_at) VALUES (:oid, :rid, :lat, :lng, :lat2, :lng2, NOW())");
