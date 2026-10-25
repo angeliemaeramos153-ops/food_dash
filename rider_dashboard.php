@@ -274,6 +274,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                         }
                     } catch (Throwable $e) {}
 
+                    try {
+                        require_once __DIR__ . '/supabase_lib.php';
+                        sync_order_to_supabase($order_id, $conn);
+                    } catch (Throwable $e) {}
+
                     if (ob_get_level()) ob_clean();
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'message' => 'Order picked up! Status transitioned to On Delivery.', 'order_id' => $order_id]);
@@ -286,6 +291,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Rider is en route to customer');
                     create_notification($conn, $customer_id, 'rider_on_way', 'Rider On the Way', 'Rider ' . $user_name . ' is actively heading towards your delivery address.', $order_id);
 
+                    try {
+                        require_once __DIR__ . '/supabase_lib.php';
+                        sync_order_to_supabase($order_id, $conn);
+                    } catch (Throwable $e) {}
+
                     if (ob_get_level()) ob_clean();
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'message' => 'Customer notified that you are on the way.']);
@@ -297,6 +307,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Rider is near customer drop-off');
                     create_notification($conn, $customer_id, 'rider_near', 'Rider Arriving Soon', 'Your rider is near your delivery address. Please prepare to receive ' . $ref . '.', $order_id);
+
+                    try {
+                        require_once __DIR__ . '/supabase_lib.php';
+                        sync_order_to_supabase($order_id, $conn);
+                    } catch (Throwable $e) {}
 
                     if (ob_get_level()) ob_clean();
                     header('Content-Type: application/json; charset=utf-8');
@@ -331,6 +346,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     create_notification($conn, $customer_id, 'rider_arrived', 'Your rider has arrived!', $arrived_msg, $order_id);
                     notify_role($conn, 'admin', 'Rider Arrived at Destination', "Rider {$user_name} arrived at customer address for order {$ref}.", $order_id);
 
+                    try {
+                        require_once __DIR__ . '/supabase_lib.php';
+                        sync_order_to_supabase($order_id, $conn);
+                    } catch (Throwable $e) {}
+
                     if (ob_get_level()) ob_clean();
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'message' => 'Customer notified that you have arrived at destination!']);
@@ -357,6 +377,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     create_notification($conn, $customer_id, 'delivered', 'Order Delivered!', 'Your order ' . $ref . ' has been marked delivered. Enjoy your meal!', $order_id);
                     notify_role($conn, 'admin', 'Order Delivered - Ready for Settlement', 'Order ' . $ref . ' delivered by ' . $user_name . '. Awaiting audit reconciliation.', $order_id);
 
+                    try {
+                        require_once __DIR__ . '/supabase_lib.php';
+                        sync_order_to_supabase($order_id, $conn);
+                    } catch (Throwable $e) {}
+
                     // Add delivery confirmation chat message
                     try {
                         $chk_m = $conn->prepare("SELECT message_id FROM order_messages WHERE order_id = :oid AND message_text LIKE '%Order delivered successfully%' LIMIT 1");
@@ -382,6 +407,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                         try {
                             $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', rider_cleared = 1, cleared_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND (rider_id = :rid OR :rid = 0)")->execute([':oid' => $order_id, ':rid' => $rid]);
                             $conn->prepare("UPDATE orders SET status = 'delivered', rider_cleared = 1, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+                            require_once __DIR__ . '/supabase_lib.php';
+                            sync_order_to_supabase($order_id, $conn);
                         } catch (Throwable $e) {}
                     }
                     try {
@@ -805,7 +832,6 @@ if ($first_order) {
         'customer_lng' => $c_lng,
         'store_lat' => $s_lat,
         'store_lng' => $s_lng,
-        'id' => $c_lat,
         'rider_lat' => $r_lat,
         'rider_lng' => $r_lng,
         'is_initial_shop_origin' => $is_initial_shop_origin
@@ -2453,7 +2479,7 @@ async function resetRiderToStore() {
 }
 
 function getActiveCustomerCoord() {
-  const cLat = activeDeliveryData ? (activeDeliveryData.id ?? activeDeliveryData.customer_lat) : null;
+  const cLat = activeDeliveryData ? (activeDeliveryData.delivery_lat ?? activeDeliveryData.customer_lat) : null;
   const cLng = activeDeliveryData ? (activeDeliveryData.delivery_lng ?? activeDeliveryData.customer_lng) : null;
   if (cLat !== null && cLng !== null && !isNaN(cLat) && !isNaN(cLng) && Number(cLat) !== 0) {
     return [Number(cLat), Number(cLng)];
@@ -2686,7 +2712,7 @@ async function initDeliveryMap(data) {
     ? Number(data.customer_lat) 
     : ((data.delivery_lat !== null && !isNaN(data.delivery_lat) && Number(data.delivery_lat) !== 0) 
       ? Number(data.delivery_lat) 
-      : ((data.id !== null && !isNaN(data.id) && Number(data.id) <= 90 && Number(data.id) >= -90) ? Number(data.id) : null));
+      : null);
   const cLng = (data.customer_lng !== null && !isNaN(data.customer_lng) && Number(data.customer_lng) !== 0) 
     ? Number(data.customer_lng) 
     : ((data.delivery_lng !== null && !isNaN(data.delivery_lng) && Number(data.delivery_lng) !== 0) ? Number(data.delivery_lng) : null);

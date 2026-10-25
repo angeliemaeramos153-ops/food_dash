@@ -165,6 +165,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $delivery_fee = max(0, (float)($input['delivery_fee'] ?? 30.00));
         $delivery_address = trim((string)($input['delivery_address'] ?? $input['address'] ?? ''));
         $payment_method = trim((string)($input['payment_method'] ?? 'Cash on Delivery (COD)'));
+
+        $input_del_lat = isset($input['delivery_lat']) && is_numeric($input['delivery_lat']) ? (float)$input['delivery_lat'] : (isset($input['customer_lat']) && is_numeric($input['customer_lat']) ? (float)$input['customer_lat'] : null);
+        $input_del_lng = isset($input['delivery_lng']) && is_numeric($input['delivery_lng']) ? (float)$input['delivery_lng'] : (isset($input['customer_lng']) && is_numeric($input['customer_lng']) ? (float)$input['customer_lng'] : null);
+        if (($input_del_lat === null || $input_del_lng === null) && !empty($delivery_address)) {
+            if (file_exists(__DIR__ . '/geocode_lib.php')) {
+                require_once __DIR__ . '/geocode_lib.php';
+                $geo = geocode_address_fallback($delivery_address);
+                if ($geo && isset($geo['lat'], $geo['lng'])) {
+                    $input_del_lat = (float)$geo['lat'];
+                    $input_del_lng = (float)$geo['lng'];
+                }
+            }
+        }
         
         if (!is_array($cart_items) || empty($cart_items)) {
             api_response(['success' => false, 'message' => 'Your cart is empty.'], 400);
@@ -246,11 +259,11 @@ $stmt = $conn->prepare("
     INSERT INTO food_orders (
         shop_id, store_name, customer_id, customer_name, order_ref, 
         items_summary, subtotal, delivery_fee, total_amount, payment_method, 
-        status, delivery_status, order_type, delivery_address, created_at
+        status, delivery_status, order_type, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, created_at
     ) VALUES (
         :shop_id, :store_name, :customer_id, :customer_name, :order_ref, 
         :items_summary, :subtotal, :delivery_fee, :total_amount, :payment_method, 
-        'PENDING', 'waiting', 'Delivery', :delivery_address, NOW()
+        'PENDING', 'waiting', 'Delivery', :delivery_address, :dlat, :dlng, :clat, :clng, NOW()
     )
 ");
 $stmt->execute([
@@ -264,7 +277,11 @@ $stmt->execute([
     ':delivery_fee'     => $delivery_fee,
     ':total_amount'     => $total_amount,
     ':payment_method'   => $payment_method,
-    ':delivery_address' => $delivery_address
+    ':delivery_address' => $delivery_address,
+    ':dlat'             => $input_del_lat,
+    ':dlng'             => $input_del_lng,
+    ':clat'             => $input_del_lat,
+    ':clng'             => $input_del_lng
 ]);
 $new_order_id = (int)$conn->lastInsertId();
                 // Insert items into food_order_items
@@ -299,15 +316,21 @@ $new_order_id = (int)$conn->lastInsertId();
                         ':addr' => $delivery_address
                     ]);
                 } else {
-                    $ins_ord = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, shop_id, payment_method, created_at) " .
-                        "VALUES (:oid, :uid, 'Pending', :tot, :sid, :pm, NOW()) " .
-                        "ON DUPLICATE KEY UPDATE status='Pending', total_price=VALUES(total_price)");
+                    $ins_ord = $conn->prepare("INSERT INTO orders (order_id, user_id, status, total_price, shop_id, payment_method, order_number, delivery_address, delivery_lat, delivery_lng, store_name, items_summary, created_at) " .
+                        "VALUES (:oid, :uid, 'Pending', :tot, :sid, :pm, :onum, :addr, :dlat, :dlng, :store, :summary, NOW()) " .
+                        "ON DUPLICATE KEY UPDATE status='Pending', total_price=VALUES(total_price), delivery_address=VALUES(delivery_address), delivery_lat=VALUES(delivery_lat), delivery_lng=VALUES(delivery_lng)");
                     $ins_ord->execute([
-                        ':oid' => $new_order_id,
-                        ':uid' => $user_id,
-                        ':tot' => $total_amount,
-                        ':sid' => $shop_id,
-                        ':pm'  => $payment_method
+                        ':oid'     => $new_order_id,
+                        ':uid'     => $user_id,
+                        ':tot'     => $total_amount,
+                        ':sid'     => $shop_id,
+                        ':pm'      => $payment_method,
+                        ':onum'    => $unique_ref,
+                        ':addr'    => $delivery_address,
+                        ':dlat'    => $input_del_lat,
+                        ':dlng'    => $input_del_lng,
+                        ':store'   => $store_name,
+                        ':summary' => $items_summary
                     ]);
                 }
 
@@ -342,6 +365,12 @@ $new_order_id = (int)$conn->lastInsertId();
             }
             
             $conn->commit();
+            foreach ($created_orders as $co) {
+                try {
+                    require_once __DIR__ . '/supabase_lib.php';
+                    sync_order_to_supabase((int)$co['order_id'], $conn);
+                } catch (Throwable $e) {}
+            }
             api_response(['success' => true, 'message' => 'Orders placed successfully!', 'orders' => $created_orders]);
         } catch (Throwable $e) {
             if ($conn->inTransaction()) $conn->rollBack();
@@ -2732,7 +2761,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
       </div>
       <textarea id="deliveryAddressInput" class="delivery-textarea" placeholder="Enter complete delivery address (e.g. Unit/House No., Street, Brgy, City, Landmark)" rows="2"></textarea>
       <div id="gpsLocationStatus" class="gps-status-pill" style="display:none;"></div>
-      <input type="hidden" id="id" name="id" value="">
+      <input type="hidden" id="delivery_lat" name="delivery_lat" value="">
       <input type="hidden" id="delivery_lng" name="delivery_lng" value="">
       <input type="hidden" id="deliveryLatInput" value="">
       <input type="hidden" id="deliveryLngInput" value="">
@@ -3007,7 +3036,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
       </select>
     </div>
     
-    <input type="hidden" id="modal_delivery_lat" name="id" value="">
+    <input type="hidden" id="modal_delivery_lat" name="delivery_lat" value="">
     <input type="hidden" id="modal_delivery_lng" name="delivery_lng" value="">
     <input type="hidden" id="modalDeliveryLat" value="">
     <input type="hidden" id="modalDeliveryLng" value="">
@@ -4329,7 +4358,7 @@ function initCheckoutMap() {
         initialLng = currentCustomerLng;
         initialZoom = 17;
     } else {
-        const latEl = document.getElementById('id') || document.getElementById('deliveryLatInput') || document.getElementById('modal_delivery_lat');
+        const latEl = document.getElementById('delivery_lat') || document.getElementById('deliveryLatInput') || document.getElementById('modal_delivery_lat');
         const lngEl = document.getElementById('delivery_lng') || document.getElementById('deliveryLngInput') || document.getElementById('modal_delivery_lng');
         if (latEl && latEl.value && lngEl && lngEl.value) {
             const pLat = parseFloat(latEl.value);

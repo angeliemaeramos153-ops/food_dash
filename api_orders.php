@@ -176,10 +176,67 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
 
     $initial_status = ($payment_status === 'paid') ? 'PREPARING' : 'PENDING';
 
+    // Resolve dynamic delivery coordinates submitted or geocode arbitrary address
+    $delivery_lat = null;
+    $delivery_lng = null;
+    if (isset($payload['delivery_lat']) && is_numeric($payload['delivery_lat'])) {
+        $delivery_lat = (float)$payload['delivery_lat'];
+    } elseif (isset($payload['customer_lat']) && is_numeric($payload['customer_lat'])) {
+        $delivery_lat = (float)$payload['customer_lat'];
+    } elseif (isset($payload['lat']) && is_numeric($payload['lat'])) {
+        $delivery_lat = (float)$payload['lat'];
+    } elseif (!empty($payload['lat_lng'])) {
+        $parts = explode(',', (string)$payload['lat_lng']);
+        if (count($parts) === 2 && is_numeric(trim($parts[0])) && is_numeric(trim($parts[1]))) {
+            $delivery_lat = (float)trim($parts[0]);
+            $delivery_lng = (float)trim($parts[1]);
+        }
+    }
+    if ($delivery_lng === null) {
+        if (isset($payload['delivery_lng']) && is_numeric($payload['delivery_lng'])) {
+            $delivery_lng = (float)$payload['delivery_lng'];
+        } elseif (isset($payload['customer_lng']) && is_numeric($payload['customer_lng'])) {
+            $delivery_lng = (float)$payload['customer_lng'];
+        } elseif (isset($payload['lng']) && is_numeric($payload['lng'])) {
+            $delivery_lng = (float)$payload['lng'];
+        }
+    }
+
+    require_once __DIR__ . '/geocode_lib.php';
+    if (($delivery_lat === null || $delivery_lng === null) && !empty($delivery_address)) {
+        $geo = geocode_address_fallback($delivery_address);
+        if ($geo && isset($geo['lat'], $geo['lng']) && is_numeric($geo['lat']) && is_numeric($geo['lng'])) {
+            $delivery_lat = (float)$geo['lat'];
+            $delivery_lng = (float)$geo['lng'];
+        }
+    }
+
+    // Resolve store coordinates
+    $store_lat = null;
+    $store_lng = null;
+    if ($shop_id > 0) {
+        try {
+            $s_stmt = $conn->prepare("SELECT * FROM shops WHERE shop_id = :sid LIMIT 1");
+            $s_stmt->execute([':sid' => $shop_id]);
+            $s_row = $s_stmt->fetch(PDO::FETCH_ASSOC);
+            if ($s_row) {
+                $store_lat = isset($s_row['lat']) ? (float)$s_row['lat'] : (isset($s_row['latitude']) ? (float)$s_row['latitude'] : null);
+                $store_lng = isset($s_row['lng']) ? (float)$s_row['lng'] : (isset($s_row['longitude']) ? (float)$s_row['longitude'] : null);
+            }
+        } catch (Throwable $e) {}
+    }
+    if (($store_lat === null || $store_lng === null) && !empty($store_name)) {
+        $geo_s = geocode_address_fallback($store_name . ', Ormoc City');
+        if ($geo_s && isset($geo_s['lat'], $geo_s['lng'])) {
+            $store_lat = (float)$geo_s['lat'];
+            $store_lng = (float)$geo_s['lng'];
+        }
+    }
+
     try {
         $stmt = $conn->prepare("INSERT INTO food_orders " .
-            "(shop_id, customer_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, delivery_address, status, delivery_status, order_type, created_at) " .
-            "VALUES (:shop_id, :cust_id, :cust_name, :ref, :store, :summary, :subtotal, :fee, :total, :pm, :address, :status, 'waiting', 'Delivery', NOW())"
+            "(shop_id, customer_id, customer_name, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, store_lat, store_lng, status, delivery_status, order_type, created_at) " .
+            "VALUES (:shop_id, :cust_id, :cust_name, :ref, :store, :summary, :subtotal, :fee, :total, :pm, :address, :dlat, :dlng, :clat, :clng, :slat, :slng, :status, 'waiting', 'Delivery', NOW())"
         );
 
         $stmt->execute([
@@ -194,6 +251,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
             ':total'     => $total,
             ':pm'        => $payment_method,
             ':address'   => $delivery_address,
+            ':dlat'      => $delivery_lat,
+            ':dlng'      => $delivery_lng,
+            ':clat'      => $delivery_lat,
+            ':clng'      => $delivery_lng,
+            ':slat'      => $store_lat,
+            ':slng'      => $store_lng,
             ':status'    => $initial_status
         ]);
 
@@ -226,9 +289,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
             $is_pgsql = ($conn->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql');
             if ($is_pgsql) {
                 $orders_sql = "INSERT INTO orders " .
-                    "(id, order_id, order_number, user_id, status, total_amount, payment_method, delivery_address, created_at) " .
-                    "VALUES (:id, :oid, :onum, :uid, 'pending', :total, :pm, :addr, NOW()) " .
-                    "ON CONFLICT (id) DO UPDATE SET total_amount = EXCLUDED.total_amount, order_number = EXCLUDED.order_number, payment_method = EXCLUDED.payment_method";
+                    "(id, order_id, order_number, user_id, status, total_amount, payment_method, delivery_address, delivery_lat, delivery_lng, created_at) " .
+                    "VALUES (:id, :oid, :onum, :uid, 'pending', :total, :pm, :addr, :dlat, :dlng, NOW()) " .
+                    "ON CONFLICT (id) DO UPDATE SET total_amount = EXCLUDED.total_amount, order_number = EXCLUDED.order_number, payment_method = EXCLUDED.payment_method, delivery_address = EXCLUDED.delivery_address, delivery_lat = EXCLUDED.delivery_lat, delivery_lng = EXCLUDED.delivery_lng";
                 $orders_stmt = $conn->prepare($orders_sql);
                 $orders_stmt->execute([
                     ':id'    => $order_id,
@@ -237,21 +300,31 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
                     ':uid'   => $user_id,
                     ':total' => $total,
                     ':pm'    => $payment_method,
-                    ':addr'  => $delivery_address
+                    ':addr'  => $delivery_address,
+                    ':dlat'  => $delivery_lat,
+                    ':dlng'  => $delivery_lng
                 ]);
             } else {
                 $orders_sql = "INSERT INTO orders " .
-                    "(order_id, user_id, status, total_price, payment_method, shop_id, created_at) " .
-                    "VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, NOW()) " .
+                    "(order_id, user_id, status, total_price, payment_method, shop_id, order_number, delivery_address, delivery_lat, delivery_lng, store_name, store_lat, store_lng, items_summary, created_at) " .
+                    "VALUES (:oid, :uid, 'pending', :total, :pm, :shop_id, :onum, :addr, :dlat, :dlng, :store, :slat, :slng, :summary, NOW()) " .
                     "ON DUPLICATE KEY UPDATE " .
-                    "payment_method = VALUES(payment_method), total_price = VALUES(total_price)";
+                    "payment_method = VALUES(payment_method), total_price = VALUES(total_price), delivery_address = VALUES(delivery_address), delivery_lat = VALUES(delivery_lat), delivery_lng = VALUES(delivery_lng)";
                 $orders_stmt = $conn->prepare($orders_sql);
                 $orders_stmt->execute([
                     ':oid'     => $order_id,
                     ':uid'     => $user_id,
                     ':total'   => $total,
                     ':pm'      => $payment_method,
-                    ':shop_id' => $shop_id
+                    ':shop_id' => $shop_id,
+                    ':onum'    => $order_ref,
+                    ':addr'    => $delivery_address,
+                    ':dlat'    => $delivery_lat,
+                    ':dlng'    => $delivery_lng,
+                    ':store'   => $store_name,
+                    ':slat'    => $store_lat,
+                    ':slng'    => $store_lng,
+                    ':summary' => $items_summary
                 ]);
             }
         } catch (Throwable $e) {}
@@ -284,6 +357,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
                 ':txid'    => strtoupper(preg_replace('/[^a-zA-Z0-9]/', '', $payment_method)) . "-{$today_ymd}-{$rand_num}"
             ]);
         } catch (Throwable $e) {}
+
+        // Realtime Cloud Synchronization: Push exact order, items, and coordinates to Supabase
+        try {
+            require_once __DIR__ . '/supabase_lib.php';
+            sync_order_to_supabase($order_id, $conn);
+        } catch (Throwable $e) {
+            error_log('Supabase sync trigger error: ' . $e->getMessage());
+        }
 
         echo json_encode([
             'success'      => true,

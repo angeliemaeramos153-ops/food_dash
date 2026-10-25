@@ -148,6 +148,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($changed > 0) {
                         try {
                             $conn->prepare("UPDATE orders SET status = 'arrived', arrived_notified_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+                            require_once __DIR__ . '/supabase_lib.php';
+                            sync_order_to_supabase($order_id, $conn);
                         } catch (Throwable $e) {}
 
                         // Resolve rider first name
