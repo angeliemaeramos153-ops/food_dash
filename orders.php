@@ -27,16 +27,16 @@ $isApi = (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST')
     || (isset($_SERVER['CONTENT_TYPE']) && strpos($_SERVER['CONTENT_TYPE'], 'application/json') !== false);
 
 // 1. STRICT ACCOUNT-SPECIFIC ORDER SCOPING:
-// Query strictly scopes to logged-in customer (or demo accounts):
-$scope_orders = "(customer_id = ?)";
+// Query strictly scopes to logged-in customer (matching customer_id or user_id):
+$scope_orders = "(customer_id = ? OR user_id = ?)";
 $stmt = $conn->prepare("SELECT * FROM orders WHERE {$scope_orders} ORDER BY created_at DESC");
-$stmt->execute([$user_id]);
+$stmt->execute([$user_id, $user_id]);
 $raw_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Also fetch corresponding details from food_orders table for complete item/store details
-$scope_food = "(customer_id = ?)";
+$scope_food = "(customer_id = ? OR user_id = ?)";
 $f_stmt = $conn->prepare("SELECT * FROM food_orders WHERE {$scope_food} ORDER BY order_id DESC");
-$f_stmt->execute([$user_id]);
+$f_stmt->execute([$user_id, $user_id]);
 $food_orders_raw = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
 $fo_map = [];
 foreach ($food_orders_raw as $fo) {

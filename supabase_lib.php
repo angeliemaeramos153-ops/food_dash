@@ -71,7 +71,28 @@ if (!function_exists('sync_order_to_supabase')) {
                 default => $raw_st
             };
 
-            $total_amount = (float)($ord['total_amount'] ?? 0);
+            $total_amount = (float)($ord['total_amount'] ?? $ord['total_price'] ?? 0);
+            if ($total_amount <= 0) {
+                try {
+                    $t_stmt = $conn->prepare("SELECT COALESCE(SUM(line_total), 0) FROM food_order_items WHERE order_id = :oid");
+                    $t_stmt->execute([':oid' => $order_id]);
+                    $items_sum = (float)$t_stmt->fetchColumn();
+                    $fee = (float)($ord['delivery_fee'] ?? 30.00);
+                    if ($items_sum > 0) {
+                        $total_amount = round($items_sum + $fee, 2);
+                    }
+                } catch (Throwable $e) {}
+            }
+
+            $del_address = trim((string)($ord['delivery_address'] ?? ''));
+            if ($del_address === '') {
+                try {
+                    $o_stmt = $conn->prepare("SELECT delivery_address FROM orders WHERE order_id = :oid OR id = :oid2 LIMIT 1");
+                    $o_stmt->execute([':oid' => $order_id, ':oid2' => $order_id]);
+                    $del_address = trim((string)($o_stmt->fetchColumn() ?: ''));
+                } catch (Throwable $e) {}
+            }
+
             $order_ref = $ord['order_ref'] ?? ('#FD-' . $order_id);
             $rider_name = $ord['assigned_rider_name'] ?? ($ord['rider_name'] ?? null);
             $rider_phone = $ord['assigned_rider_phone'] ?? ($ord['rider_phone'] ?? null);
@@ -95,11 +116,11 @@ if (!function_exists('sync_order_to_supabase')) {
             $order_payload = [
                 'order_number'        => $order_ref,
                 'order_id'            => $order_id,
-                'user_id'             => (int)($ord['customer_id'] ?? 0),
+                'user_id'             => (int)($ord['customer_id'] ?? $ord['user_id'] ?? 0),
                 'store_id'            => (int)($ord['shop_id'] ?? 0),
                 'status'              => $status_map,
                 'payment_method'      => $ord['payment_method'] ?? 'Cash on Delivery (COD)',
-                'delivery_address'    => $ord['delivery_address'] ?? '',
+                'delivery_address'    => $del_address,
                 'total_amount'        => $total_amount,
                 'payment_status'      => $ord['payment_status'] ?? 'pending',
                 'order_status'        => $status_map

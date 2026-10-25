@@ -94,6 +94,8 @@ if ($action === 'cancel_order' || $action === 'cancel') {
 
         try {
             $conn->prepare("UPDATE orders SET status = 'Cancelled' WHERE order_id = :oid")->execute([':oid' => $order_id]);
+            require_once __DIR__ . '/supabase_lib.php';
+            sync_order_to_supabase($order_id, $conn);
         } catch (Throwable $e) {}
 
         // b. Post an entry to the order status history/timeline (order_audit_logs)
