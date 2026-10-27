@@ -5697,6 +5697,10 @@ function openTrackingModal(orderId, meta) {
     if (!payload.orderStatus && card.dataset.status) payload.orderStatus = card.dataset.status;
     if (!payload.deliveryLat && card.dataset.deliveryLat) payload.deliveryLat = card.dataset.deliveryLat;
     if (!payload.deliveryLng && card.dataset.deliveryLng) payload.deliveryLng = card.dataset.deliveryLng;
+    if (!payload.destinationLat && (card.dataset.destinationLat || card.dataset.deliveryLat)) payload.destinationLat = card.dataset.destinationLat || card.dataset.deliveryLat;
+    if (!payload.destinationLng && (card.dataset.destinationLng || card.dataset.deliveryLng)) payload.destinationLng = card.dataset.destinationLng || card.dataset.deliveryLng;
+    if (!payload.currentLat && (card.dataset.currentLat || card.dataset.riderLat)) payload.currentLat = card.dataset.currentLat || card.dataset.riderLat;
+    if (!payload.currentLng && (card.dataset.currentLng || card.dataset.riderLng)) payload.currentLng = card.dataset.currentLng || card.dataset.riderLng;
     if (!payload.riderName && card.dataset.riderName) payload.riderName = card.dataset.riderName;
     if (!payload.riderPhone && card.dataset.riderPhone) payload.riderPhone = card.dataset.riderPhone;
   }
