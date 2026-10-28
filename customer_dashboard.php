@@ -739,26 +739,16 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
 .icon-btn{width:34px;height:34px;border:1px solid var(--line);border-radius:50%;background:white;color:var(--olive);display:grid;place-items:center;position:relative}
 .avatar{width:34px;height:34px;border-radius:50%;background:#e8dfc0;display:grid;place-items:center;color:var(--olive-dark);font-weight:700;font-size:12px}
 
-/* Notification Banner */
-.notice-bar{
-  background: linear-gradient(90deg, #344016, #4f5d21);
-  color: #fff;
-  padding: 10px 14px;
-  border-radius: 12px;
-  margin: 10px 12px 0;
-  width: calc(100% - 24px) !important;
-  max-width: calc(100% - 24px) !important;
-  box-sizing: border-box !important;
-  font-size: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-shadow: 0 4px 12px rgba(52,64,22,0.18);
-  animation: pulse 2s infinite alternate;
+/* Notification Banner - Permanently Removed */
+.notice-bar, #dynamicOnTheWayBanner {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
 }
-@keyframes pulse { from { opacity:0.92; } to { opacity:1; transform: scale(1.01); } }
-.notice-bar span { display: flex; align-items: center; gap: 6px; }
-.notice-bar button { background: var(--gold); border: 0; color: #fff; padding: 4px 10px; border-radius: 8px; font-weight:700; font-size: 9px; }
 
 .screen{display:none;padding:14px 16px 90px;flex:1}
 .screen.active{display:block}
@@ -2605,30 +2595,6 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
   </div>
 </header>
 
-<?php if ($ontheway_count > 0 && !empty($active_tracking_order)): ?>
-<div class="notice-bar" id="dynamicOnTheWayBanner" 
-     data-order-id="<?= (int)$active_tracking_order['order_id'] ?>"
-     data-order-ref="<?= htmlspecialchars($active_tracking_order['order_ref']) ?>"
-     data-store-name="<?= htmlspecialchars($active_tracking_order['store_name']) ?>"
-     data-items-summary="<?= htmlspecialchars($active_tracking_order['items_summary']) ?>"
-     data-delivery-address="<?= htmlspecialchars($active_tracking_order['delivery_address'] ?? '') ?>"
-     data-total-amount="<?= htmlspecialchars((string)$active_tracking_order['total_amount']) ?>"
-     data-status="<?= htmlspecialchars($active_tracking_order['status']) ?>"
-     onclick="openTrackingModal(<?= (int)$active_tracking_order['order_id'] ?>, { orderId: <?= (int)$active_tracking_order['order_id'] ?>, orderNum: '<?= htmlspecialchars(addslashes($active_tracking_order['order_ref'])) ?>', storeName: '<?= htmlspecialchars(addslashes($active_tracking_order['store_name'])) ?>', itemsSummary: '<?= htmlspecialchars(addslashes($active_tracking_order['items_summary'])) ?>', deliveryAddress: '<?= htmlspecialchars(addslashes($active_tracking_order['delivery_address'] ?? '')) ?>', totalAmount: '<?= htmlspecialchars(addslashes((string)$active_tracking_order['total_amount'])) ?>', orderStatus: '<?= htmlspecialchars(addslashes($active_tracking_order['status'])) ?>' })" style="cursor:pointer;" title="Tap to view real-time delivery GPS">
-  <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food! (<?= htmlspecialchars($active_tracking_order['order_ref']) ?>)</span>
-  <button type="button" onclick="event.stopPropagation(); openTrackingModal(<?= (int)$active_tracking_order['order_id'] ?>, { orderId: <?= (int)$active_tracking_order['order_id'] ?>, orderNum: '<?= htmlspecialchars(addslashes($active_tracking_order['order_ref'])) ?>', storeName: '<?= htmlspecialchars(addslashes($active_tracking_order['store_name'])) ?>', itemsSummary: '<?= htmlspecialchars(addslashes($active_tracking_order['items_summary'])) ?>', deliveryAddress: '<?= htmlspecialchars(addslashes($active_tracking_order['delivery_address'] ?? '')) ?>', totalAmount: '<?= htmlspecialchars(addslashes((string)$active_tracking_order['total_amount'])) ?>', orderStatus: '<?= htmlspecialchars(addslashes($active_tracking_order['status'])) ?>' })">View</button>
-</div>
-<?php elseif ($ontheway_count > 0): ?>
-<div class="notice-bar" id="dynamicOnTheWayBanner" onclick="showScreen('orders')" style="cursor:pointer;">
-  <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!</span>
-  <button type="button" onclick="showScreen('orders')">View</button>
-</div>
-<?php else: ?>
-<div class="notice-bar" id="dynamicOnTheWayBanner" style="display:none; cursor:pointer;" onclick="openCustomerTrackingModal(activeCustomerTrackingOrderId || 0)">
-  <span><i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!</span>
-  <button type="button" onclick="event.stopPropagation(); openCustomerTrackingModal(activeCustomerTrackingOrderId || 0)">View</button>
-</div>
-<?php endif; ?>
 
 <section id="home" class="screen active">
   <div class="greeting"><small>Good Morning,</small><h1><?php echo htmlspecialchars($full_name); ?>!</h1></div>
@@ -4818,20 +4784,11 @@ async function loadCustomerOrdersLive() {
       }
     });
 
-    // Update the on-the-way notice banner dynamically
+    // Top banner removed per UX specifications
     const banner = document.getElementById('dynamicOnTheWayBanner');
     if (banner) {
-      if (activeDeliveryOrder) {
-        banner.style.display = 'flex';
-        const targetId = activeDeliveryOrder.order_id || activeDeliveryOrder.id;
-        banner.onclick = () => openCustomerTrackingModal(targetId);
-        const span = banner.querySelector('span');
-        if (span) {
-          span.innerHTML = `<i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food! (${escapeCustHtml(activeDeliveryOrder.order_ref)})`;
-        }
-      } else {
-        banner.style.display = 'none';
-      }
+      banner.style.display = 'none';
+      banner.remove();
     }
 
     if (orders.length === 0) {
@@ -7013,17 +6970,11 @@ async function pollCustomerCommunicationUpdates() {
         }
       }
 
-      // Restore / display persistent top banner
+      // Persistent top banner removed per UX specifications
       const topBanner = document.getElementById('dynamicOnTheWayBanner');
       if (topBanner) {
-        topBanner.style.display = 'flex';
-        topBanner.onclick = () => openCustomerTrackingModal(oId);
-        const span = topBanner.querySelector('span');
-        if (span) {
-          const cleanBannerRef = data.order_ref ? ('#' + String(data.order_ref).replace(/^#+/, '')) : '';
-          const refText = cleanBannerRef ? ` (${escapeCustHtml(cleanBannerRef)})` : '';
-          span.innerHTML = `<i class="fa-solid fa-motorcycle fa-beat" style="color:var(--harvest-sun)"></i> Rider is on the way with your food!${refText}`;
-        }
+        topBanner.style.display = 'none';
+        topBanner.remove();
       }
     }
 
@@ -7035,7 +6986,10 @@ async function pollCustomerCommunicationUpdates() {
         tag.textContent = 'Delivered';
       }
       const topBanner = document.getElementById('dynamicOnTheWayBanner');
-      if (topBanner) topBanner.style.display = 'none';
+      if (topBanner) {
+        topBanner.style.display = 'none';
+        topBanner.remove();
+      }
     }
   } catch (e) {
     console.warn('Customer global poll error:', e);

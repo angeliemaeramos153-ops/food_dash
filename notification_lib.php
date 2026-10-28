@@ -182,20 +182,22 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
     if ($order_id <= 0) return false;
 
     try {
-        // 1. Dynamic Database Query: Fetch order details from food_orders, users, shops, and stores tables
+        // 1. Dynamic Database Query: Fetch order details from food_orders, users, shops, stores, and riders
         $stmt = $conn->prepare("
             SELECT 
                 fo.order_id, fo.order_ref, fo.customer_id, fo.user_id, fo.customer_name, fo.store_name, 
-                fo.delivery_address, fo.total_amount, fo.payment_method, fo.rider_id, fo.shop_id,
+                fo.delivery_address, fo.total_amount, fo.delivery_fee, fo.payment_method, fo.rider_id, fo.shop_id,
                 COALESCE(NULLIF(TRIM(fo.customer_name), ''), u.full_name) AS dynamic_customer_name,
                 COALESCE(st.store_name, st.name, s.shop_name, fo.store_name) AS dynamic_store_name,
-                COALESCE(r.rider_name, 'Alex Gonzaga') AS assigned_rider_name,
-                COALESCE(r.user_id, 17) AS rider_user_id
+                r.rider_name,
+                r.user_id AS rider_user_id,
+                ru.full_name AS rider_user_fullname
             FROM food_orders fo
-            LEFT JOIN users u ON fo.customer_id = u.user_id
+            LEFT JOIN users u ON (fo.customer_id = u.user_id OR fo.user_id = u.user_id)
             LEFT JOIN shops s ON fo.shop_id = s.shop_id
             LEFT JOIN stores st ON (fo.shop_id = st.shop_id OR fo.shop_id = st.id)
-            LEFT JOIN riders r ON fo.rider_id = r.rider_id
+            LEFT JOIN riders r ON (fo.rider_id = r.rider_id OR fo.rider_id = r.user_id)
+            LEFT JOIN users ru ON (r.user_id = ru.user_id OR fo.rider_id = ru.user_id)
             WHERE fo.order_id = :oid
             LIMIT 1
         ");
@@ -212,15 +214,18 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
                         COALESCE(NULLIF(TRIM(o.customer_name), ''), u.full_name, '') AS dynamic_customer_name,
                         COALESCE(st.store_name, st.name, s.shop_name, o.store_name, 'Partner Store') AS dynamic_store_name, 
                         o.delivery_address, 
-                        o.total_price AS total_amount, 
+                        COALESCE(o.total_amount, o.total_price, 0) AS total_amount, 
                         o.payment_method, 
                         o.rider_id, 
-                        COALESCE(o.rider_name, 'Alex Gonzaga') AS assigned_rider_name, 
-                        17 AS rider_user_id 
+                        r.rider_name, 
+                        r.user_id AS rider_user_id,
+                        ru.full_name AS rider_user_fullname
                     FROM orders o 
                     LEFT JOIN users u ON o.user_id = u.user_id
                     LEFT JOIN shops s ON (o.store_id = s.shop_id OR o.shop_id = s.shop_id) 
                     LEFT JOIN stores st ON (o.store_id = s.shop_id OR o.store_id = st.id)
+                    LEFT JOIN riders r ON (o.rider_id = r.rider_id OR o.rider_id = r.user_id)
+                    LEFT JOIN users ru ON (r.user_id = ru.user_id OR o.rider_id = ru.user_id)
                     WHERE o.id = :oid OR o.order_id = :oid2 
                     LIMIT 1
                 ");
@@ -237,15 +242,7 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
             return true; // Already dispatched
         }
 
-        // 3. Dynamically resolve Customer Name from database row
-        $raw_cust = trim((string)($order['dynamic_customer_name'] ?: ($order['customer_name'] ?? '')));
-        $customer_name = (!empty($raw_cust) && strtolower($raw_cust) !== 'customer') ? $raw_cust : '';
-
-        // 4. Dynamically resolve Store Name from database row
-        $raw_store = trim((string)($order['dynamic_store_name'] ?: ($order['store_name'] ?: 'Store')));
-        $store_name = (!empty($raw_store) && strtolower($raw_store) !== 'store' && strtolower($raw_store) !== 'partner store') ? $raw_store : '';
-
-        // 5. Dynamically calculate Real Total Amount from database row
+        // 3. Dynamically calculate Real Total Amount from database row & order items
         $total_val = (float)($order['total_amount'] ?: ($order['ord_total_amount'] ?? 0));
         if ($total_val <= 0) {
             try {
@@ -257,39 +254,34 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
                     $item_sum_stmt2->execute([':oid' => $order_id]);
                     $sum = (float)$item_sum_stmt2->fetchColumn();
                 }
-                if ($sum > 0) $total_val = $sum + 30.00;
+                $delivery_fee_val = isset($order['delivery_fee']) ? (float)$order['delivery_fee'] : 30.00;
+                if ($sum > 0) $total_val = $sum + $delivery_fee_val;
             } catch (Throwable $e) {}
         }
-        $formatted_amount = number_format($total_val > 0 ? $total_val : 327.00, 2);
+        $formatted_amount = number_format($total_val, 2);
 
-        // 6. Resolve Payment Method dynamically
-        $raw_pm = trim((string)($order['payment_method'] ?: ($order['ord_payment_method'] ?? 'COD')));
-        $pm_brand = 'COD';
-        if (stripos($raw_pm, 'gcash') !== false) {
-            $pm_brand = 'GCash';
-        } elseif (stripos($raw_pm, 'maya') !== false) {
-            $pm_brand = 'Maya';
-        } elseif (stripos($raw_pm, 'gotyme') !== false) {
-            $pm_brand = 'GoTyme';
-        } elseif (stripos($raw_pm, 'apple') !== false) {
-            $pm_brand = 'Apple Pay';
-        } elseif (stripos($raw_pm, 'cod') !== false || stripos($raw_pm, 'delivery') !== false || strtolower(trim($raw_pm)) === 'cash') {
-            $pm_brand = 'COD';
-        } elseif (!empty($raw_pm)) {
-            $pm_brand = $raw_pm;
+        // 4. Construct exact automated text-style chat message
+        $auto_msg = "Hi! Your order has been picked up by the rider and is now on the way. Total amount due: ₱{$formatted_amount}.";
+
+        // 5. Resolve sender and receiver IDs dynamically
+        $r_name = !empty($sender_name) ? trim($sender_name) : '';
+        if (empty($r_name) && !empty($order['rider_name'])) {
+            $r_name = trim($order['rider_name']);
+        }
+        if (empty($r_name) && !empty($order['rider_user_fullname'])) {
+            $r_name = trim($order['rider_user_fullname']);
+        }
+        if (empty($r_name)) {
+            $r_name = 'Rider';
         }
 
-        // 7. Construct dynamic live chat message
-        $greeting = !empty($customer_name) ? "Hi {$customer_name}!" : "Hi!";
-        $store_phrase = !empty($store_name) ? " from {$store_name}" : "";
-        $auto_msg = "{$greeting} Your order{$store_phrase} has been picked up by the rider and is now on the way. Total amount due: ₱{$formatted_amount} ({$pm_brand}).";
+        $r_uid = ($sender_id !== null && $sender_id > 0) 
+            ? $sender_id 
+            : (int)($order['rider_user_id'] ?: ($order['rider_id'] ?: 0));
 
-        // 8. Resolve sender and receiver IDs
-        $r_name = !empty($sender_name) ? $sender_name : ($order['assigned_rider_name'] ?: 'Alex Gonzaga');
-        $r_uid = ($sender_id !== null && $sender_id > 0) ? $sender_id : (int)($order['rider_user_id'] ?: 17);
-        $cust_uid = (int)($order['customer_id'] ?: ($order['user_id'] ?? 26));
+        $cust_uid = (int)($order['customer_id'] ?: ($order['user_id'] ?? 0));
 
-        // 9. Insert into MySQL order_messages
+        // 6. Insert into MySQL order_messages table
         $ins = $conn->prepare("
             INSERT INTO order_messages (order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at)
             VALUES (:oid, 'rider', :uid, :rec, :name, :txt, NOW())
@@ -302,7 +294,7 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
             ':txt'  => $auto_msg
         ]);
 
-        // 10. Mirror into Supabase order_messages Cloud chat log
+        // 7. Mirror into Supabase order_messages Cloud chat log
         try {
             $sup_base = 'https://ijxbecblutgwfmuguxkg.supabase.co/rest/v1';
             $sup_key = 'sb_publishable_vtkNEJpgxhN2xp-hbTio8g_iXS4nxz5';
@@ -331,13 +323,14 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
             curl_close($sch);
         } catch (Throwable $e) {}
 
-        // 11. Dispatch in-app notification to the customer
+        // 8. Dispatch in-app notification to the customer
         if ($cust_uid > 0) {
+            $notif_title = 'Message from Rider (' . $r_name . ')';
             create_notification(
                 $conn,
                 $cust_uid,
                 'rider_message',
-                'Message from Rider (' . $r_name . ')' . (!empty($store_name) ? ' - ' . $store_name : ''),
+                $notif_title,
                 $auto_msg,
                 $order_id
             );
