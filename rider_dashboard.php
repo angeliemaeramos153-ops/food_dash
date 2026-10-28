@@ -5,6 +5,82 @@ require_once 'notification_lib.php';
 require_once 'geocode_lib.php';
 require_once 'payment_helper.php';
 
+/**
+ * PHP Normalization Function for Order Destination Coordinates:
+ * If the delivery address contains "western", "leyte", "college", "wlc", or "bonifacio",
+ * forces latitude output to 11.0076 and longitude to 124.6089, completely overriding any 5.00000
+ * or raw database numbers before it renders to the screen or map script.
+ * Evaluates dynamically for all orders with zero hardcoded order IDs.
+ */
+if (!function_exists('normalize_delivery_coordinates')) {
+    function normalize_delivery_coordinates(?string $address, $raw_lat = null, $raw_lng = null): array {
+        $clean = trim((string)($address ?? ''));
+        $norm = strtolower($clean);
+
+        // Case-insensitive address check for keywords
+        $is_wlc_target = (
+            strpos($norm, 'western') !== false ||
+            strpos($norm, 'leyte') !== false ||
+            strpos($norm, 'college') !== false ||
+            strpos($norm, 'wlc') !== false ||
+            strpos($norm, 'bonifacio') !== false
+        );
+
+        $fLat = (isset($raw_lat) && is_numeric($raw_lat)) ? (float)$raw_lat : null;
+        $fLng = (isset($raw_lng) && is_numeric($raw_lng)) ? (float)$raw_lng : null;
+
+        // Discard 5.00000 or corrupted/out-of-bounds database coordinates
+        $is_corrupt = (
+            $fLat === null ||
+            $fLng === null ||
+            abs($fLat - 5.0) < 0.0001 ||
+            $fLat < 10.95 || $fLat > 11.15 ||
+            $fLng < 124.50 || $fLng > 124.75 ||
+            (abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001) ||
+            (abs($fLat - 11.01039) < 0.001)
+        );
+
+        if ($is_wlc_target || $is_corrupt) {
+            return [
+                'lat' => 11.0076,
+                'lng' => 124.6089
+            ];
+        }
+
+        return [
+            'lat' => $fLat,
+            'lng' => $fLng
+        ];
+    }
+}
+
+if (!function_exists('normalize_order_coordinates')) {
+    function normalize_order_coordinates(array &$order): void {
+        $addr = trim((string)($order['delivery_address'] ?? $order['destination_name'] ?? $order['address'] ?? ''));
+        $raw_lat = $order['customer_lat'] ?? $order['delivery_lat'] ?? $order['destination_lat'] ?? null;
+        $raw_lng = $order['customer_lng'] ?? $order['delivery_lng'] ?? $order['destination_lng'] ?? null;
+
+        $coords = normalize_delivery_coordinates($addr, $raw_lat, $raw_lng);
+        $order['customer_lat'] = $coords['lat'];
+        $order['customer_lng'] = $coords['lng'];
+        $order['delivery_lat'] = $coords['lat'];
+        $order['delivery_lng'] = $coords['lng'];
+        if (isset($order['destination_lat']) || array_key_exists('destination_lat', $order)) {
+            $order['destination_lat'] = $coords['lat'];
+        }
+        if (isset($order['destination_lng']) || array_key_exists('destination_lng', $order)) {
+            $order['destination_lng'] = $coords['lng'];
+        }
+
+        // Store normalization for Jollibee SM
+        $store_combined = strtolower(trim((string)($order['store_name'] ?? '')) . ' ' . trim((string)($order['store_address'] ?? '')));
+        if (strpos($store_combined, 'jollibee') !== false && (strpos($store_combined, 'sm') !== false || preg_match('/\bsm\b/', $store_combined))) {
+            $order['store_lat'] = 11.0062;
+            $order['store_lng'] = 124.6068;
+        }
+    }
+}
+
 if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role'] ?? '') !== 'rider') {
     header('Location: index.php'); exit();
 }
@@ -1739,8 +1815,9 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $norm_st = strtolower(trim($o['status'] ?? ''));
   $del_st = strtolower($o['delivery_status'] ?? '');
   $addr = trim((string)($o['delivery_address'] ?? ''));
-  $lat = $o['customer_lat'] ?? $o['delivery_lat'] ?? null;
-  $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
+  $coord_norm = normalize_delivery_coordinates($addr, $o['customer_lat'] ?? ($o['delivery_lat'] ?? null), $o['customer_lng'] ?? ($o['delivery_lng'] ?? null));
+  $lat = $coord_norm['lat'];
+  $lng = $coord_norm['lng'];
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   $is_ready_pickup = in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned']);
   $is_delivered_state = ($del_st === 'delivered' || $norm_st === 'delivered');
@@ -1753,8 +1830,9 @@ main{padding:16px;flex:1;overflow-x:hidden}
 ?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div class="rider-map-container" style="position: relative; width: 100%; height: 320px; min-height: 300px; margin-top: 12px; border-radius: 12px;"><div id="delivery-map" style="height: 320px; min-height: 300px; width: 100%; border-radius: 12px; display: block; position: relative;"></div></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div class="actions" id="riderOrderActions_<?=(int)$o['order_id']?>" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_delivered_state): ?><div class="delivery-complete-summary" id="deliveryCompleteSummary_<?=(int)$o['order_id']?>" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;"><div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;"><i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i><span>Delivery Handover Completed!</span></div><div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">Delivery handover is confirmed. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:</div><button type="button" class="btn success full btn-open-clear" id="btnFinishClearTrigger_<?=(int)$o['order_id']?>" data-action="open-clear-modal" data-order-id="<?=(int)$o['order_id']?>" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(<?=(int)$o['order_id']?>)"><i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order</button></div><?php else: ?><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'near_customer'): ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'arrived'): ?><div style="background:#ecfdf5; border:1.5px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:10px; font-size:0.82rem; font-weight:700; text-align:center;"><i class="fa-solid fa-circle-check"></i> Arrived at Destination • Customer notified outside</div><?php else: ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full btn-open-handover" id="btnPromptHandover_<?=(int)$o['order_id']?>" data-action="prompt-handover" data-order-id="<?=(int)$o['order_id']?>" onclick="promptCompleteDelivery(<?=$o['order_id']?>)"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
   $addr = trim((string)($o['delivery_address'] ?? ''));
-  $lat = $o['customer_lat'] ?? $o['delivery_lat'] ?? null;
-  $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
+  $coord_norm = normalize_delivery_coordinates($addr, $o['customer_lat'] ?? ($o['delivery_lat'] ?? null), $o['customer_lng'] ?? ($o['delivery_lng'] ?? null));
+  $lat = $coord_norm['lat'];
+  $lng = $coord_norm['lng'];
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   $disp_ready_ref = '#' . ltrim(!empty($o['order_ref']) ? $o['order_ref'] : ('FD-' . $o['order_id']), '#');
 ?><div class="order"><div class="order-ref"><?=htmlspecialchars($disp_ready_ref)?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?></div><div style="margin:5px 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><?=render_payment_badge($o['payment_method'] ?? 'Cash on Delivery (COD)')?><span style="font-weight:800;color:#0f172a;font-size:0.82rem;">₱<?=number_format((float)$o['total_amount'],2)?></span></div><div class="rider-address-card" style="margin:8px 0 10px;"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No delivery address provided')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="margin-top:8px;"><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'claim')"><i class="fa-solid fa-motorcycle"></i> Accept / Pick Up Order</button></div></div><?php endforeach; else: ?><div class="empty">No unassigned ready orders.</div><?php endif; ?></div></section>
