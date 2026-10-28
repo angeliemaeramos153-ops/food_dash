@@ -69,8 +69,8 @@ if (!function_exists('geocode_address_fallback')) {
         // 2. Local Ormoc barangay dictionary mapping if external API is unreachable or rate-limited
         $norm = strtolower($clean_addr);
         $barangays = [
-            'western leyte college' => [11.0068, 124.6115],
-            'wlc'                   => [11.0068, 124.6115],
+            'western leyte college' => [11.0075, 124.6120],
+            'wlc'                   => [11.0075, 124.6120],
             'alta vista'       => [11.0118026, 124.6203237],
             'altavista'        => [11.0118026, 124.6203237],
             'cogon'            => [11.0233014, 124.6040868],
@@ -166,7 +166,7 @@ if (!function_exists('smart_geocode_ormoc')) {
                 strpos($norm, 'wlc') !== false ||
                 strpos($norm, 'bonifacio') !== false
             ) {
-                return ['lat' => 11.0068, 'lng' => 124.6115, 'name' => 'Western Leyte College (A. Bonifacio St.)', 'type' => 'destination'];
+                return ['lat' => 11.0075, 'lng' => 124.6120, 'name' => 'Western Leyte College (A. Bonifacio St.)', 'type' => 'destination'];
             }
             if (strpos($norm, 'city hall') !== false) {
                 return ['lat' => 11.0088, 'lng' => 124.6050, 'name' => 'Ormoc City Hall', 'type' => 'destination'];
@@ -311,8 +311,8 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
 
         if ($is_wlc_or_bonifacio || $is_near_real_street_or_invalid) {
             return [
-                'lat' => 11.0068,
-                'lng' => 124.6115,
+                'lat' => 11.0075,
+                'lng' => 124.6120,
                 'name' => !empty($clean) ? $clean : 'Western Leyte College (A. Bonifacio St.)',
                 'source' => 'wlc_campus_override'
             ];

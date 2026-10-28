@@ -2648,14 +2648,14 @@ const ORMOC_GEOCODING_DICTIONARY = {
   destinations: {
     western_leyte_college: {
       name: 'Western Leyte College',
-      latitude: 11.0068,
-      longitude: 124.6115,
+      latitude: 11.0075,
+      longitude: 124.6120,
       keywords: ['western leyte college', 'western leyte', 'wlc']
     },
     bonifacio_street: {
       name: 'A. Bonifacio St., Ormoc City',
-      latitude: 11.0068,
-      longitude: 124.6115,
+      latitude: 11.0075,
+      longitude: 124.6120,
       keywords: ['a. bonifacio', 'a.bonifacio', 'bonifacio st', 'bonifacio street', 'bonifacio']
     },
     city_hall: {
