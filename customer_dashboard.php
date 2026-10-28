@@ -5703,6 +5703,8 @@ function openTrackingModal(orderId, meta) {
     if (!payload.currentLng && (card.dataset.currentLng || card.dataset.riderLng)) payload.currentLng = card.dataset.currentLng || card.dataset.riderLng;
     if (!payload.riderName && card.dataset.riderName) payload.riderName = card.dataset.riderName;
     if (!payload.riderPhone && card.dataset.riderPhone) payload.riderPhone = card.dataset.riderPhone;
+    if (!payload.storeLat && card.dataset.storeLat) payload.storeLat = card.dataset.storeLat;
+    if (!payload.storeLng && card.dataset.storeLng) payload.storeLng = card.dataset.storeLng;
   }
 
   // If inside Expo mobile app WebView, post message to native bridge and do not open web modal

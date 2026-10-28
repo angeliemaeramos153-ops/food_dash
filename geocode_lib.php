@@ -69,8 +69,8 @@ if (!function_exists('geocode_address_fallback')) {
         // 2. Local Ormoc barangay dictionary mapping if external API is unreachable or rate-limited
         $norm = strtolower($clean_addr);
         $barangays = [
-            'western leyte college' => [11.0093834, 124.6092918],
-            'wlc'                   => [11.0093834, 124.6092918],
+            'western leyte college' => [11.0125, 124.6085],
+            'wlc'                   => [11.0125, 124.6085],
             'alta vista'       => [11.0118026, 124.6203237],
             'altavista'        => [11.0118026, 124.6203237],
             'cogon'            => [11.0233014, 124.6040868],
@@ -133,5 +133,156 @@ if (!function_exists('geocode_address_fallback')) {
 
         // Default Ormoc City central coordinates as ultimate safety net
         return ['lat' => 11.0054, 'lng' => 124.6078, 'source' => 'default_ormoc'];
+    }
+}
+
+
+if (!function_exists('is_valid_ormoc_coord')) {
+    function is_valid_ormoc_coord($lat, $lng): bool {
+        if ($lat === null || $lng === null || !is_numeric($lat) || !is_numeric($lng)) return false;
+        $fLat = (float)$lat;
+        $fLng = (float)$lng;
+        // Ormoc City envelope: Lat 10.95 to 11.15, Lng 124.50 to 124.75
+        // Strictly reject corrupted values like 5.0, 0, or stale Alta Vista defaults (11.0138, 124.6040)
+        if ($fLat < 10.95 || $fLat > 11.15 || $fLng < 124.50 || $fLng > 124.75) return false;
+        if (abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001) return false;
+        return true;
+    }
+}
+
+if (!function_exists('smart_geocode_ormoc')) {
+    function smart_geocode_ormoc(?string $text, string $type = 'any'): ?array {
+        if (empty($text)) return null;
+        $norm = strtolower(trim(preg_replace('/[^a-zA-Z0-9\s]/', ' ', $text)));
+        $norm = preg_replace('/\s+/', ' ', $norm);
+        if ($norm === '') return null;
+
+        // 1. Destination / Street Matching
+        if ($type === 'destination' || $type === 'any') {
+            if (strpos($norm, 'western leyte') !== false || strpos($norm, 'wlc') !== false) {
+                return ['lat' => 11.0125, 'lng' => 124.6085, 'name' => 'Western Leyte College', 'type' => 'destination'];
+            }
+            if (strpos($norm, 'bonifacio') !== false) {
+                return ['lat' => 11.0085, 'lng' => 124.6065, 'name' => 'A. Bonifacio St., Ormoc City', 'type' => 'destination'];
+            }
+            if (strpos($norm, 'city hall') !== false) {
+                return ['lat' => 11.0088, 'lng' => 124.6050, 'name' => 'Ormoc City Hall', 'type' => 'destination'];
+            }
+            if (strpos($norm, 'superdome') !== false) {
+                return ['lat' => 11.0035, 'lng' => 124.6095, 'name' => 'Ormoc Superdome', 'type' => 'destination'];
+            }
+            if (strpos($norm, 'plaza') !== false) {
+                return ['lat' => 11.0065, 'lng' => 124.6070, 'name' => 'Ormoc City Plaza', 'type' => 'destination'];
+            }
+        }
+
+        // 2. Store / Mall Matching
+        if ($type === 'store' || $type === 'any') {
+            $hasRobinsons = (strpos($norm, 'robinson') !== false || strpos($norm, 'rob') !== false);
+            $hasSm = (strpos($norm, 'sm') !== false);
+            $isJollibee = (strpos($norm, 'jollibee') !== false);
+            $isInasal = (strpos($norm, 'inasal') !== false);
+
+            $isRobinsonsBranch = ($isJollibee || $isInasal) && $hasRobinsons;
+            $isSmBranch = ($isJollibee || $isInasal) && $hasSm;
+
+            $isRobinsonsStore = (
+                strpos($norm, 'shakey') !== false ||
+                strpos($norm, 'mcdonald') !== false ||
+                strpos($norm, 'mcdo') !== false ||
+                strpos($norm, 'chowking') !== false ||
+                strpos($norm, 'greenwich') !== false ||
+                $isRobinsonsBranch ||
+                ($hasRobinsons && !$isSmBranch)
+            );
+
+            $isSmStore = (
+                $isSmBranch ||
+                strpos($norm, 'ribshack') !== false ||
+                strpos($norm, 'rib shack') !== false ||
+                strpos($norm, 'sm ormoc') !== false ||
+                strpos($norm, 'sm center') !== false ||
+                ($hasSm && !$isRobinsonsStore) ||
+                ($isJollibee && !$isRobinsonsStore)
+            );
+
+            if ($isRobinsonsStore && !$isSmBranch && strpos($norm, 'ribshack') === false) {
+                return ['lat' => 11.0215, 'lng' => 124.6155, 'name' => 'Robinsons Place Ormoc', 'mall' => 'Robinsons Place Ormoc', 'is_partner' => true, 'type' => 'store'];
+            }
+
+            if ($isSmStore) {
+                return ['lat' => 11.0075, 'lng' => 124.6072, 'name' => 'SM Center Ormoc', 'mall' => 'SM Center Ormoc', 'is_partner' => true, 'type' => 'store'];
+            }
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('resolve_ormoc_store_coords')) {
+    function resolve_ormoc_store_coords(?string $store_name, ?string $store_address = '', $raw_lat = null, $raw_lng = null): array {
+        $combined = trim(($store_name ?? '') . ' ' . ($store_address ?? ''));
+        $smart = smart_geocode_ormoc($combined, 'store');
+        if ($smart) {
+            return [
+                'lat' => $smart['lat'],
+                'lng' => $smart['lng'],
+                'name' => !empty($store_name) ? $store_name : $smart['name'],
+                'mall' => $smart['mall'] ?? null,
+                'is_partner' => true,
+                'source' => 'smart_lookup'
+            ];
+        }
+
+        if (is_valid_ormoc_coord($raw_lat, $raw_lng)) {
+            return [
+                'lat' => (float)$raw_lat,
+                'lng' => (float)$raw_lng,
+                'name' => !empty($store_name) ? $store_name : 'Partner Store',
+                'mall' => null,
+                'is_partner' => true,
+                'source' => 'db_verified'
+            ];
+        }
+
+        return [
+            'lat' => 11.0075,
+            'lng' => 124.6072,
+            'name' => !empty($store_name) ? $store_name : 'SM Center Ormoc Store',
+            'mall' => 'SM Center Ormoc',
+            'is_partner' => true,
+            'source' => 'default_sm_ormoc'
+        ];
+    }
+}
+
+if (!function_exists('resolve_ormoc_dest_coords')) {
+    function resolve_ormoc_dest_coords(?string $address, $raw_lat = null, $raw_lng = null): array {
+        $clean = trim($address ?? '');
+        $smart = smart_geocode_ormoc($clean, 'destination');
+        if ($smart) {
+            return [
+                'lat' => $smart['lat'],
+                'lng' => $smart['lng'],
+                'name' => !empty($clean) ? $clean : $smart['name'],
+                'source' => 'smart_lookup'
+            ];
+        }
+
+        if (is_valid_ormoc_coord($raw_lat, $raw_lng)) {
+            return [
+                'lat' => (float)$raw_lat,
+                'lng' => (float)$raw_lng,
+                'name' => !empty($clean) ? $clean : 'Customer Destination',
+                'source' => 'db_verified'
+            ];
+        }
+
+        return [
+            'lat' => 11.0125,
+            'lng' => 124.6085,
+            'name' => !empty($clean) ? $clean : 'Western Leyte College',
+            'source' => 'default_wlc'
+        ];
     }
 }

@@ -699,85 +699,26 @@ $active_order_for_map = null;
 $first_order = !empty($my_orders) ? $my_orders[0] : null;
 if ($first_order) {
 
-    // 1. Customer Destination: strictly from order delivery coordinates without arbitrary offsets
-    $c_lat = (isset($first_order['delivery_lat']) && is_numeric($first_order['delivery_lat']) && (float)$first_order['delivery_lat'] != 0) 
+    // 1. Dynamic Customer Destination Resolution: smart keyword string matching across order strings
+    $raw_c_lat = (isset($first_order['delivery_lat']) && is_numeric($first_order['delivery_lat'])) 
         ? (float)$first_order['delivery_lat'] 
-        : ((isset($first_order['customer_lat']) && is_numeric($first_order['customer_lat']) && (float)$first_order['customer_lat'] != 0) ? (float)$first_order['customer_lat'] : null);
-    $c_lng = (isset($first_order['delivery_lng']) && is_numeric($first_order['delivery_lng']) && (float)$first_order['delivery_lng'] != 0) 
+        : ((isset($first_order['customer_lat']) && is_numeric($first_order['customer_lat'])) ? (float)$first_order['customer_lat'] : null);
+    $raw_c_lng = (isset($first_order['delivery_lng']) && is_numeric($first_order['delivery_lng'])) 
         ? (float)$first_order['delivery_lng'] 
-        : ((isset($first_order['customer_lng']) && is_numeric($first_order['customer_lng']) && (float)$first_order['customer_lng'] != 0) ? (float)$first_order['customer_lng'] : null);
+        : ((isset($first_order['customer_lng']) && is_numeric($first_order['customer_lng'])) ? (float)$first_order['customer_lng'] : null);
 
-    // Dynamic Geocode delivery address if coordinates are missing from order
-    if (($c_lat === null || $c_lng === null) && !empty($first_order['delivery_address'])) {
-        $geo_c = geocode_address_fallback($first_order['delivery_address'] . ', Ormoc City, Leyte');
-        if ($geo_c && isset($geo_c['lat'], $geo_c['lng']) && is_numeric($geo_c['lat']) && is_numeric($geo_c['lng'])) {
-            $c_lat = (float)$geo_c['lat'];
-            $c_lng = (float)$geo_c['lng'];
-        }
-    }
+    $dest_res = resolve_ormoc_dest_coords($first_order['delivery_address'] ?? ($first_order['address'] ?? ''), $raw_c_lat, $raw_c_lng);
+    $c_lat = $dest_res['lat'];
+    $c_lng = $dest_res['lng'];
 
-    if ($c_lat !== null && ((float)$c_lat == 0 || $c_lat < -90 || $c_lat > 90)) $c_lat = null;
-    if ($c_lng !== null && ((float)$c_lng == 0 || $c_lng < -180 || $c_lng > 180)) $c_lng = null;
+    // 2. Dynamic Store Origin Resolution: smart keyword string matching for SM and Robinsons partner stores
+    $raw_s_lat = (isset($first_order['store_lat']) && is_numeric($first_order['store_lat'])) ? (float)$first_order['store_lat'] : null;
+    $raw_s_lng = (isset($first_order['store_lng']) && is_numeric($first_order['store_lng'])) ? (float)$first_order['store_lng'] : null;
 
-    // 2. Dynamic Store Origin: retrieved from store/order record; if missing or 0, dynamically geocode on the fly
-    $s_lat = (isset($first_order['store_lat']) && is_numeric($first_order['store_lat'])) ? (float)$first_order['store_lat'] : null;
-    $s_lng = (isset($first_order['store_lng']) && is_numeric($first_order['store_lng'])) ? (float)$first_order['store_lng'] : null;
-    if ($s_lat !== null && ((float)$s_lat == 0 || $s_lat < -90 || $s_lat > 90)) $s_lat = null;
-    if ($s_lng !== null && ((float)$s_lng == 0 || $s_lng < -180 || $s_lng > 180)) $s_lng = null;
-
-    // If store coordinates are missing or zero, dynamically fetch coordinates on the fly using Nominatim OpenStreetMap
-    if ($s_lat === null || $s_lng === null) {
-        $store_search_name = !empty($first_order['shop_record_name']) ? $first_order['shop_record_name'] : ($first_order['store_name'] ?? '');
-        $store_search_addr = !empty($first_order['store_address']) ? $first_order['store_address'] : '';
-        
-        $queries_to_try = [];
-        if (!empty($store_search_name) && !empty($store_search_addr)) {
-            $queries_to_try[] = $store_search_name . ', ' . $store_search_addr . ', Ormoc City, Leyte';
-            $queries_to_try[] = $store_search_addr . ', Ormoc City, Leyte';
-        } elseif (!empty($store_search_addr)) {
-            $queries_to_try[] = $store_search_addr . ', Ormoc City, Leyte';
-        }
-        if (!empty($store_search_name)) {
-            $queries_to_try[] = $store_search_name . ', Ormoc City, Leyte';
-        }
-
-        foreach ($queries_to_try as $query_str) {
-            $geo = geocode_address_fallback($query_str);
-            // Strictly require valid coordinates and reject default city center fallback
-            if ($geo && isset($geo['lat'], $geo['lng']) && is_numeric($geo['lat']) && is_numeric($geo['lng']) && ($geo['source'] ?? '') !== 'default_ormoc') {
-                $s_lat = (float)$geo['lat'];
-                $s_lng = (float)$geo['lng'];
-
-                // Persist the verified coordinates back to database
-                // 1. Update food_orders which has valid store_lat and store_lng columns
-                if (!empty($first_order['order_id'])) {
-                    try {
-                        $u_stmt2 = $conn->prepare("UPDATE food_orders SET store_lat = ?, store_lng = ? WHERE order_id = ?");
-                        $u_stmt2->execute([$s_lat, $s_lng, (int)$first_order['order_id']]);
-                    } catch (Throwable $e) {}
-                }
-
-                // 2. Safely check if shops table has coordinate columns before updating to prevent undefined column PDOException
-                if (!empty($first_order['shop_id'])) {
-                    try {
-                        static $shops_coord_col = null;
-                        if ($shops_coord_col === null) {
-                            $chk = $conn->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'shops' AND column_name IN ('lat', 'latitude') LIMIT 1");
-                            $shops_coord_col = $chk ? (string)$chk->fetchColumn() : '';
-                        }
-                        if ($shops_coord_col === 'lat') {
-                            $u_stmt = $conn->prepare("UPDATE shops SET lat = ?, lng = ? WHERE shop_id = ?");
-                            $u_stmt->execute([$s_lat, $s_lng, (int)$first_order['shop_id']]);
-                        } elseif ($shops_coord_col === 'latitude') {
-                            $u_stmt = $conn->prepare("UPDATE shops SET latitude = ?, longitude = ? WHERE shop_id = ?");
-                            $u_stmt->execute([$s_lat, $s_lng, (int)$first_order['shop_id']]);
-                        }
-                    } catch (Throwable $e) {}
-                }
-                break;
-            }
-        }
-    }
+    $store_combined_str = ($first_order['shop_record_name'] ?? '') . ' ' . ($first_order['store_name'] ?? '') . ' ' . ($first_order['store_address'] ?? '');
+    $store_res = resolve_ormoc_store_coords($store_combined_str, '', $raw_s_lat, $raw_s_lng);
+    $s_lat = $store_res['lat'];
+    $s_lng = $store_res['lng'];
 
     // 3. True Live Rider GPS: from riders table or food_orders table
     $live_rider_lat = null;
@@ -2455,8 +2396,9 @@ async function resetRiderToStore() {
     return;
   }
 
-  const sLat = (activeDeliveryData.store_lat !== null && !isNaN(activeDeliveryData.store_lat)) ? Number(activeDeliveryData.store_lat) : (storeMarker ? storeMarker.getLatLng().lat : null);
-  const sLng = (activeDeliveryData.store_lng !== null && !isNaN(activeDeliveryData.store_lng)) ? Number(activeDeliveryData.store_lng) : (storeMarker ? storeMarker.getLatLng().lng : null);
+  const storeRes = resolveStoreCoordinates(activeDeliveryData);
+  const sLat = storeRes.latitude;
+  const sLng = storeRes.longitude;
 
   if (sLat === null || sLng === null || isNaN(sLat) || isNaN(sLng) || sLat === 0) {
     toastRider('Store pickup coordinates not available.', true);
@@ -2480,12 +2422,9 @@ async function resetRiderToStore() {
 }
 
 function getActiveCustomerCoord() {
-  const cLat = activeDeliveryData ? (activeDeliveryData.delivery_lat ?? activeDeliveryData.customer_lat) : null;
-  const cLng = activeDeliveryData ? (activeDeliveryData.delivery_lng ?? activeDeliveryData.customer_lng) : null;
-  if (cLat !== null && cLng !== null && !isNaN(cLat) && !isNaN(cLng) && Number(cLat) !== 0) {
-    return [Number(cLat), Number(cLng)];
-  }
-  return null;
+  if (!activeDeliveryData) return null;
+  const resolved = resolveDestinationCoordinates(activeDeliveryData);
+  return [resolved.latitude, resolved.longitude];
 }
 
 function updateRouteUI(rLat, rLng, cLat, cLng) {
@@ -2682,8 +2621,218 @@ function handleRiderPositionUpdate(lat, lng, source = 'gps', accuracy = null) {
   }
 }
 
+// ==========================================
+// ORMOC GEOCODING DICTIONARY & SMART LOOKUP (100% Dynamic matching Mobile App)
+// ==========================================
+const ORMOC_GEOCODING_DICTIONARY = {
+  malls: {
+    sm_center_ormoc: {
+      name: 'SM Center Ormoc',
+      mall: 'SM Center Ormoc',
+      latitude: 11.0075,
+      longitude: 124.6072,
+      stores: ['jollibee sm', 'mang inasal sm', 'ribshack', 'rib shack', 'sm ormoc', 'sm center']
+    },
+    robinsons_place_ormoc: {
+      name: 'Robinsons Place Ormoc',
+      mall: 'Robinsons Place Ormoc',
+      latitude: 11.0215,
+      longitude: 124.6155,
+      stores: [
+        "shakey's", 'shakeys', "mcdonald's", 'mcdonalds', 'mcdo',
+        'chowking', 'greenwich', 'jollibee robinsons', 'mang inasal robinsons',
+        'robinsons ormoc', 'robinsons place'
+      ]
+    }
+  },
+  destinations: {
+    western_leyte_college: {
+      name: 'Western Leyte College',
+      latitude: 11.0125,
+      longitude: 124.6085,
+      keywords: ['western leyte college', 'western leyte', 'wlc']
+    },
+    bonifacio_street: {
+      name: 'A. Bonifacio St., Ormoc City',
+      latitude: 11.0085,
+      longitude: 124.6065,
+      keywords: ['a. bonifacio', 'a.bonifacio', 'bonifacio st', 'bonifacio street', 'bonifacio']
+    },
+    city_hall: {
+      name: 'Ormoc City Hall',
+      latitude: 11.0088,
+      longitude: 124.6050,
+      keywords: ['ormoc city hall', 'city hall']
+    },
+    superdome: {
+      name: 'Ormoc City Superdome',
+      latitude: 11.0035,
+      longitude: 124.6095,
+      keywords: ['superdome', 'ormoc superdome']
+    },
+    city_plaza: {
+      name: 'Ormoc City Plaza',
+      latitude: 11.0065,
+      longitude: 124.6070,
+      keywords: ['ormoc plaza', 'city plaza']
+    }
+  }
+};
+
+function isValidOrmocCoordinate(lat, lng) {
+  if (lat == null || lng == null) return false;
+  const nLat = parseFloat(lat);
+  const nLng = parseFloat(lng);
+  if (isNaN(nLat) || isNaN(nLng)) return false;
+  if (nLat < 10.95 || nLat > 11.15 || nLng < 124.50 || nLng > 124.75) return false;
+  if (Math.abs(nLat - 11.0138) < 0.001 && Math.abs(nLng - 124.6040) < 0.001) return false;
+  return true;
+}
+
+function smartGeocodeLookup(text, targetType = 'any') {
+  if (!text) return null;
+  const normalized = String(text)
+    .toLowerCase()
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return null;
+
+  // 1. Destination / Street Matching
+  if (targetType === 'destination' || targetType === 'any') {
+    const wlc = ORMOC_GEOCODING_DICTIONARY.destinations.western_leyte_college;
+    const bonifacio = ORMOC_GEOCODING_DICTIONARY.destinations.bonifacio_street;
+
+    if (normalized.includes('western leyte') || normalized.includes('wlc') || /\bwlc\b/.test(normalized)) {
+      return { latitude: wlc.latitude, longitude: wlc.longitude, name: wlc.name, type: 'destination' };
+    }
+    if (normalized.includes('bonifacio') || normalized.includes('a bonifacio')) {
+      return { latitude: bonifacio.latitude, longitude: bonifacio.longitude, name: bonifacio.name, type: 'destination' };
+    }
+    for (const [key, dest] of Object.entries(ORMOC_GEOCODING_DICTIONARY.destinations)) {
+      if (key === 'western_leyte_college' || key === 'bonifacio_street') continue;
+      if (dest.keywords.some(k => normalized.includes(k.toLowerCase()))) {
+        return { latitude: dest.latitude, longitude: dest.longitude, name: dest.name, type: 'destination' };
+      }
+    }
+  }
+
+  // 2. Store / Mall Matching
+  if (targetType === 'store' || targetType === 'any') {
+    const smMall = ORMOC_GEOCODING_DICTIONARY.malls.sm_center_ormoc;
+    const robMall = ORMOC_GEOCODING_DICTIONARY.malls.robinsons_place_ormoc;
+
+    const hasRobinsons = normalized.includes('robinson') || normalized.includes('rob');
+    const hasSm = normalized.includes('sm') || /\bsm\b/.test(normalized);
+    const isJollibee = normalized.includes('jollibee');
+    const isInasal = normalized.includes('inasal') || normalized.includes('mang inasal');
+
+    const isRobinsonsBranch = (isJollibee || isInasal) && hasRobinsons;
+    const isSmBranch = (isJollibee || isInasal) && hasSm;
+
+    const isRobinsonsStore =
+      normalized.includes('shakey') ||
+      normalized.includes('mcdonald') ||
+      normalized.includes('mcdo') ||
+      normalized.includes('chowking') ||
+      normalized.includes('greenwich') ||
+      isRobinsonsBranch ||
+      (hasRobinsons && !isSmBranch);
+
+    const isSmStore =
+      isSmBranch ||
+      normalized.includes('ribshack') ||
+      normalized.includes('rib shack') ||
+      normalized.includes('sm ormoc') ||
+      normalized.includes('sm center') ||
+      (hasSm && !isRobinsonsStore) ||
+      (isJollibee && !isRobinsonsStore);
+
+    if (isRobinsonsStore && !isSmBranch && !normalized.includes('ribshack')) {
+      return {
+        latitude: robMall.latitude,
+        longitude: robMall.longitude,
+        name: robMall.name,
+        mall: 'Robinsons Place Ormoc',
+        isPartner: true,
+        type: 'store'
+      };
+    }
+
+    if (isSmStore) {
+      return {
+        latitude: smMall.latitude,
+        longitude: smMall.longitude,
+        name: smMall.name,
+        mall: 'SM Center Ormoc',
+        isPartner: true,
+        type: 'store'
+      };
+    }
+  }
+
+  return null;
+}
+
+function resolveStoreCoordinates(data) {
+  const storeNameStr = String(data?.store_name || data?.shop_name || data?.restaurant_name || data?.merchant_name || '').trim();
+  const storeAddrStr = String(data?.store_address || data?.shop_address || data?.pickup_address || '').trim();
+  const combined = (storeNameStr + ' ' + storeAddrStr).trim();
+
+  const smart = smartGeocodeLookup(combined, 'store');
+  if (smart) {
+    return {
+      latitude: smart.latitude,
+      longitude: smart.longitude,
+      storeName: storeNameStr || smart.name,
+      mall: smart.mall,
+      isPartner: true
+    };
+  }
+
+  const rawLat = parseFloat(data?.store_lat);
+  const rawLng = parseFloat(data?.store_lng);
+  if (isValidOrmocCoordinate(rawLat, rawLng)) {
+    return { latitude: rawLat, longitude: rawLng, storeName: storeNameStr || 'Partner Kitchen', isPartner: true };
+  }
+
+  return { latitude: 11.0075, longitude: 124.6072, storeName: storeNameStr || 'SM Center Ormoc Store', mall: 'SM Center Ormoc', isPartner: true };
+}
+
+function resolveDestinationCoordinates(data) {
+  const addrStr = String(data?.delivery_address || data?.address || data?.customer_address || data?.customer_name || '').trim();
+
+  const smart = smartGeocodeLookup(addrStr, 'destination');
+  if (smart) {
+    return {
+      latitude: smart.latitude,
+      longitude: smart.longitude,
+      destinationName: addrStr || smart.name
+    };
+  }
+
+  const rawLat = parseFloat(data?.delivery_lat ?? data?.customer_lat);
+  const rawLng = parseFloat(data?.delivery_lng ?? data?.customer_lng);
+  if (isValidOrmocCoordinate(rawLat, rawLng)) {
+    return { latitude: rawLat, longitude: rawLng, destinationName: addrStr || 'Customer Destination' };
+  }
+
+  return { latitude: 11.0125, longitude: 124.6085, destinationName: addrStr || 'Western Leyte College' };
+}
+
 async function initDeliveryMap(data) {
   if (!data || !document.getElementById('delivery-map')) return;
+
+  // Enforce 100% dynamic smart coordinate resolution matching mobile app
+  const storeResolution = resolveStoreCoordinates(data);
+  const destResolution = resolveDestinationCoordinates(data);
+
+  data.store_lat = storeResolution.latitude;
+  data.store_lng = storeResolution.longitude;
+  data.delivery_lat = destResolution.latitude;
+  data.delivery_lng = destResolution.longitude;
+  data.customer_lat = destResolution.latitude;
+  data.customer_lng = destResolution.longitude;
 
   // Safe retry in case Leaflet is still downloading
   if (typeof L === 'undefined') {
