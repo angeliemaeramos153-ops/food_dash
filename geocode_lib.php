@@ -71,6 +71,10 @@ if (!function_exists('geocode_address_fallback')) {
         $barangays = [
             'western leyte college' => [11.0076, 124.6089],
             'wlc'                   => [11.0076, 124.6089],
+            'lilia'                 => [11.0185, 124.6062],
+            'combado'               => [11.0185, 124.6062],
+            'cogon combado'         => [11.0185, 124.6062],
+            'batuan'                => [11.0185, 124.6062],
             'alta vista'       => [11.0118026, 124.6203237],
             'altavista'        => [11.0118026, 124.6203237],
             'cogon'            => [11.0233014, 124.6040868],
@@ -170,10 +174,9 @@ if (!function_exists('smart_geocode_ormoc')) {
         if ($type === 'destination' || $type === 'any') {
             if (
                 strpos($norm, 'western') !== false ||
-                strpos($norm, 'leyte') !== false ||
-                strpos($norm, 'college') !== false ||
-                strpos($norm, 'wlc') !== false ||
-                strpos($norm, 'bonifacio') !== false
+            strpos($norm, 'college') !== false ||
+            strpos($norm, 'wlc') !== false ||
+            strpos($norm, 'bonifacio') !== false
             ) {
                 return ['lat' => 11.0076, 'lng' => 124.6089, 'name' => 'Western Leyte College (A. Bonifacio St.)', 'type' => 'destination'];
             }
@@ -311,7 +314,6 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
         // strictly override destination to WLC's exact campus center (11.0076, 124.6089), completely discarding corrupted values (e.g. 5.00000).
         $is_wlc_or_bonifacio = (
             strpos($norm, 'western') !== false ||
-            strpos($norm, 'leyte') !== false ||
             strpos($norm, 'college') !== false ||
             strpos($norm, 'wlc') !== false ||
             strpos($norm, 'bonifacio') !== false
@@ -340,6 +342,15 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
         );
 
         if ($is_invalid) {
+            $fallback = geocode_address_fallback($clean);
+            if ($fallback && !empty($fallback['lat']) && !empty($fallback['lng'])) {
+                return [
+                    'lat' => (float)$fallback['lat'],
+                    'lng' => (float)$fallback['lng'],
+                    'name' => !empty($clean) ? $clean : 'Customer Destination',
+                    'source' => 'ormoc_fallback'
+                ];
+            }
             return [
                 'lat' => 11.0076,
                 'lng' => 124.6089,
@@ -395,7 +406,6 @@ if (!function_exists('apply_dynamic_geocoding_to_order')) {
         // Check keywords
         $is_wlc = (
             strpos($norm_addr, 'western') !== false ||
-            strpos($norm_addr, 'leyte') !== false ||
             strpos($norm_addr, 'college') !== false ||
             strpos($norm_addr, 'wlc') !== false ||
             strpos($norm_addr, 'bonifacio') !== false

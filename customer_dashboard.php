@@ -4965,6 +4965,10 @@ async function loadCustomerOrdersLive() {
              data-items-summary="${escapeCustAttr(ord.items_summary || '')}"
              data-delivery-address="${escapeCustAttr(ord.delivery_address || '')}"
              data-total-amount="${escapeCustAttr(ord.total_amount || ord.total_price || '')}"
+             data-delivery-lat="${ord.delivery_lat || ord.customer_lat || ''}"
+             data-delivery-lng="${ord.delivery_lng || ord.customer_lng || ''}"
+             data-rider-name="${escapeCustAttr(ord.rider_name || '')}"
+             data-rider-phone="${escapeCustAttr(ord.rider_phone || '')}"
              id="order-card-${orderId}" ${rowClick}>
           <div class="row-icon ${iconClass}">${iconHtml}</div>
           <div class="info">
