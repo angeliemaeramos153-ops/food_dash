@@ -333,20 +333,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     }
                     notify_role($conn, 'admin', 'Rider Dispatched', "Rider {$user_name} confirmed pickup of order #{$clean_order_number} (Total: ₱{$formatted_total_amount})", $order_id);
 
-                    // Automated departure & amount notification into chat
-                    $bill_pm = !empty($db_order['payment_method']) ? trim($db_order['payment_method']) : (!empty($fo_order['payment_method']) ? trim($fo_order['payment_method']) : (!empty($order['payment_method']) ? trim($order['payment_method']) : 'Cash on Delivery (COD)'));
-                    $auto_dep_msg = "Hello! I have picked up your order #{$clean_order_number} and I'm on the way. Your total bill is ₱{$formatted_total_amount} ({$bill_pm}). Please have the payment or recipient ready!";
-
+                    // Automated departure & amount chat message inserted into order_messages and Supabase
                     try {
-                        $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'rider', :uid, :rname, :txt, NOW())");
-                        $ins_m->execute([
-                            ':oid'   => $order_id,
-                            ':uid'   => $user_id,
-                            ':rname' => $user_name,
-                            ':txt'   => $auto_dep_msg
-                        ]);
-                        if ($actual_customer_id > 0) {
-                            create_notification($conn, $actual_customer_id, 'rider_message', 'Message from Rider (' . $user_name . ')', $auto_dep_msg, $order_id);
+                        require_once __DIR__ . '/notification_lib.php';
+                        if (function_exists('send_on_delivery_chat_message')) {
+                            send_on_delivery_chat_message($conn, $order_id, $user_id, $user_name);
                         }
                     } catch (Throwable $e) {}
 
@@ -586,20 +577,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                         }
                         notify_role($conn, 'admin', 'Rider Dispatched', "Rider {$user_name} confirmed pickup of order #{$clean_order_number} (Total: ₱{$formatted_total_amount})", $order_id);
 
-                        // Automated departure & amount notification into chat
-                        $bill_pm = !empty($db_order['payment_method']) ? trim($db_order['payment_method']) : (!empty($fo_order['payment_method']) ? trim($fo_order['payment_method']) : (!empty($order['payment_method']) ? trim($order['payment_method']) : 'Cash on Delivery (COD)'));
-                        $auto_dep_msg = "Hello! I have picked up your order #{$clean_order_number} and I'm on the way. Your total bill is ₱{$formatted_total_amount} ({$bill_pm}). Please have the payment or recipient ready!";
-
+                        // Automated departure & amount chat message inserted into order_messages and Supabase
                         try {
-                            $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'rider', :uid, :rname, :txt, NOW())");
-                            $ins_m->execute([
-                                ':oid'   => $order_id,
-                                ':uid'   => $user_id,
-                                ':rname' => $user_name,
-                                ':txt'   => $auto_dep_msg
-                            ]);
-                            if ($actual_customer_id > 0) {
-                                create_notification($conn, $actual_customer_id, 'rider_message', 'Message from Rider (' . $user_name . ')', $auto_dep_msg, $order_id);
+                            require_once __DIR__ . '/notification_lib.php';
+                            if (function_exists('send_on_delivery_chat_message')) {
+                                send_on_delivery_chat_message($conn, $order_id, $user_id, $user_name);
                             }
                         } catch (Throwable $e) {}
 

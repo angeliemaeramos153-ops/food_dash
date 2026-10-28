@@ -267,6 +267,16 @@ try {
         ':id'              => $order_id
     ]);
 
+    // Dispatch automated chat message if order status transitioned to on_delivery
+    if (in_array(strtolower($target_status), ['out_for_delivery', 'on_delivery']) || in_array(strtolower($new_delivery_status), ['on_the_way', 'on_delivery'])) {
+        try {
+            require_once __DIR__ . '/notification_lib.php';
+            if (function_exists('send_on_delivery_chat_message')) {
+                send_on_delivery_chat_message($pdo, $order_id, $rider_id, $user_name ?? 'Rider');
+            }
+        } catch (Throwable $e) {}
+    }
+
     // Insert Settlement record if SETTLED
     if ($target_status === 'SETTLED') {
         $settle_stmt = $pdo->prepare("INSERT INTO settlements (order_id, admin_id, subtotal, delivery_fee, total_amount, payment_method, status, notes, reconciled_at) VALUES (:oid, :aid, :sub, :del, :tot, 'Cash on Delivery', 'SETTLED', :notes, NOW()) ON CONFLICT (order_id) DO UPDATE SET status = 'SETTLED', notes = EXCLUDED.notes, reconciled_at = NOW()");

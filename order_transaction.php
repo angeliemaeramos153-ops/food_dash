@@ -448,8 +448,17 @@ if ($method === 'POST') {
                 ':dst' => $new_delivery_status,
                 ':cid' => $chef_id_val,
                 ':rid' => $rider_id_val,
-                ':oid' => $order_id,
             ]);
+
+            // Dispatch automated chat message if order status transitioned to on_delivery
+            if (in_array(strtolower($target_status), ['out_for_delivery', 'on_delivery']) || in_array(strtolower($new_delivery_status), ['on_the_way', 'on_delivery'])) {
+                try {
+                    require_once __DIR__ . '/notification_lib.php';
+                    if (function_exists('send_on_delivery_chat_message')) {
+                        send_on_delivery_chat_message($conn, $order_id, $rider_id_val, $user_name);
+                    }
+                } catch (Throwable $e) {}
+            }
 
             // Settle transaction if target is SETTLED
             if ($target_status === 'SETTLED') {
