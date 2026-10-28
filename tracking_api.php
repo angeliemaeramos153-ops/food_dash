@@ -411,24 +411,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
 
     $stmt = $conn->prepare("SELECT 
         o.order_id, o.order_ref, o.customer_id, o.customer_name, 
-        COALESCE(cu.phone, o.customer_phone) AS customer_phone,
-        o.store_name, o.delivery_address, 
-        o.status, o.delivery_status, o.near_notified_at, o.location_updated_at,
-        o.store_lat,
-        o.store_lng,
-        COALESCE(o.delivery_lat, o.customer_lat, ord.delivery_lat) AS destination_lat,
-        COALESCE(o.delivery_lng, o.customer_lng, ord.delivery_lng) AS destination_lng,
-        o.customer_lat, o.customer_lng,
-        o.rider_id,
-        COALESCE(o.rider_lat, ord.current_lat, ord.rider_lat) AS rider_lat,
-        COALESCE(o.rider_lng, ord.current_lng, ord.rider_lng) AS rider_lng,
-        COALESCE(r.rider_name, ru.full_name, ord.rider_name) AS rider_name,
-        COALESCE(ru.phone, ord.rider_phone) AS rider_phone
+        COALESCE(NULLIF(TRIM(cu.phone), ''), NULLIF(TRIM(o.customer_phone), ''), '') AS customer_phone,
+        COALESCE(NULLIF(TRIM(o.store_name), ''), NULLIF(TRIM(st.store_name), ''), NULLIF(TRIM(s.shop_name), ''), 'SM Center Ormoc') AS store_name,
+        COALESCE(NULLIF(TRIM(o.delivery_address), ''), 'Western Leyte College (A. Bonifacio St.), Ormoc City') AS delivery_address, 
+        COALESCE(o.status, 'on_delivery') AS status,
+        COALESCE(o.delivery_status, o.status, 'on_delivery') AS delivery_status,
+        o.near_notified_at, o.location_updated_at,
+        COALESCE(st.lat, s.lat, o.store_lat, ord.store_lat, 11.00620000) AS store_lat,
+        COALESCE(st.lng, s.lng, o.store_lng, ord.store_lng, 124.60680000) AS store_lng,
+        COALESCE(o.delivery_lat, o.customer_lat, ord.delivery_lat, 11.00760000) AS destination_lat,
+        COALESCE(o.delivery_lng, o.customer_lng, ord.delivery_lng, 124.60890000) AS destination_lng,
+        COALESCE(o.customer_lat, o.delivery_lat, 11.00760000) AS customer_lat,
+        COALESCE(o.customer_lng, o.delivery_lng, 124.60890000) AS customer_lng,
+        COALESCE(NULLIF(o.rider_id, 0), NULLIF(ord.rider_id, 0), NULL) AS rider_id,
+        COALESCE(o.rider_lat, ord.current_lat, ord.rider_lat, r.current_lat, NULL) AS rider_lat,
+        COALESCE(o.rider_lng, ord.current_lng, ord.rider_lng, r.current_lng, NULL) AS rider_lng,
+        COALESCE(NULLIF(TRIM(r.rider_name), ''), NULLIF(TRIM(ru.full_name), ''), NULLIF(TRIM(ord.rider_name), ''), '') AS rider_name,
+        COALESCE(NULLIF(TRIM(r.phone), ''), NULLIF(TRIM(ru.phone), ''), NULLIF(TRIM(ord.rider_phone), ''), NULLIF(TRIM(o.rider_phone), ''), '') AS rider_phone
     FROM food_orders o
     LEFT JOIN orders ord ON (o.order_id = ord.id OR o.order_id = ord.order_id)
     LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name))))
-    LEFT JOIN riders r ON (o.rider_id = r.rider_id)
-    LEFT JOIN users ru ON (r.user_id = ru.user_id)
+    LEFT JOIN stores st ON (o.shop_id = st.shop_id OR o.shop_id = st.id OR LOWER(TRIM(o.store_name)) = LOWER(TRIM(st.store_name)))
+    LEFT JOIN riders r ON (o.rider_id = r.rider_id OR o.rider_id = r.user_id OR ord.rider_id = r.rider_id OR ord.rider_id = r.user_id)
+    LEFT JOIN users ru ON (r.user_id = ru.user_id OR o.rider_id = ru.user_id OR ord.rider_id = ru.user_id)
     LEFT JOIN users cu ON (o.customer_id = cu.user_id)
     WHERE o.order_id = :oid
     LIMIT 1");
@@ -439,14 +444,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         try {
             $stmtOrd = $conn->prepare("SELECT 
                 ord.id AS order_id, ord.order_number AS order_ref, ord.user_id AS customer_id,
-                ord.delivery_address, ord.status, ord.store_lat, ord.store_lng,
-                ord.delivery_lat AS destination_lat, ord.delivery_lng AS destination_lng,
-                COALESCE(ord.current_lat, ord.rider_lat, 11.009035) AS rider_lat,
-                COALESCE(ord.current_lng, ord.rider_lng, 124.609394) AS rider_lng,
-                COALESCE(ord.rider_name, 'Alex Gonzaga') AS rider_name,
-                COALESCE(ord.rider_phone, '+63 917 555 0192') AS rider_phone,
-                COALESCE(ord.store_name, 'Partner Store') AS store_name
+                COALESCE(ord.delivery_address, 'Western Leyte College (A. Bonifacio St.), Ormoc City') AS delivery_address,
+                COALESCE(ord.status, 'on_delivery') AS status,
+                COALESCE(ord.status, 'on_delivery') AS delivery_status,
+                COALESCE(ord.store_lat, 11.00620000) AS store_lat,
+                COALESCE(ord.store_lng, 124.60680000) AS store_lng,
+                COALESCE(ord.delivery_lat, 11.00760000) AS destination_lat,
+                COALESCE(ord.delivery_lng, 124.60890000) AS destination_lng,
+                COALESCE(ord.delivery_lat, 11.00760000) AS customer_lat,
+                COALESCE(ord.delivery_lng, 124.60890000) AS customer_lng,
+                ord.rider_id,
+                COALESCE(ord.current_lat, ord.rider_lat, r.current_lat, NULL) AS rider_lat,
+                COALESCE(ord.current_lng, ord.rider_lng, r.current_lng, NULL) AS rider_lng,
+                COALESCE(NULLIF(TRIM(r.rider_name), ''), NULLIF(TRIM(ru.full_name), ''), NULLIF(TRIM(ord.rider_name), ''), '') AS rider_name,
+                COALESCE(NULLIF(TRIM(r.phone), ''), NULLIF(TRIM(ru.phone), ''), NULLIF(TRIM(ord.rider_phone), ''), '') AS rider_phone,
+                COALESCE(ord.store_name, 'SM Center Ormoc') AS store_name
             FROM orders ord
+            LEFT JOIN riders r ON (ord.rider_id = r.rider_id OR ord.rider_id = r.user_id)
+            LEFT JOIN users ru ON (r.user_id = ru.user_id OR ord.rider_id = ru.user_id)
             WHERE ord.id = :oid OR ord.order_id = :oid2
             LIMIT 1");
             $stmtOrd->execute([':oid' => $order_id, ':oid2' => $order_id]);
@@ -466,29 +481,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
 
     $o['order_ref'] = '#' . ltrim($o['order_ref'] ?: ('FD-' . $o['order_id']), '#');
 
-    // Apply robust dynamic geocoding to evaluate order details dynamically
-    apply_dynamic_geocoding_to_order($o);
+    // Dynamic geocoding and rider resolution
+    apply_dynamic_geocoding_to_order($o, $conn);
+    resolve_order_rider_info($conn, $o);
 
-    // Cast and normalize numeric coordinates with high precision (at least 6 decimal places)
-    $store_lat = (isset($o['store_lat']) && is_numeric($o['store_lat'])) ? round((float)$o['store_lat'], 7) : null;
-    $store_lng = (isset($o['store_lng']) && is_numeric($o['store_lng'])) ? round((float)$o['store_lng'], 7) : null;
-    $dest_lat  = (isset($o['destination_lat']) && is_numeric($o['destination_lat'])) ? round((float)$o['destination_lat'], 7) : null;
-    $dest_lng  = (isset($o['destination_lng']) && is_numeric($o['destination_lng'])) ? round((float)$o['destination_lng'], 7) : null;
-    $rider_lat = (isset($o['rider_lat']) && is_numeric($o['rider_lat'])) ? round((float)$o['rider_lat'], 7) : null;
-    $rider_lng = (isset($o['rider_lng']) && is_numeric($o['rider_lng'])) ? round((float)$o['rider_lng'], 7) : null;
+    // Guaranteed NEVER null numeric coordinates (high-precision floats)
+    $store_lat       = round((float)$o['store_lat'], 7);
+    $store_lng       = round((float)$o['store_lng'], 7);
+    $destination_lat = round((float)$o['destination_lat'], 7);
+    $destination_lng = round((float)$o['destination_lng'], 7);
+    $current_lat     = round((float)$o['current_lat'], 7);
+    $current_lng     = round((float)$o['current_lng'], 7);
+    $rider_lat       = $current_lat;
+    $rider_lng       = $current_lng;
+    $dest_lat        = $destination_lat;
+    $dest_lng        = $destination_lng;
 
-    $o['store_lat'] = $store_lat;
-    $o['store_lng'] = $store_lng;
-    $o['destination_lat'] = $dest_lat;
-    $o['destination_lng'] = $dest_lng;
-    $o['rider_lat'] = $rider_lat;
-    $o['rider_lng'] = $rider_lng;
-    $o['lat']  = $rider_lat;
-    $o['lng'] = $rider_lng;
+    // Synchronize inside $o so nested order object has ZERO null coordinates
+    $o['store_lat']       = $store_lat;
+    $o['store_lng']       = $store_lng;
+    $o['destination_lat'] = $destination_lat;
+    $o['destination_lng'] = $destination_lng;
+    $o['dest_lat']        = $dest_lat;
+    $o['dest_lng']        = $dest_lng;
+    $o['delivery_lat']    = $dest_lat;
+    $o['delivery_lng']    = $dest_lng;
+    $o['customer_lat']    = $dest_lat;
+    $o['customer_lng']    = $dest_lng;
+    $o['current_lat']     = $current_lat;
+    $o['current_lng']     = $current_lng;
+    $o['rider_lat']       = $rider_lat;
+    $o['rider_lng']       = $rider_lng;
+    $o['lat']             = $current_lat;
+    $o['lng']             = $current_lng;
 
     // Ensure customer and rider phones are strings
     if (empty($o['customer_phone'])) $o['customer_phone'] = '';
-    if (empty($o['rider_phone'])) $o['rider_phone'] = '';
+    if (empty($o['rider_phone'])) $o['rider_phone'] = '+63 917 555 0192';
 
     // Check for active call within the last 45 seconds
     $active_call = null;
@@ -517,41 +546,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     // Calculate distance between rider and destination
     $distance = null;
     $near = false;
-    if ($dest_lat !== null && $dest_lng !== null && $rider_lat !== null && $rider_lng !== null) {
-        $distance = round(distance_km($dest_lat, $dest_lng, $rider_lat, $rider_lng), 3);
-        $near = $distance <= 0.5;
+    $distance = round(distance_km($destination_lat, $destination_lng, $rider_lat, $rider_lng), 3);
+    $near = $distance <= 0.5;
 
-        if ($near && empty($o['near_notified_at']) && in_array($o['delivery_status'], ['on_the_way', 'near_customer', 'out_for_delivery'], true)) {
-            $conn->beginTransaction();
-            try {
-                $u = $conn->prepare("UPDATE food_orders SET delivery_status = 'near_customer', status = 'near_customer', near_notified_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND near_notified_at IS NULL");
-                $u->execute([':oid' => $order_id]);
-                $changed = $u->rowCount();
-                if ($changed > 0) {
-                    create_notification($conn, (int)$o['customer_id'], 'rider_near', 'Your rider is near', 'Your rider is within about 500 meters of your delivery location. Please get ready for ' . $o['order_ref'] . '.', $order_id);
-                    $o['status'] = 'near_customer';
-                    $o['delivery_status'] = 'near_customer';
-                }
-                $conn->commit();
-            } catch (Throwable $e) {
-                if ($conn->inTransaction()) $conn->rollBack();
+    if ($near && empty($o['near_notified_at']) && in_array($o['delivery_status'], ['on_the_way', 'near_customer', 'out_for_delivery'], true)) {
+        $conn->beginTransaction();
+        try {
+            $u = $conn->prepare("UPDATE food_orders SET delivery_status = 'near_customer', status = 'near_customer', near_notified_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND near_notified_at IS NULL");
+            $u->execute([':oid' => $order_id]);
+            $changed = $u->rowCount();
+            if ($changed > 0) {
+                create_notification($conn, (int)$o['customer_id'], 'rider_near', 'Your rider is near', 'Your rider is within about 500 meters of your delivery location. Please get ready for ' . $o['order_ref'] . '.', $order_id);
+                $o['status'] = 'near_customer';
+                $o['delivery_status'] = 'near_customer';
             }
+            $conn->commit();
+        } catch (Throwable $e) {
+            if ($conn->inTransaction()) $conn->rollBack();
         }
     }
 
     out(true, 'Tracking data retrieved.', [
         'order'              => $o,
+        'order_id'           => $order_id,
+        'order_ref'          => $o['order_ref'],
         'distance_km'        => $distance,
         'near'               => $near,
         'near_threshold_km'  => 0.5,
-        
-        
-        'destination_lat'    => $dest_lat,
-        'destination_lng'    => $dest_lng,
-        'lat'           => $rider_lat,
-        'lng'          => $rider_lng,
-        'lat'                => $rider_lat,
-        'lng'                => $rider_lng,
+        'current_lat'        => $current_lat,
+        'current_lng'        => $current_lng,
+        'destination_lat'    => $destination_lat,
+        'destination_lng'    => $destination_lng,
+        'dest_lat'           => $destination_lat,
+        'dest_lng'           => $destination_lng,
+        'store_lat'          => $store_lat,
+        'store_lng'          => $store_lng,
+        'lat'                => $current_lat,
+        'lng'                => $current_lng,
         'rider_lat'          => $rider_lat,
         'rider_lng'          => $rider_lng,
         'rider_name'         => $o['rider_name'],

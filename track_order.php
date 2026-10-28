@@ -54,15 +54,16 @@ if ($order_id > 0) {
         COALESCE(o.rider_phone, r.phone, ru.phone) AS rider_phone
     FROM food_orders o
     LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
-    LEFT JOIN riders r ON (o.rider_id = r.rider_id)
-    LEFT JOIN users ru ON (r.user_id = ru.user_id)
+    LEFT JOIN riders r ON (o.rider_id = r.rider_id OR o.rider_id = r.user_id)
+    LEFT JOIN users ru ON (r.user_id = ru.user_id OR o.rider_id = ru.user_id)
     WHERE o.order_id = :oid AND {$scope_single}
     LIMIT 1");
     $isAdmin = (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') ? 1 : 0;
     $stmt->execute([':oid' => $order_id, ':cid' => $user_id, ':uid' => $user_id, ':is_admin' => $isAdmin]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($order) {
-        apply_dynamic_geocoding_to_order($order);
+        apply_dynamic_geocoding_to_order($order, $conn);
+        resolve_order_rider_info($conn, $order);
         if (!empty($order['order_ref'])) {
             $order['order_ref'] = '#' . ltrim($order['order_ref'], '#');
         }

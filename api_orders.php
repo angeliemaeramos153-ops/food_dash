@@ -211,27 +211,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
         }
     }
 
-    // Resolve store coordinates
-    $store_lat = null;
-    $store_lng = null;
-    if ($shop_id > 0) {
-        try {
-            $s_stmt = $conn->prepare("SELECT * FROM shops WHERE shop_id = :sid LIMIT 1");
-            $s_stmt->execute([':sid' => $shop_id]);
-            $s_row = $s_stmt->fetch(PDO::FETCH_ASSOC);
-            if ($s_row) {
-                $store_lat = isset($s_row['lat']) ? (float)$s_row['lat'] : (isset($s_row['latitude']) ? (float)$s_row['latitude'] : null);
-                $store_lng = isset($s_row['lng']) ? (float)$s_row['lng'] : (isset($s_row['longitude']) ? (float)$s_row['longitude'] : null);
-            }
-        } catch (Throwable $e) {}
-    }
-    if (($store_lat === null || $store_lng === null) && !empty($store_name)) {
-        $geo_s = geocode_address_fallback($store_name . ', Ormoc City');
-        if ($geo_s && isset($geo_s['lat'], $geo_s['lng'])) {
-            $store_lat = (float)$geo_s['lat'];
-            $store_lng = (float)$geo_s['lng'];
-        }
-    }
+    // Resolve dynamic delivery coordinates (WLC default: 11.0076, 124.6089)
+    $dest_c = resolve_ormoc_dest_coords($delivery_address, $delivery_lat, $delivery_lng);
+    $delivery_lat = (float)$dest_c['lat'];
+    $delivery_lng = (float)$dest_c['lng'];
+
+    // Resolve store coordinates (SM Ormoc default: 11.0062, 124.6068)
+    $store_c = resolve_ormoc_store_coords($conn, $shop_id, $store_name);
+    $store_lat = (float)$store_c['lat'];
+    $store_lng = (float)$store_c['lng'];
 
     try {
         $stmt = $conn->prepare("INSERT INTO food_orders " .
