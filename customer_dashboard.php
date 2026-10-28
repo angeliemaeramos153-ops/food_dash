@@ -6031,9 +6031,11 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     const riderLat = parseFloat(data.rider_lat ?? data.lat ?? data.lat ?? ord.rider_lat);
     const riderLng = parseFloat(data.rider_lng ?? data.lng ?? data.lng ?? ord.rider_lng);
 
-    // Update Rider info dynamically from database
-    currentTrackingRiderName = data.rider_name || ord.rider_name || 'Assigned Rider';
-    const riderPhoneRaw = data.rider_phone || ord.rider_phone || '';
+    // Update Rider info dynamically from database or joined riders table data
+    const rawRiderName = String(data.rider_name || ord.rider_name || data.rider?.name || data.rider_fullname || '').trim();
+    const isRiderAssigned = Boolean(rawRiderName && rawRiderName.toLowerCase() !== 'delivery partner' && rawRiderName.toLowerCase() !== 'assigned rider' && rawRiderName.toLowerCase() !== 'none' && rawRiderName.toLowerCase() !== 'null');
+    currentTrackingRiderName = isRiderAssigned ? rawRiderName : 'Waiting for Rider Assignment';
+    const riderPhoneRaw = String(data.rider_phone || ord.rider_phone || data.rider?.phone || '').trim();
     const riderDial = riderPhoneRaw ? riderPhoneRaw.replace(/[^\+0-9]/g, '') : '';
     currentTrackingRiderPhone = riderDial;
 
@@ -6842,7 +6844,7 @@ function handleRiderArrivedEvent(data) {
   if (window.displayedNotificationIds.has(arrivedKey)) return;
   window.displayedNotificationIds.add(arrivedKey);
 
-  const rName = data.rider_name || currentTrackingRiderName || 'Alex';
+  const rName = (data.rider_name || currentTrackingRiderName || 'Waiting for Rider Assignment');
 
   // Trigger persistent looping arrival alarm (MUST ring until action button is clicked)
   if (window.FoodDashCall) {

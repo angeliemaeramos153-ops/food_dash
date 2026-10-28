@@ -49,8 +49,8 @@ if ($order_id > 0) {
         COALESCE(o.delivery_lng, o.customer_lng, 124.60749) AS destination_lng,
         COALESCE(o.rider_lat, r.current_lat) AS rider_lat,
         COALESCE(o.rider_lng, r.current_lng) AS rider_lng,
-        COALESCE(r.rider_name, ru.full_name, 'Alex Rider') AS rider_name,
-        COALESCE(o.rider_phone, r.phone, ru.phone, '+63 917 555 0192') AS rider_phone
+        COALESCE(r.rider_name, ru.full_name, o.rider_name, o.rider_fullname) AS rider_name,
+        COALESCE(o.rider_phone, r.phone, ru.phone) AS rider_phone
     FROM food_orders o
     LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
     LEFT JOIN riders r ON (o.rider_id = r.rider_id)
@@ -67,9 +67,12 @@ if ($order_id > 0) {
 
 $raw_status = strtoupper(trim(str_replace([' ', '-'], '_', $order['status'] ?? 'ON_DELIVERY')));
 $status_label = ucwords(strtolower(str_replace('_', ' ', $raw_status)));
-$rider_phone = $order['rider_phone'] ?? '+63 917 555 0192';
+$raw_r_name = trim((string)($order['rider_name'] ?? ''));
+$is_r_assigned = (!empty($raw_r_name) && strtolower($raw_r_name) !== 'delivery partner' && strtolower($raw_r_name) !== 'alex rider' && strtolower($raw_r_name) !== 'assigned rider' && strtolower($raw_r_name) !== 'none');
+$rider_name = $is_r_assigned ? $raw_r_name : 'Waiting for Rider Assignment';
+$rider_phone = !empty($order['rider_phone']) ? $order['rider_phone'] : ($is_r_assigned ? 'No phone provided' : 'Rider not yet assigned');
 $rider_dial = preg_replace('/[^\+0-9]/', '', $rider_phone) ?: '+639175550192';
-$rider_name = $order['rider_name'] ?? 'Alex Rider';
+// $rider_name resolved dynamically above
 ?>
 <!DOCTYPE html>
 <html lang="en">
