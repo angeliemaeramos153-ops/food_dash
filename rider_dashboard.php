@@ -2624,6 +2624,8 @@ function handleRiderPositionUpdate(lat, lng, source = 'gps', accuracy = null) {
 // ==========================================
 // ORMOC GEOCODING DICTIONARY & SMART LOOKUP (100% Dynamic matching Mobile App)
 // ==========================================
+// ORMOC GEOCODING DICTIONARY & SMART LOOKUP (100% Dynamic matching Mobile App)
+// ==========================================
 const ORMOC_GEOCODING_DICTIONARY = {
   malls: {
     sm_center_ormoc: {
@@ -2631,7 +2633,7 @@ const ORMOC_GEOCODING_DICTIONARY = {
       mall: 'SM Center Ormoc',
       latitude: 11.0062,
       longitude: 124.6068,
-      stores: ['jollibee sm', 'mang inasal sm', 'ribshack', 'rib shack', 'sm ormoc', 'sm center']
+      stores: ['jollibee', 'sm', 'mang inasal', 'inasal', 'ribshack', 'rib shack', 'sm ormoc', 'sm center'],
     },
     robinsons_place_ormoc: {
       name: 'Robinsons Place Ormoc',
@@ -2639,45 +2641,65 @@ const ORMOC_GEOCODING_DICTIONARY = {
       latitude: 11.0215,
       longitude: 124.6155,
       stores: [
-        "shakey's", 'shakeys', "mcdonald's", 'mcdonalds', 'mcdo',
-        'chowking', 'greenwich', 'jollibee robinsons', 'mang inasal robinsons',
-        'robinsons ormoc', 'robinsons place'
-      ]
-    }
+        "shakey's",
+        'shakeys',
+        "mcdonald's",
+        'mcdonalds',
+        'mcdo',
+        'chowking',
+        'greenwich',
+        'jollibee robinsons',
+        'mang inasal robinsons',
+        'robinsons ormoc',
+        'robinsons place',
+      ],
+    },
   },
   destinations: {
     western_leyte_college: {
       name: 'Western Leyte College',
       latitude: 11.0076,
       longitude: 124.6089,
-      keywords: ['western leyte college', 'western leyte', 'wlc']
+      keywords: ['western', 'leyte', 'college', 'wlc', 'bonifacio', 'a. bonifacio'],
     },
     bonifacio_street: {
       name: 'A. Bonifacio St., Ormoc City',
       latitude: 11.0076,
       longitude: 124.6089,
-      keywords: ['a. bonifacio', 'a.bonifacio', 'bonifacio st', 'bonifacio street', 'bonifacio']
+      keywords: ['bonifacio', 'a. bonifacio', 'a.bonifacio', 'bonifacio st', 'bonifacio street'],
     },
     city_hall: {
       name: 'Ormoc City Hall',
       latitude: 11.0088,
       longitude: 124.6050,
-      keywords: ['ormoc city hall', 'city hall']
+      keywords: ['ormoc city hall', 'city hall'],
     },
     superdome: {
       name: 'Ormoc City Superdome',
       latitude: 11.0035,
       longitude: 124.6095,
-      keywords: ['superdome', 'ormoc superdome']
+      keywords: ['superdome', 'ormoc superdome'],
     },
     city_plaza: {
       name: 'Ormoc City Plaza',
       latitude: 11.0065,
       longitude: 124.6070,
-      keywords: ['ormoc plaza', 'city plaza']
-    }
-  }
+      keywords: ['ormoc plaza', 'city plaza'],
+    },
+  },
 };
+
+/**
+ * Normalizes query string for robust, fault-tolerant string matching (exact match with mobile).
+ */
+function normalizeQuery(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .toLowerCase()
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_\x60~()'"?]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function isValidOrmocCoordinate(lat, lng) {
   if (lat == null || lng == null) return false;
@@ -2686,33 +2708,43 @@ function isValidOrmocCoordinate(lat, lng) {
   if (isNaN(nLat) || isNaN(nLng)) return false;
   if (nLat < 10.95 || nLat > 11.15 || nLng < 124.50 || nLng > 124.75) return false;
   if (Math.abs(nLat - 11.0138) < 0.001 && Math.abs(nLng - 124.6040) < 0.001) return false;
+  if (Math.abs(nLat - 11.01039) < 0.001) return false;
   return true;
 }
 
 function smartGeocodeLookup(text, targetType = 'any') {
   if (!text) return null;
-  const normalized = String(text)
-    .toLowerCase()
-    .replace(/[^a-zA-Z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const normalized = normalizeQuery(text);
   if (!normalized) return null;
 
   // 1. Destination / Street Matching
   if (targetType === 'destination' || targetType === 'any') {
     const wlc = ORMOC_GEOCODING_DICTIONARY.destinations.western_leyte_college;
-    const bonifacio = ORMOC_GEOCODING_DICTIONARY.destinations.bonifacio_street;
 
-    if (normalized.includes('western leyte') || normalized.includes('wlc') || /\bwlc\b/.test(normalized)) {
-      return { latitude: wlc.latitude, longitude: wlc.longitude, name: wlc.name, type: 'destination' };
+    if (
+      normalized.includes('western') ||
+      normalized.includes('leyte') ||
+      normalized.includes('college') ||
+      normalized.includes('wlc') ||
+      normalized.includes('bonifacio')
+    ) {
+      return {
+        latitude: wlc.latitude,
+        longitude: wlc.longitude,
+        name: 'Western Leyte College (A. Bonifacio St.)',
+        type: 'destination',
+      };
     }
-    if (normalized.includes('bonifacio') || normalized.includes('a bonifacio')) {
-      return { latitude: bonifacio.latitude, longitude: bonifacio.longitude, name: bonifacio.name, type: 'destination' };
-    }
+
     for (const [key, dest] of Object.entries(ORMOC_GEOCODING_DICTIONARY.destinations)) {
       if (key === 'western_leyte_college' || key === 'bonifacio_street') continue;
-      if (dest.keywords.some(k => normalized.includes(k.toLowerCase()))) {
-        return { latitude: dest.latitude, longitude: dest.longitude, name: dest.name, type: 'destination' };
+      if (dest.keywords.some((k) => normalized.includes(normalizeQuery(k)))) {
+        return {
+          latitude: dest.latitude,
+          longitude: dest.longitude,
+          name: dest.name,
+          type: 'destination',
+        };
       }
     }
   }
@@ -2722,13 +2754,14 @@ function smartGeocodeLookup(text, targetType = 'any') {
     const smMall = ORMOC_GEOCODING_DICTIONARY.malls.sm_center_ormoc;
     const robMall = ORMOC_GEOCODING_DICTIONARY.malls.robinsons_place_ormoc;
 
-    const hasRobinsons = normalized.includes('robinson') || normalized.includes('rob');
-    const hasSm = normalized.includes('sm') || /\bsm\b/.test(normalized);
+    const hasRobinsonsKeyword = normalized.includes('robinson') || normalized.includes('rob');
+    const hasSmKeyword = normalized.includes('sm') || /\bsm\b/.test(normalized);
+
     const isJollibee = normalized.includes('jollibee');
     const isInasal = normalized.includes('inasal') || normalized.includes('mang inasal');
 
-    const isRobinsonsBranch = (isJollibee || isInasal) && hasRobinsons;
-    const isSmBranch = (isJollibee || isInasal) && hasSm;
+    const isRobinsonsBranch = (isJollibee || isInasal) && hasRobinsonsKeyword;
+    const isSmBranch = (isJollibee || isInasal) && hasSmKeyword;
 
     const isRobinsonsStore =
       normalized.includes('shakey') ||
@@ -2737,7 +2770,7 @@ function smartGeocodeLookup(text, targetType = 'any') {
       normalized.includes('chowking') ||
       normalized.includes('greenwich') ||
       isRobinsonsBranch ||
-      (hasRobinsons && !isSmBranch);
+      (hasRobinsonsKeyword && !isSmBranch);
 
     const isSmStore =
       isSmBranch ||
@@ -2745,7 +2778,7 @@ function smartGeocodeLookup(text, targetType = 'any') {
       normalized.includes('rib shack') ||
       normalized.includes('sm ormoc') ||
       normalized.includes('sm center') ||
-      (hasSm && !isRobinsonsStore) ||
+      (hasSmKeyword && !isRobinsonsStore) ||
       (isJollibee && !isRobinsonsStore);
 
     if (isRobinsonsStore && !isSmBranch && !normalized.includes('ribshack')) {
@@ -2755,7 +2788,7 @@ function smartGeocodeLookup(text, targetType = 'any') {
         name: robMall.name,
         mall: 'Robinsons Place Ormoc',
         isPartner: true,
-        type: 'store'
+        type: 'store',
       };
     }
 
@@ -2766,7 +2799,7 @@ function smartGeocodeLookup(text, targetType = 'any') {
         name: smMall.name,
         mall: 'SM Center Ormoc',
         isPartner: true,
-        type: 'store'
+        type: 'store',
       };
     }
   }
@@ -2774,50 +2807,192 @@ function smartGeocodeLookup(text, targetType = 'any') {
   return null;
 }
 
-function resolveStoreCoordinates(data) {
-  const storeNameStr = String(data?.store_name || data?.shop_name || data?.restaurant_name || data?.merchant_name || '').trim();
-  const storeAddrStr = String(data?.store_address || data?.shop_address || data?.pickup_address || '').trim();
-  const combined = (storeNameStr + ' ' + storeAddrStr).trim();
+function resolveStoreCoordinates(orderData) {
+  const storeNameStr = String(
+    orderData?.store_name ||
+    orderData?.shop_name ||
+    orderData?.restaurant_name ||
+    orderData?.merchant_name ||
+    orderData?.branch_name ||
+    orderData?.store?.name ||
+    orderData?.shop?.name ||
+    ''
+  ).trim();
 
-  const smart = smartGeocodeLookup(combined, 'store');
-  if (smart) {
+  const storeAddrStr = String(
+    orderData?.store_address ||
+    orderData?.shop_address ||
+    orderData?.pickup_address ||
+    orderData?.pickup_location ||
+    orderData?.store?.address ||
+    orderData?.shop?.address ||
+    ''
+  ).trim();
+
+  const combinedStore = normalizeQuery(`${storeNameStr} ${storeAddrStr}`);
+
+  // 1. Check Robinsons Ormoc stores first
+  const isRobinsons =
+    (combinedStore.includes('robinson') ||
+      combinedStore.includes('shakey') ||
+      combinedStore.includes('mcdonald') ||
+      combinedStore.includes('mcdo') ||
+      combinedStore.includes('chowking') ||
+      combinedStore.includes('greenwich')) &&
+    !combinedStore.includes('sm') &&
+    !combinedStore.includes('ribshack');
+
+  if (isRobinsons) {
+    const robMall = ORMOC_GEOCODING_DICTIONARY.malls.robinsons_place_ormoc;
     return {
-      latitude: smart.latitude,
-      longitude: smart.longitude,
-      storeName: storeNameStr || smart.name,
-      mall: smart.mall,
-      isPartner: true
+      latitude: robMall.latitude,
+      longitude: robMall.longitude,
+      storeName: storeNameStr || robMall.name,
+      mall: 'Robinsons Place Ormoc',
+      isPartner: true,
     };
   }
 
-  const rawLat = parseFloat(data?.store_lat);
-  const rawLng = parseFloat(data?.store_lng);
-  if (isValidOrmocCoordinate(rawLat, rawLng)) {
-    return { latitude: rawLat, longitude: rawLng, storeName: storeNameStr || 'Partner Kitchen', isPartner: true };
+  // 2. Jollibee SM / SM store dynamic override -> sLat = 11.0062, sLng = 124.6068
+  const isSmStore =
+    combinedStore.includes('sm') ||
+    combinedStore.includes('jollibee') ||
+    combinedStore.includes('inasal') ||
+    combinedStore.includes('ribshack') ||
+    combinedStore.includes('rib shack') ||
+    combinedStore.includes('center') ||
+    /\bsm\b/.test(combinedStore) ||
+    combinedStore.length === 0;
+
+  const rawLat = parseFloat(
+    orderData?.store_lat ??
+    orderData?.store_latitude ??
+    orderData?.pickup_lat ??
+    orderData?.store?.latitude
+  );
+  const rawLng = parseFloat(
+    orderData?.store_lng ??
+    orderData?.store_longitude ??
+    orderData?.pickup_lng ??
+    orderData?.store?.longitude
+  );
+
+  const isStoreCoordInvalid =
+    isNaN(rawLat) ||
+    isNaN(rawLng) ||
+    !isValidOrmocCoordinate(rawLat, rawLng) ||
+    (Math.abs(rawLat - 11.0138) < 0.001 && Math.abs(rawLng - 124.6040) < 0.001);
+
+  if (isSmStore || isStoreCoordInvalid) {
+    return {
+      latitude: 11.0062,
+      longitude: 124.6068,
+      storeName: storeNameStr || 'Jollibee SM Center Ormoc',
+      mall: 'SM Center Ormoc',
+      isPartner: true,
+    };
   }
 
-  return { latitude: 11.0075, longitude: 124.6072, storeName: storeNameStr || 'SM Center Ormoc Store', mall: 'SM Center Ormoc', isPartner: true };
+  return {
+    latitude: rawLat,
+    longitude: rawLng,
+    storeName: storeNameStr || 'Partner Kitchen',
+    isPartner: true,
+  };
 }
 
-function resolveDestinationCoordinates(data) {
-  const addrStr = String(data?.delivery_address || data?.address || data?.customer_address || data?.customer_name || '').trim();
+function resolveDestinationCoordinates(orderData) {
+  const rawDeliveryAddress =
+    orderData?.delivery_address ||
+    orderData?.destination_name ||
+    orderData?.address ||
+    orderData?.customer_address ||
+    orderData?.destination_address ||
+    orderData?.dropoff_address ||
+    orderData?.dropoff_location ||
+    orderData?.customer_name ||
+    orderData?.delivery_location ||
+    orderData?.delivery_notes ||
+    orderData?.notes ||
+    orderData?.street ||
+    orderData?.delivery_street ||
+    orderData?.customer?.address ||
+    orderData?.customer?.name ||
+    '';
 
-  const smart = smartGeocodeLookup(addrStr, 'destination');
-  if (smart) {
+  const addressStr = normalizeQuery(rawDeliveryAddress);
+
+  // 1. ABSOLUTE PRIORITY: Case-insensitive text-matching override
+  // If delivery_address or destination_name includes "western", "leyte", "college", "wlc", or "bonifacio",
+  // unconditionally force dLat = 11.0076 and dLng = 124.6089, completely discarding any corrupted latitude/longitude (e.g. 5.0 or Alta Vista).
+  const isWlcOrBonifacio =
+    addressStr.includes('western') ||
+    addressStr.includes('leyte') ||
+    addressStr.includes('college') ||
+    addressStr.includes('wlc') ||
+    addressStr.includes('bonifacio');
+
+  if (isWlcOrBonifacio) {
     return {
-      latitude: smart.latitude,
-      longitude: smart.longitude,
-      destinationName: addrStr || smart.name
+      latitude: 11.0076,
+      longitude: 124.6089,
+      destinationName:
+        orderData?.delivery_address ||
+        orderData?.destination_name ||
+        orderData?.address ||
+        'Western Leyte College (A. Bonifacio St.)',
     };
   }
 
-  const rawLat = parseFloat(data?.delivery_lat ?? data?.customer_lat);
-  const rawLng = parseFloat(data?.delivery_lng ?? data?.customer_lng);
-  if (isValidOrmocCoordinate(rawLat, rawLng)) {
-    return { latitude: rawLat, longitude: rawLng, destinationName: addrStr || 'Customer Destination' };
+  // 2. Read customer_lat and customer_lng directly from food_orders schema
+  const rawDestLat = parseFloat(
+    orderData?.customer_lat ??
+    orderData?.delivery_lat ??
+    orderData?.destination_lat ??
+    orderData?.dropoff_lat ??
+    orderData?.dest_lat ??
+    orderData?.customer?.latitude ??
+    orderData?.lat
+  );
+  const rawDestLng = parseFloat(
+    orderData?.customer_lng ??
+    orderData?.delivery_lng ??
+    orderData?.destination_lng ??
+    orderData?.dropoff_lng ??
+    orderData?.dest_lng ??
+    orderData?.customer?.longitude ??
+    orderData?.lng
+  );
+
+  // If destination coordinates are missing, corrupted (like 5.0, 11.01039), or Alta Vista default (~11.0138, 124.6040)
+  const isInvalidCoordinate =
+    isNaN(rawDestLat) ||
+    isNaN(rawDestLng) ||
+    !isValidOrmocCoordinate(rawDestLat, rawDestLng) ||
+    (Math.abs(rawDestLat - 11.0138) < 0.001 && Math.abs(rawDestLng - 124.6040) < 0.001) ||
+    (Math.abs(rawDestLat - 11.01039) < 0.001);
+
+  if (isInvalidCoordinate) {
+    return {
+      latitude: 11.0076,
+      longitude: 124.6089,
+      destinationName:
+        orderData?.delivery_address ||
+        orderData?.destination_name ||
+        orderData?.address ||
+        'Western Leyte College (A. Bonifacio St.)',
+    };
   }
 
-  return { latitude: 11.0125, longitude: 124.6085, destinationName: addrStr || 'Western Leyte College' };
+  return {
+    latitude: rawDestLat,
+    longitude: rawDestLng,
+    destinationName:
+      orderData?.delivery_address ||
+      orderData?.destination_name ||
+      orderData?.address ||
+      'Customer Destination',
+  };
 }
 
 async function initDeliveryMap(data) {

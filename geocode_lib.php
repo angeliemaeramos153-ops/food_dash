@@ -137,6 +137,15 @@ if (!function_exists('geocode_address_fallback')) {
 }
 
 
+if (!function_exists('normalize_query_str')) {
+    function normalize_query_str(?string $str): string {
+        if ($str === null) return '';
+        $s = strtolower(trim($str));
+        $s = preg_replace('/[.,\/#!$%\^&\*;:{}=\-_\x60~()\'"?]/', ' ', $s);
+        return trim(preg_replace('/\s+/', ' ', $s));
+    }
+}
+
 if (!function_exists('is_valid_ormoc_coord')) {
     function is_valid_ormoc_coord($lat, $lng): bool {
         if ($lat === null || $lng === null || !is_numeric($lat) || !is_numeric($lng)) return false;
@@ -224,8 +233,9 @@ if (!function_exists('smart_geocode_ormoc')) {
 
 if (!function_exists('resolve_ormoc_store_coords')) {
     function resolve_ormoc_store_coords(?string $store_name, ?string $store_address = '', $raw_lat = null, $raw_lng = null): array {
-        $combined = strtolower(trim(($store_name ?? '') . ' ' . ($store_address ?? '')));
+        $combined = normalize_query_str(($store_name ?? '') . ' ' . ($store_address ?? ''));
 
+        // 1. Check Robinsons Ormoc stores first
         $hasRobinsons = (strpos($combined, 'robinson') !== false || strpos($combined, 'rob') !== false);
         $hasSm = (strpos($combined, 'sm') !== false || preg_match('/\bsm\b/', $combined));
 
@@ -249,6 +259,7 @@ if (!function_exists('resolve_ormoc_store_coords')) {
             ];
         }
 
+        // 2. Jollibee SM / SM store dynamic override -> sLat = 11.0062, sLng = 124.6068
         $isJollibeeSm = (
             $hasSm ||
             strpos($combined, 'jollibee') !== false ||
@@ -261,7 +272,12 @@ if (!function_exists('resolve_ormoc_store_coords')) {
 
         $fLat = is_numeric($raw_lat) ? (float)$raw_lat : null;
         $fLng = is_numeric($raw_lng) ? (float)$raw_lng : null;
-        $is_store_invalid = ($fLat === null || $fLng === null || !is_valid_ormoc_coord($fLat, $fLng));
+        $is_store_invalid = (
+            $fLat === null ||
+            $fLng === null ||
+            !is_valid_ormoc_coord($fLat, $fLng) ||
+            (abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001)
+        );
 
         if ($isJollibeeSm || $is_store_invalid) {
             return [
@@ -288,8 +304,11 @@ if (!function_exists('resolve_ormoc_store_coords')) {
 if (!function_exists('resolve_ormoc_dest_coords')) {
     function resolve_ormoc_dest_coords(?string $address, $raw_lat = null, $raw_lng = null): array {
         $clean = trim($address ?? '');
-        $norm = strtolower($clean);
+        $norm = normalize_query_str($clean);
 
+        // 1. ABSOLUTE PRIORITY: Case-insensitive text-matching override
+        // If address contains "western", "leyte", "college", "wlc", or "bonifacio",
+        // strictly override destination to WLC's exact campus center (11.0076, 124.6089), completely discarding corrupted values.
         $is_wlc_or_bonifacio = (
             strpos($norm, 'western') !== false ||
             strpos($norm, 'leyte') !== false ||
@@ -298,18 +317,28 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
             strpos($norm, 'bonifacio') !== false
         );
 
+        if ($is_wlc_or_bonifacio) {
+            return [
+                'lat' => 11.0076,
+                'lng' => 124.6089,
+                'name' => !empty($clean) ? $clean : 'Western Leyte College (A. Bonifacio St.)',
+                'source' => 'wlc_campus_override'
+            ];
+        }
+
         $fLat = is_numeric($raw_lat) ? (float)$raw_lat : null;
         $fLng = is_numeric($raw_lng) ? (float)$raw_lng : null;
 
-        $is_near_real_street_or_invalid = (
+        // Discard corrupted coordinates (like 5.0, 11.01039, or Alta Vista default 11.0138)
+        $is_invalid = (
             $fLat === null ||
             $fLng === null ||
             !is_valid_ormoc_coord($fLat, $fLng) ||
-            ($fLat <= 11.0072 && $fLng <= 124.6078) ||
-            strpos($norm, 'real') !== false
+            (abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001) ||
+            (abs($fLat - 11.01039) < 0.001)
         );
 
-        if ($is_wlc_or_bonifacio || $is_near_real_street_or_invalid) {
+        if ($is_invalid) {
             return [
                 'lat' => 11.0076,
                 'lng' => 124.6089,
