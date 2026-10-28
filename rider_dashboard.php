@@ -2629,8 +2629,8 @@ const ORMOC_GEOCODING_DICTIONARY = {
     sm_center_ormoc: {
       name: 'SM Center Ormoc',
       mall: 'SM Center Ormoc',
-      latitude: 11.0075,
-      longitude: 124.6072,
+      latitude: 11.0062,
+      longitude: 124.6068,
       stores: ['jollibee sm', 'mang inasal sm', 'ribshack', 'rib shack', 'sm ormoc', 'sm center']
     },
     robinsons_place_ormoc: {
@@ -2648,14 +2648,14 @@ const ORMOC_GEOCODING_DICTIONARY = {
   destinations: {
     western_leyte_college: {
       name: 'Western Leyte College',
-      latitude: 11.0125,
-      longitude: 124.6085,
+      latitude: 11.0068,
+      longitude: 124.6115,
       keywords: ['western leyte college', 'western leyte', 'wlc']
     },
     bonifacio_street: {
       name: 'A. Bonifacio St., Ormoc City',
-      latitude: 11.0085,
-      longitude: 124.6065,
+      latitude: 11.0068,
+      longitude: 124.6115,
       keywords: ['a. bonifacio', 'a.bonifacio', 'bonifacio st', 'bonifacio street', 'bonifacio']
     },
     city_hall: {

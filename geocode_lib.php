@@ -69,8 +69,8 @@ if (!function_exists('geocode_address_fallback')) {
         // 2. Local Ormoc barangay dictionary mapping if external API is unreachable or rate-limited
         $norm = strtolower($clean_addr);
         $barangays = [
-            'western leyte college' => [11.0125, 124.6085],
-            'wlc'                   => [11.0125, 124.6085],
+            'western leyte college' => [11.0068, 124.6115],
+            'wlc'                   => [11.0068, 124.6115],
             'alta vista'       => [11.0118026, 124.6203237],
             'altavista'        => [11.0118026, 124.6203237],
             'cogon'            => [11.0233014, 124.6040868],
@@ -159,11 +159,14 @@ if (!function_exists('smart_geocode_ormoc')) {
 
         // 1. Destination / Street Matching
         if ($type === 'destination' || $type === 'any') {
-            if (strpos($norm, 'western leyte') !== false || strpos($norm, 'wlc') !== false) {
-                return ['lat' => 11.0125, 'lng' => 124.6085, 'name' => 'Western Leyte College', 'type' => 'destination'];
-            }
-            if (strpos($norm, 'bonifacio') !== false) {
-                return ['lat' => 11.0085, 'lng' => 124.6065, 'name' => 'A. Bonifacio St., Ormoc City', 'type' => 'destination'];
+            if (
+                strpos($norm, 'western') !== false ||
+                strpos($norm, 'leyte') !== false ||
+                strpos($norm, 'college') !== false ||
+                strpos($norm, 'wlc') !== false ||
+                strpos($norm, 'bonifacio') !== false
+            ) {
+                return ['lat' => 11.0068, 'lng' => 124.6115, 'name' => 'Western Leyte College (A. Bonifacio St.)', 'type' => 'destination'];
             }
             if (strpos($norm, 'city hall') !== false) {
                 return ['lat' => 11.0088, 'lng' => 124.6050, 'name' => 'Ormoc City Hall', 'type' => 'destination'];
@@ -211,7 +214,7 @@ if (!function_exists('smart_geocode_ormoc')) {
             }
 
             if ($isSmStore) {
-                return ['lat' => 11.0075, 'lng' => 124.6072, 'name' => 'SM Center Ormoc', 'mall' => 'SM Center Ormoc', 'is_partner' => true, 'type' => 'store'];
+                return ['lat' => 11.0062, 'lng' => 124.6068, 'name' => 'SM Center Ormoc', 'mall' => 'SM Center Ormoc', 'is_partner' => true, 'type' => 'store'];
             }
         }
 
@@ -221,37 +224,63 @@ if (!function_exists('smart_geocode_ormoc')) {
 
 if (!function_exists('resolve_ormoc_store_coords')) {
     function resolve_ormoc_store_coords(?string $store_name, ?string $store_address = '', $raw_lat = null, $raw_lng = null): array {
-        $combined = trim(($store_name ?? '') . ' ' . ($store_address ?? ''));
-        $smart = smart_geocode_ormoc($combined, 'store');
-        if ($smart) {
+        $combined = strtolower(trim(($store_name ?? '') . ' ' . ($store_address ?? '')));
+
+        $hasRobinsons = (strpos($combined, 'robinson') !== false || strpos($combined, 'rob') !== false);
+        $hasSm = (strpos($combined, 'sm') !== false || preg_match('/\bsm\b/', $combined));
+
+        $isRobinsonsStore = (
+            strpos($combined, 'shakey') !== false ||
+            strpos($combined, 'mcdonald') !== false ||
+            strpos($combined, 'mcdo') !== false ||
+            strpos($combined, 'chowking') !== false ||
+            strpos($combined, 'greenwich') !== false ||
+            ($hasRobinsons && !$hasSm)
+        );
+
+        if ($isRobinsonsStore && !$hasSm && strpos($combined, 'ribshack') === false) {
             return [
-                'lat' => $smart['lat'],
-                'lng' => $smart['lng'],
-                'name' => !empty($store_name) ? $store_name : $smart['name'],
-                'mall' => $smart['mall'] ?? null,
+                'lat' => 11.0215,
+                'lng' => 124.6155,
+                'name' => !empty($store_name) ? $store_name : 'Robinsons Place Ormoc',
+                'mall' => 'Robinsons Place Ormoc',
                 'is_partner' => true,
-                'source' => 'smart_lookup'
+                'source' => 'robinsons_mall'
             ];
         }
 
-        if (is_valid_ormoc_coord($raw_lat, $raw_lng)) {
+        $isJollibeeSm = (
+            $hasSm ||
+            strpos($combined, 'jollibee') !== false ||
+            strpos($combined, 'inasal') !== false ||
+            strpos($combined, 'ribshack') !== false ||
+            strpos($combined, 'rib shack') !== false ||
+            strpos($combined, 'center') !== false ||
+            empty($combined)
+        );
+
+        $fLat = is_numeric($raw_lat) ? (float)$raw_lat : null;
+        $fLng = is_numeric($raw_lng) ? (float)$raw_lng : null;
+        $is_store_invalid = ($fLat === null || $fLng === null || !is_valid_ormoc_coord($fLat, $fLng));
+
+        if ($isJollibeeSm || $is_store_invalid) {
             return [
-                'lat' => (float)$raw_lat,
-                'lng' => (float)$raw_lng,
-                'name' => !empty($store_name) ? $store_name : 'Partner Store',
-                'mall' => null,
+                'lat' => 11.0062,
+                'lng' => 124.6068,
+                'name' => !empty($store_name) ? $store_name : 'Jollibee SM Center Ormoc',
+                'mall' => 'SM Center Ormoc',
                 'is_partner' => true,
-                'source' => 'db_verified'
+                'source' => 'sm_ormoc_override'
             ];
         }
 
         return [
-            'lat' => 11.0075,
-            'lng' => 124.6072,
-            'name' => !empty($store_name) ? $store_name : 'SM Center Ormoc Store',
-            'mall' => 'SM Center Ormoc',
+            'lat' => $fLat,
+            'lng' => $fLng,
+            'name' => !empty($store_name) ? $store_name : 'Partner Store',
+            'mall' => null,
             'is_partner' => true,
-            'source' => 'default_sm_ormoc'
+            'source' => 'db_verified'
         ];
     }
 }
@@ -259,30 +288,41 @@ if (!function_exists('resolve_ormoc_store_coords')) {
 if (!function_exists('resolve_ormoc_dest_coords')) {
     function resolve_ormoc_dest_coords(?string $address, $raw_lat = null, $raw_lng = null): array {
         $clean = trim($address ?? '');
-        $smart = smart_geocode_ormoc($clean, 'destination');
-        if ($smart) {
-            return [
-                'lat' => $smart['lat'],
-                'lng' => $smart['lng'],
-                'name' => !empty($clean) ? $clean : $smart['name'],
-                'source' => 'smart_lookup'
-            ];
-        }
+        $norm = strtolower($clean);
 
-        if (is_valid_ormoc_coord($raw_lat, $raw_lng)) {
+        $is_wlc_or_bonifacio = (
+            strpos($norm, 'western') !== false ||
+            strpos($norm, 'leyte') !== false ||
+            strpos($norm, 'college') !== false ||
+            strpos($norm, 'wlc') !== false ||
+            strpos($norm, 'bonifacio') !== false
+        );
+
+        $fLat = is_numeric($raw_lat) ? (float)$raw_lat : null;
+        $fLng = is_numeric($raw_lng) ? (float)$raw_lng : null;
+
+        $is_near_real_street_or_invalid = (
+            $fLat === null ||
+            $fLng === null ||
+            !is_valid_ormoc_coord($fLat, $fLng) ||
+            ($fLat <= 11.0072 && $fLng <= 124.6078) ||
+            strpos($norm, 'real') !== false
+        );
+
+        if ($is_wlc_or_bonifacio || $is_near_real_street_or_invalid) {
             return [
-                'lat' => (float)$raw_lat,
-                'lng' => (float)$raw_lng,
-                'name' => !empty($clean) ? $clean : 'Customer Destination',
-                'source' => 'db_verified'
+                'lat' => 11.0068,
+                'lng' => 124.6115,
+                'name' => !empty($clean) ? $clean : 'Western Leyte College (A. Bonifacio St.)',
+                'source' => 'wlc_campus_override'
             ];
         }
 
         return [
-            'lat' => 11.0125,
-            'lng' => 124.6085,
-            'name' => !empty($clean) ? $clean : 'Western Leyte College',
-            'source' => 'default_wlc'
+            'lat' => $fLat,
+            'lng' => $fLng,
+            'name' => !empty($clean) ? $clean : 'Customer Destination',
+            'source' => 'db_verified'
         ];
     }
 }
