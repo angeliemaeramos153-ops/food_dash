@@ -2,6 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once 'db_connect.php';
 require_once 'payment_helper.php';
+require_once __DIR__ . '/geocode_lib.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: index.php");
@@ -45,8 +46,8 @@ if ($order_id > 0) {
         COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
         COALESCE(o.store_lat, s.lat, s.lat, 11.00842) AS store_lat,
         COALESCE(o.store_lng, s.lng, s.lng, 124.60721) AS store_lng,
-        COALESCE(o.id, o.customer_lat, 11.00762) AS destination_lat,
-        COALESCE(o.delivery_lng, o.customer_lng, 124.60749) AS destination_lng,
+        COALESCE(o.delivery_lat, o.customer_lat, 11.0076) AS destination_lat,
+        COALESCE(o.delivery_lng, o.customer_lng, 124.6089) AS destination_lng,
         COALESCE(o.rider_lat, r.current_lat) AS rider_lat,
         COALESCE(o.rider_lng, r.current_lng) AS rider_lng,
         COALESCE(r.rider_name, ru.full_name, o.rider_name, o.rider_fullname) AS rider_name,
@@ -60,8 +61,11 @@ if ($order_id > 0) {
     $isAdmin = (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') ? 1 : 0;
     $stmt->execute([':oid' => $order_id, ':cid' => $user_id, ':uid' => $user_id, ':is_admin' => $isAdmin]);
     $order = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($order && !empty($order['order_ref'])) {
-        $order['order_ref'] = '#' . ltrim($order['order_ref'], '#');
+    if ($order) {
+        apply_dynamic_geocoding_to_order($order);
+        if (!empty($order['order_ref'])) {
+            $order['order_ref'] = '#' . ltrim($order['order_ref'], '#');
+        }
     }
 }
 

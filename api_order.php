@@ -19,8 +19,8 @@ if (!is_array($payload)) {
 
 $action = $payload['action'] ?? $_GET['action'] ?? 'update_rider_location';
 
-// 1. Resolve Order ID
-$raw_oid = trim((string)($payload['order_id'] ?? $_GET['order_id'] ?? '8117'));
+// 1. Resolve Order ID dynamically (zero hardcoded order IDs)
+$raw_oid = trim((string)($payload['order_id'] ?? $_GET['order_id'] ?? ''));
 $order_id = 0;
 if (is_numeric($raw_oid)) {
     $order_id = (int)$raw_oid;
@@ -30,7 +30,11 @@ if (is_numeric($raw_oid)) {
     }
 }
 if ($order_id <= 0) {
-    $order_id = 8117; // Default target delivery order if unspecified
+    // Resolve dynamically from the active delivering order
+    $rid = (int)($_SESSION['user_id'] ?? 0);
+    $q_act = $conn->prepare("SELECT order_id FROM food_orders WHERE (rider_id = :rid OR :rid = 0) AND LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived') ORDER BY order_id DESC LIMIT 1");
+    $q_act->execute([':rid' => $rid]);
+    $order_id = (int)($q_act->fetchColumn() ?: 0);
 }
 
 // 2. Resolve Coordinates (current_lat, current_lng, lat, lng)

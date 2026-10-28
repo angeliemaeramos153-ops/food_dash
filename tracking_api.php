@@ -2,6 +2,7 @@
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
+require_once __DIR__ . '/geocode_lib.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
@@ -146,13 +147,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Check proximity & arrival immediately
-        $stmt = $conn->prepare("SELECT customer_id, order_ref, delivery_status, status, near_notified_at, arrived_notified_at FROM food_orders WHERE order_id = :oid LIMIT 1");
+        $stmt = $conn->prepare("SELECT customer_id, order_ref, delivery_status, status, near_notified_at, arrived_notified_at, delivery_address, delivery_lat, delivery_lng, customer_lat, customer_lng, store_name, store_lat, store_lng FROM food_orders WHERE order_id = :oid LIMIT 1");
         $stmt->execute([':oid' => $order_id]);
         $fresh = $stmt->fetch(PDO::FETCH_ASSOC);
 
         $distance = null;
         $near = false;
         $arrived = false;
+        if ($fresh) {
+            apply_dynamic_geocoding_to_order($fresh);
+        }
+
         if ($fresh && $fresh['customer_lat'] !== null && $fresh['customer_lng'] !== null) {
             $distance = distance_km((float)$fresh['customer_lat'], (float)$fresh['customer_lng'], $lat, $lng);
             $near = ($distance <= 0.5); // <= 500 meters
@@ -316,7 +321,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         $o_stmt = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.store_name, o.delivery_address,
             o.items_summary, o.total_amount, o.status AS order_status, o.delivery_status,
-            COALESCE(o.id, o.customer_lat) AS dest_lat,
+            COALESCE(o.delivery_lat, o.customer_lat) AS dest_lat,
             COALESCE(o.delivery_lng, o.customer_lng) AS dest_lng,
             COALESCE(o.store_lat, sh.lat, sh.lat, 11.0065) AS store_lat,
             COALESCE(o.store_lng, sh.lng, sh.lng, 124.6075) AS store_lng,
@@ -341,6 +346,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
             $cur_ref
         ]);
         $ord = $o_stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($ord) {
+            apply_dynamic_geocoding_to_order($ord);
+        }
 
         $r_lat = (isset($ord['live_rider_lat']) && is_numeric($ord['live_rider_lat']) && (float)$ord['live_rider_lat'] != 0)
             ? (float)$ord['live_rider_lat']
@@ -456,6 +465,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     }
 
     $o['order_ref'] = '#' . ltrim($o['order_ref'] ?: ('FD-' . $o['order_id']), '#');
+
+    // Apply robust dynamic geocoding to evaluate order details dynamically
+    apply_dynamic_geocoding_to_order($o);
 
     // Cast and normalize numeric coordinates with high precision (at least 6 decimal places)
     $store_lat = (isset($o['store_lat']) && is_numeric($o['store_lat'])) ? round((float)$o['store_lat'], 7) : null;

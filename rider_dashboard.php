@@ -680,6 +680,17 @@ if ($rid > 0) {
     $stmt_my->execute([':rid' => $rid]);
     $my_orders = $stmt_my->fetchAll(PDO::FETCH_ASSOC);
 
+    // Apply robust dynamic geocoding to all orders dynamically
+    foreach ($ready_orders as &$r_ord) {
+        apply_dynamic_geocoding_to_order($r_ord);
+    }
+    unset($r_ord);
+
+    foreach ($my_orders as &$m_ord) {
+        apply_dynamic_geocoding_to_order($m_ord);
+    }
+    unset($m_ord);
+
     // 3. Completed Orders: delivered by this rider
     $stmt_comp = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.customer_id, o.customer_name, 
@@ -700,25 +711,12 @@ $first_order = !empty($my_orders) ? $my_orders[0] : null;
 if ($first_order) {
 
     // 1. Dynamic Customer Destination Resolution: smart keyword string matching across order strings
-    $raw_c_lat = (isset($first_order['delivery_lat']) && is_numeric($first_order['delivery_lat'])) 
-        ? (float)$first_order['delivery_lat'] 
-        : ((isset($first_order['customer_lat']) && is_numeric($first_order['customer_lat'])) ? (float)$first_order['customer_lat'] : null);
-    $raw_c_lng = (isset($first_order['delivery_lng']) && is_numeric($first_order['delivery_lng'])) 
-        ? (float)$first_order['delivery_lng'] 
-        : ((isset($first_order['customer_lng']) && is_numeric($first_order['customer_lng'])) ? (float)$first_order['customer_lng'] : null);
-
-    $dest_res = resolve_ormoc_dest_coords($first_order['delivery_address'] ?? ($first_order['address'] ?? ''), $raw_c_lat, $raw_c_lng);
-    $c_lat = $dest_res['lat'];
-    $c_lng = $dest_res['lng'];
+    $c_lat = $first_order['customer_lat'];
+    $c_lng = $first_order['customer_lng'];
 
     // 2. Dynamic Store Origin Resolution: smart keyword string matching for SM and Robinsons partner stores
-    $raw_s_lat = (isset($first_order['store_lat']) && is_numeric($first_order['store_lat'])) ? (float)$first_order['store_lat'] : null;
-    $raw_s_lng = (isset($first_order['store_lng']) && is_numeric($first_order['store_lng'])) ? (float)$first_order['store_lng'] : null;
-
-    $store_combined_str = ($first_order['shop_record_name'] ?? '') . ' ' . ($first_order['store_name'] ?? '') . ' ' . ($first_order['store_address'] ?? '');
-    $store_res = resolve_ormoc_store_coords($store_combined_str, '', $raw_s_lat, $raw_s_lng);
-    $s_lat = $store_res['lat'];
-    $s_lng = $store_res['lng'];
+    $s_lat = $first_order['store_lat'];
+    $s_lng = $first_order['store_lng'];
 
     // 3. True Live Rider GPS: from riders table or food_orders table
     $live_rider_lat = null;
@@ -1741,7 +1739,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $norm_st = strtolower(trim($o['status'] ?? ''));
   $del_st = strtolower($o['delivery_status'] ?? '');
   $addr = trim((string)($o['delivery_address'] ?? ''));
-  $lat = (isset($o['id']) && is_numeric($o['id'])) ? $o['id'] : ($o['customer_lat'] ?? null);
+  $lat = $o['customer_lat'] ?? $o['delivery_lat'] ?? null;
   $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   $is_ready_pickup = in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned']);
@@ -1755,7 +1753,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
 ?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div class="rider-map-container" style="position: relative; width: 100%; height: 320px; min-height: 300px; margin-top: 12px; border-radius: 12px;"><div id="delivery-map" style="height: 320px; min-height: 300px; width: 100%; border-radius: 12px; display: block; position: relative;"></div></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div class="actions" id="riderOrderActions_<?=(int)$o['order_id']?>" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_delivered_state): ?><div class="delivery-complete-summary" id="deliveryCompleteSummary_<?=(int)$o['order_id']?>" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;"><div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;"><i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i><span>Delivery Handover Completed!</span></div><div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">Delivery handover is confirmed. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:</div><button type="button" class="btn success full btn-open-clear" id="btnFinishClearTrigger_<?=(int)$o['order_id']?>" data-action="open-clear-modal" data-order-id="<?=(int)$o['order_id']?>" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(<?=(int)$o['order_id']?>)"><i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order</button></div><?php else: ?><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'near_customer'): ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'arrived'): ?><div style="background:#ecfdf5; border:1.5px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:10px; font-size:0.82rem; font-weight:700; text-align:center;"><i class="fa-solid fa-circle-check"></i> Arrived at Destination • Customer notified outside</div><?php else: ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full btn-open-handover" id="btnPromptHandover_<?=(int)$o['order_id']?>" data-action="prompt-handover" data-order-id="<?=(int)$o['order_id']?>" onclick="promptCompleteDelivery(<?=$o['order_id']?>)"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
   $addr = trim((string)($o['delivery_address'] ?? ''));
-  $lat = (isset($o['id']) && is_numeric($o['id'])) ? $o['id'] : ($o['customer_lat'] ?? null);
+  $lat = $o['customer_lat'] ?? $o['delivery_lat'] ?? null;
   $lng = (isset($o['delivery_lng']) && is_numeric($o['delivery_lng'])) ? $o['delivery_lng'] : ($o['customer_lng'] ?? null);
   $has_coords = ($lat !== null && $lng !== null && is_numeric($lat) && is_numeric($lng) && (float)$lat != 0 && (float)$lng != 0);
   $disp_ready_ref = '#' . ltrim(!empty($o['order_ref']) ? $o['order_ref'] : ('FD-' . $o['order_id']), '#');

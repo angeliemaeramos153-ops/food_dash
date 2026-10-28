@@ -303,12 +303,12 @@ if (!function_exists('resolve_ormoc_store_coords')) {
 
 if (!function_exists('resolve_ormoc_dest_coords')) {
     function resolve_ormoc_dest_coords(?string $address, $raw_lat = null, $raw_lng = null): array {
-        $clean = trim($address ?? '');
-        $norm = normalize_query_str($clean);
+        $clean = trim((string)($address ?? ''));
+        $norm = strtolower($clean);
 
         // 1. ABSOLUTE PRIORITY: Case-insensitive text-matching override
-        // If address contains "western", "leyte", "college", "wlc", or "bonifacio",
-        // strictly override destination to WLC's exact campus center (11.0076, 124.6089), completely discarding corrupted values.
+        // If delivery address contains "western", "leyte", "college", "wlc", or "bonifacio",
+        // strictly override destination to WLC's exact campus center (11.0076, 124.6089), completely discarding corrupted values (e.g. 5.00000).
         $is_wlc_or_bonifacio = (
             strpos($norm, 'western') !== false ||
             strpos($norm, 'leyte') !== false ||
@@ -326,14 +326,15 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
             ];
         }
 
-        $fLat = is_numeric($raw_lat) ? (float)$raw_lat : null;
-        $fLng = is_numeric($raw_lng) ? (float)$raw_lng : null;
+        $fLat = (isset($raw_lat) && is_numeric($raw_lat)) ? (float)$raw_lat : null;
+        $fLng = (isset($raw_lng) && is_numeric($raw_lng)) ? (float)$raw_lng : null;
 
         // Discard corrupted coordinates (like 5.0, 11.01039, or Alta Vista default 11.0138)
         $is_invalid = (
             $fLat === null ||
             $fLng === null ||
             !is_valid_ormoc_coord($fLat, $fLng) ||
+            abs($fLat - 5.0) < 0.0001 ||
             (abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001) ||
             (abs($fLat - 11.01039) < 0.001)
         );
@@ -355,3 +356,94 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
         ];
     }
 }
+
+/**
+ * Robust dynamic geocoding check:
+ * 1. Whenever order details or coordinates are loaded (specifically customer_lat, customer_lng, or delivery_address), normalize address text (lowercase, trimmed).
+ * 2. If delivery address contains "western", "leyte", "college", "wlc", or "bonifacio", strictly override destination coordinates to WLC's precise campus center: latitude 11.0076, longitude 124.6089, completely discarding corrupted database coordinates like 5.00000.
+ * 3. If the store is Jollibee SM, override store coordinates to SM Ormoc: latitude 11.0062, longitude 124.6068.
+ * 4. Ensure zero hardcoded order IDs - evaluates all orders dynamically.
+ */
+if (!function_exists('apply_dynamic_geocoding_to_order')) {
+    function apply_dynamic_geocoding_to_order(array &$order): void {
+        // 1. Destination / Customer address normalization (lowercase, trimmed)
+        $raw_addr = trim((string)($order['delivery_address'] ?? $order['destination_name'] ?? $order['address'] ?? ''));
+        $norm_addr = strtolower($raw_addr);
+
+        $raw_c_lat = null;
+        if (isset($order['delivery_lat']) && is_numeric($order['delivery_lat'])) {
+            $raw_c_lat = (float)$order['delivery_lat'];
+        } elseif (isset($order['destination_lat']) && is_numeric($order['destination_lat'])) {
+            $raw_c_lat = (float)$order['destination_lat'];
+        } elseif (isset($order['dest_lat']) && is_numeric($order['dest_lat'])) {
+            $raw_c_lat = (float)$order['dest_lat'];
+        } elseif (isset($order['customer_lat']) && is_numeric($order['customer_lat'])) {
+            $raw_c_lat = (float)$order['customer_lat'];
+        }
+
+        $raw_c_lng = null;
+        if (isset($order['delivery_lng']) && is_numeric($order['delivery_lng'])) {
+            $raw_c_lng = (float)$order['delivery_lng'];
+        } elseif (isset($order['destination_lng']) && is_numeric($order['destination_lng'])) {
+            $raw_c_lng = (float)$order['destination_lng'];
+        } elseif (isset($order['dest_lng']) && is_numeric($order['dest_lng'])) {
+            $raw_c_lng = (float)$order['dest_lng'];
+        } elseif (isset($order['customer_lng']) && is_numeric($order['customer_lng'])) {
+            $raw_c_lng = (float)$order['customer_lng'];
+        }
+
+        // Check keywords
+        $is_wlc = (
+            strpos($norm_addr, 'western') !== false ||
+            strpos($norm_addr, 'leyte') !== false ||
+            strpos($norm_addr, 'college') !== false ||
+            strpos($norm_addr, 'wlc') !== false ||
+            strpos($norm_addr, 'bonifacio') !== false
+        );
+
+        $dest_res = resolve_ormoc_dest_coords($raw_addr, $raw_c_lat, $raw_c_lng);
+        $d_lat = $dest_res['lat'];
+        $d_lng = $dest_res['lng'];
+
+        $order['delivery_lat'] = $d_lat;
+        $order['delivery_lng'] = $d_lng;
+        $order['customer_lat'] = $d_lat;
+        $order['customer_lng'] = $d_lng;
+
+        if (isset($order['destination_lat']) || array_key_exists('destination_lat', $order)) {
+            $order['destination_lat'] = $d_lat;
+        }
+        if (isset($order['destination_lng']) || array_key_exists('destination_lng', $order)) {
+            $order['destination_lng'] = $d_lng;
+        }
+        if (isset($order['dest_lat']) || array_key_exists('dest_lat', $order)) {
+            $order['dest_lat'] = $d_lat;
+        }
+        if (isset($order['dest_lng']) || array_key_exists('dest_lng', $order)) {
+            $order['dest_lng'] = $d_lng;
+        }
+
+        // 2. Store Coordinates & Jollibee SM override
+        $store_name = trim((string)($order['store_name'] ?? $order['shop_name'] ?? $order['shop_record_name'] ?? ''));
+        $store_addr = trim((string)($order['store_address'] ?? $order['shop_address'] ?? ''));
+        $raw_s_lat = (isset($order['store_lat']) && is_numeric($order['store_lat'])) ? (float)$order['store_lat'] : null;
+        $raw_s_lng = (isset($order['store_lng']) && is_numeric($order['store_lng'])) ? (float)$order['store_lng'] : null;
+
+        $store_combined = strtolower($store_name . ' ' . $store_addr);
+        $has_sm = (strpos($store_combined, 'sm') !== false || preg_match('/\bsm\b/', $store_combined));
+        $is_jollibee = (strpos($store_combined, 'jollibee') !== false);
+
+        if ($is_jollibee && $has_sm) {
+            $s_lat = 11.0062;
+            $s_lng = 124.6068;
+        } else {
+            $s_res = resolve_ormoc_store_coords($store_name, $store_addr, $raw_s_lat, $raw_s_lng);
+            $s_lat = $s_res['lat'];
+            $s_lng = $s_res['lng'];
+        }
+
+        $order['store_lat'] = $s_lat;
+        $order['store_lng'] = $s_lng;
+    }
+}
+

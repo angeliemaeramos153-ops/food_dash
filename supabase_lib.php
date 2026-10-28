@@ -28,6 +28,13 @@ if (!function_exists('sync_order_to_supabase')) {
             $ord = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$ord) return false;
 
+            if (file_exists(__DIR__ . '/geocode_lib.php')) {
+                require_once __DIR__ . '/geocode_lib.php';
+            }
+            if (function_exists('apply_dynamic_geocoding_to_order')) {
+                apply_dynamic_geocoding_to_order($ord);
+            }
+
             // Resolve delivery coordinates
             $del_lat = (isset($ord['delivery_lat']) && is_numeric($ord['delivery_lat']) && (float)$ord['delivery_lat'] != 0) 
                 ? (float)$ord['delivery_lat'] 
@@ -36,22 +43,14 @@ if (!function_exists('sync_order_to_supabase')) {
                 ? (float)$ord['delivery_lng'] 
                 : ((isset($ord['customer_lng']) && is_numeric($ord['customer_lng']) && (float)$ord['customer_lng'] != 0) ? (float)$ord['customer_lng'] : null);
 
-            // Dynamically geocode address if coordinates are missing from the order
-            if (($del_lat === null || $del_lng === null) && !empty($ord['delivery_address'])) {
-                if (file_exists(__DIR__ . '/geocode_lib.php')) {
-                    require_once __DIR__ . '/geocode_lib.php';
-                    $geo = geocode_address_fallback($ord['delivery_address']);
-                    if ($geo && isset($geo['lat'], $geo['lng']) && is_numeric($geo['lat']) && is_numeric($geo['lng'])) {
-                        $del_lat = (float)$geo['lat'];
-                        $del_lng = (float)$geo['lng'];
-                        try {
-                            $conn->prepare("UPDATE food_orders SET delivery_lat = ?, delivery_lng = ? WHERE order_id = ?")
-                                 ->execute([$del_lat, $del_lng, $order_id]);
-                            $conn->prepare("UPDATE orders SET delivery_lat = ?, delivery_lng = ? WHERE id = ? OR order_id = ?")
-                                 ->execute([$del_lat, $del_lng, $order_id, $order_id]);
-                        } catch (Throwable $ignore) {}
-                    }
-                }
+            // Persist corrected coordinates back to MySQL if they were corrupted or missing
+            if ($del_lat !== null && $del_lng !== null) {
+                try {
+                    $conn->prepare("UPDATE food_orders SET delivery_lat = ?, delivery_lng = ?, customer_lat = ?, customer_lng = ? WHERE order_id = ?")
+                         ->execute([$del_lat, $del_lng, $del_lat, $del_lng, $order_id]);
+                    $conn->prepare("UPDATE orders SET delivery_lat = ?, delivery_lng = ? WHERE id = ? OR order_id = ?")
+                         ->execute([$del_lat, $del_lng, $order_id, $order_id]);
+                } catch (Throwable $ignore) {}
             }
 
             // Rider GPS coordinates

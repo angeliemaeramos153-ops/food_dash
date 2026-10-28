@@ -168,15 +168,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $input_del_lat = isset($input['delivery_lat']) && is_numeric($input['delivery_lat']) ? (float)$input['delivery_lat'] : (isset($input['customer_lat']) && is_numeric($input['customer_lat']) ? (float)$input['customer_lat'] : null);
         $input_del_lng = isset($input['delivery_lng']) && is_numeric($input['delivery_lng']) ? (float)$input['delivery_lng'] : (isset($input['customer_lng']) && is_numeric($input['customer_lng']) ? (float)$input['customer_lng'] : null);
-        if (($input_del_lat === null || $input_del_lng === null) && !empty($delivery_address)) {
-            if (file_exists(__DIR__ . '/geocode_lib.php')) {
-                require_once __DIR__ . '/geocode_lib.php';
-                $geo = geocode_address_fallback($delivery_address);
-                if ($geo && isset($geo['lat'], $geo['lng'])) {
-                    $input_del_lat = (float)$geo['lat'];
-                    $input_del_lng = (float)$geo['lng'];
-                }
-            }
+        if (file_exists(__DIR__ . '/geocode_lib.php')) {
+            require_once __DIR__ . '/geocode_lib.php';
+            $dest_res = resolve_ormoc_dest_coords($delivery_address, $input_del_lat, $input_del_lng);
+            $input_del_lat = $dest_res['lat'];
+            $input_del_lng = $dest_res['lng'];
         }
         
         if (!is_array($cart_items) || empty($cart_items)) {

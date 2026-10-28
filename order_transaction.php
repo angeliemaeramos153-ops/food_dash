@@ -111,22 +111,15 @@ if ($method === 'POST') {
         $customer_name = !empty($_SESSION['full_name']) ? $_SESSION['full_name'] : 'Customer';
 
         $delivery_address = trim((string)($payload['delivery_address'] ?? ''));
-        $id = isset($payload['id']) && is_numeric($payload['id']) ? (float)$payload['id'] : (isset($payload['customer_lat']) && is_numeric($payload['customer_lat']) ? (float)$payload['customer_lat'] : null);
-        $delivery_lng = isset($payload['delivery_lng']) && is_numeric($payload['delivery_lng']) ? (float)$payload['delivery_lng'] : (isset($payload['customer_lng']) && is_numeric($payload['customer_lng']) ? (float)$payload['customer_lng'] : null);
-        if ($id !== null && ($id < -90 || $id > 90)) $id = null;
-        if ($delivery_lng !== null && ($delivery_lng < -180 || $delivery_lng > 180)) $delivery_lng = null;
+        $raw_c_lat = isset($payload['delivery_lat']) && is_numeric($payload['delivery_lat']) ? (float)$payload['delivery_lat'] : (isset($payload['customer_lat']) && is_numeric($payload['customer_lat']) ? (float)$payload['customer_lat'] : null);
+        $raw_c_lng = isset($payload['delivery_lng']) && is_numeric($payload['delivery_lng']) ? (float)$payload['delivery_lng'] : (isset($payload['customer_lng']) && is_numeric($payload['customer_lng']) ? (float)$payload['customer_lng'] : null);
 
-        // Fallback geocoding lookup using address string instead of hardcoding downtown Ormoc coordinates
-        if (($id === null || $delivery_lng === null) && !empty($delivery_address)) {
-            $fallback_geo = geocode_address_fallback($delivery_address);
-            if ($fallback_geo && isset($fallback_geo['lat'], $fallback_geo['lng'])) {
-                $id = $fallback_geo['lat'];
-                $delivery_lng = $fallback_geo['lng'];
-            }
-        }
-
-        $customer_lat = $id;
-        $customer_lng = $delivery_lng;
+        require_once __DIR__ . '/geocode_lib.php';
+        $dest_res = resolve_ormoc_dest_coords($delivery_address, $raw_c_lat, $raw_c_lng);
+        $customer_lat = $dest_res['lat'];
+        $customer_lng = $dest_res['lng'];
+        $delivery_lat = $customer_lat;
+        $delivery_lng = $customer_lng;
 
         $items_summary = implode(', ', array_map(fn($x) => $x['qty'] . 'x ' . $x['name'], $clean));
 

@@ -4,6 +4,7 @@ ob_start();
 require_once 'db_connect.php';
 require_once 'notification_lib.php';
 require_once 'payment_helper.php';
+require_once 'geocode_lib.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -405,6 +406,8 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
     if (!$o) {
         order_api_out(false, 'Order not found.', [], 404);
     }
+
+    apply_dynamic_geocoding_to_order($o);
 
     $rider_lat = (isset($o['rider_lat']) && is_numeric($o['rider_lat'])) ? round((float)$o['rider_lat'], 7) : null;
     $rider_lng = (isset($o['rider_lng']) && is_numeric($o['rider_lng'])) ? round((float)$o['rider_lng'], 7) : null;
