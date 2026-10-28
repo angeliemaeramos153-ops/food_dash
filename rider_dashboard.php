@@ -2880,10 +2880,25 @@ function resolveStoreCoordinates(orderData) {
     ''
   ).trim();
 
-  // SM Ormoc Store Coordinate Override: permanently locked to SM Ormoc (lat: 11.0062, lng: 124.6068), overriding any default or downtown coordinates
+  // Dynamic Store Location: Read store pickup coordinates dynamically from database row
+  const rawLat = parseFloat(
+    orderData?.store_lat ??
+    orderData?.store_latitude ??
+    orderData?.pickup_lat ??
+    orderData?.store?.latitude ??
+    orderData?.store?.lat
+  );
+  const rawLng = parseFloat(
+    orderData?.store_lng ??
+    orderData?.store_longitude ??
+    orderData?.pickup_lng ??
+    orderData?.store?.longitude ??
+    orderData?.store?.lng
+  );
+
   return {
-    latitude: 11.0062,
-    longitude: 124.6068,
+    latitude: !isNaN(rawLat) ? rawLat : 11.0062,
+    longitude: !isNaN(rawLng) ? rawLng : 124.6068,
     storeName: storeNameStr || 'SM Center Ormoc',
     mall: 'SM Center Ormoc',
     isPartner: true,

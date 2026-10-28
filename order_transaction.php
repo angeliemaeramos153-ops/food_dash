@@ -169,12 +169,12 @@ if ($method === 'POST') {
             }
         }
 
-        // If coordinates not found in shops table, fallback geocode store_name
+        // Dynamic Store Location: Query database stores/restaurants table based on selected store ID / store_name
         if (($store_lat === null || $store_lng === null) && !empty($store_name)) {
-            $s_geo = geocode_address_fallback($store_name);
-            if ($s_geo && !empty($s_geo['lat']) && !empty($s_geo['lng'])) {
-                $store_lat = (float)$s_geo['lat'];
-                $store_lng = (float)$s_geo['lng'];
+            $s_res = resolve_ormoc_store_coords($store_name, '', null, null, $conn, $shop_id);
+            if (!empty($s_res['lat']) && !empty($s_res['lng'])) {
+                $store_lat = (float)$s_res['lat'];
+                $store_lng = (float)$s_res['lng'];
             }
         }
 

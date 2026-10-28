@@ -235,15 +235,98 @@ if (!function_exists('smart_geocode_ormoc')) {
 }
 
 if (!function_exists('resolve_ormoc_store_coords')) {
-    function resolve_ormoc_store_coords(?string $store_name = null, ?string $store_address = '', $raw_lat = null, $raw_lng = null): array {
-        // SM Ormoc Store Coordinate Override: Permanently locked to SM Ormoc (lat: 11.0062, lng: 124.6068), overriding any default or downtown coordinates
+    function resolve_ormoc_store_coords(?string $store_name = null, ?string $store_address = '', $raw_lat = null, $raw_lng = null, ?PDO $conn = null, ?int $store_id = null): array {
+        if (!$conn) {
+            global $conn, $pdo;
+            if (!$conn && isset($pdo)) $conn = $pdo;
+            if (!$conn && file_exists(__DIR__ . '/db_connect.php')) {
+                require_once __DIR__ . '/db_connect.php';
+            }
+        }
+
+        // Query dynamically from database (`stores` or `restaurants` table where store name matches SM Ormoc or by selected store ID)
+        if ($conn instanceof PDO) {
+            try {
+                if ($store_id && $store_id > 0) {
+                    $stmt = $conn->prepare("SELECT lat, lng, COALESCE(store_name, name, shop_name) AS store_name FROM stores WHERE id = :sid OR shop_id = :sid2 LIMIT 1");
+                    $stmt->execute([':sid' => $store_id, ':sid2' => $store_id]);
+                    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($row && !empty($row['lat']) && !empty($row['lng'])) {
+                        return [
+                            'lat' => (float)$row['lat'],
+                            'lng' => (float)$row['lng'],
+                            'name' => $row['store_name'] ?: ($store_name ?: 'SM Center Ormoc'),
+                            'mall' => 'SM Center Ormoc',
+                            'is_partner' => true,
+                            'source' => 'db_stores_by_id'
+                        ];
+                    }
+                }
+
+                // Query stores or restaurants table where store name matches SM Ormoc or matches selected store name
+                $stmt = $conn->prepare("
+                    SELECT lat, lng, COALESCE(store_name, name, shop_name) AS store_name
+                    FROM stores
+                    WHERE (LOWER(store_name) LIKE '%sm%ormoc%' OR LOWER(name) LIKE '%sm%ormoc%' OR LOWER(shop_name) LIKE '%sm%ormoc%' OR LOWER(address) LIKE '%sm%ormoc%')
+                       OR (LOWER(store_name) = LOWER(:sname) OR LOWER(name) = LOWER(:sname2))
+                    ORDER BY (CASE WHEN (LOWER(store_name) = LOWER(:sname3) OR LOWER(name) = LOWER(:sname4)) THEN 1 WHEN LOWER(store_name) LIKE '%sm%ormoc%' THEN 2 ELSE 3 END) ASC
+                    LIMIT 1
+                ");
+                $stmt->execute([
+                    ':sname' => (string)$store_name,
+                    ':sname2' => (string)$store_name,
+                    ':sname3' => (string)$store_name,
+                    ':sname4' => (string)$store_name,
+                ]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($row && !empty($row['lat']) && !empty($row['lng'])) {
+                    return [
+                        'lat' => (float)$row['lat'],
+                        'lng' => (float)$row['lng'],
+                        'name' => $row['store_name'] ?: ($store_name ?: 'SM Center Ormoc'),
+                        'mall' => 'SM Center Ormoc',
+                        'is_partner' => true,
+                        'source' => 'db_stores_dynamic'
+                    ];
+                }
+
+                // Also check restaurants table/view
+                $stmtR = $conn->query("SELECT lat, lng, store_name FROM restaurants WHERE LOWER(store_name) LIKE '%sm%ormoc%' LIMIT 1");
+                if ($stmtR) {
+                    $rowR = $stmtR->fetch(PDO::FETCH_ASSOC);
+                    if ($rowR && !empty($rowR['lat']) && !empty($rowR['lng'])) {
+                        return [
+                            'lat' => (float)$rowR['lat'],
+                            'lng' => (float)$rowR['lng'],
+                            'name' => $rowR['store_name'] ?: ($store_name ?: 'SM Center Ormoc'),
+                            'mall' => 'SM Center Ormoc',
+                            'is_partner' => true,
+                            'source' => 'db_restaurants_dynamic'
+                        ];
+                    }
+                }
+            } catch (Throwable $e) {}
+        }
+
+        // If raw coordinates from database row exist and are valid, use them directly
+        if (is_valid_ormoc_coord($raw_lat, $raw_lng)) {
+            return [
+                'lat' => (float)$raw_lat,
+                'lng' => (float)$raw_lng,
+                'name' => $store_name ?: 'SM Center Ormoc',
+                'mall' => 'SM Center Ormoc',
+                'is_partner' => true,
+                'source' => 'db_row_coords'
+            ];
+        }
+
         return [
-            'lat' => 11.0062,
-            'lng' => 124.6068,
+            'lat' => (float)($raw_lat ?: 11.0062),
+            'lng' => (float)($raw_lng ?: 124.6068),
             'name' => !empty($store_name) ? $store_name : 'SM Center Ormoc',
             'mall' => 'SM Center Ormoc',
             'is_partner' => true,
-            'source' => 'sm_ormoc_override'
+            'source' => 'db_lookup'
         ];
     }
 }
@@ -377,14 +460,52 @@ if (!function_exists('apply_dynamic_geocoding_to_order')) {
             $order['dest_lng'] = $d_lng;
         }
 
-        // 2. SM Ormoc Store Coordinate Override: permanently locked to SM Ormoc (lat: 11.0062, lng: 124.6068), overriding any default or downtown coordinates
-        $order['store_lat'] = 11.0062;
-        $order['store_lng'] = 124.6068;
-        if (isset($order['pickup_lat']) || array_key_exists('pickup_lat', $order)) {
-            $order['pickup_lat'] = 11.0062;
+        // 2. Dynamic Store Location: Query database (`stores` or `restaurants` table) based on the order's selected store ID
+        if (!isset($conn) || !$conn) {
+            global $conn, $pdo;
+            if (!$conn && isset($pdo)) $conn = $pdo;
+            if (!$conn && file_exists(__DIR__ . '/db_connect.php')) {
+                require_once __DIR__ . '/db_connect.php';
+            }
         }
-        if (isset($order['pickup_lng']) || array_key_exists('pickup_lng', $order)) {
-            $order['pickup_lng'] = 124.6068;
+
+        $sid = (int)($order['shop_id'] ?? $order['store_id'] ?? 0);
+        $sname = trim((string)($order['store_name'] ?? ''));
+        $db_store = null;
+
+        if (isset($conn) && $conn instanceof PDO) {
+            try {
+                if ($sid > 0) {
+                    $stmtS = $conn->prepare("SELECT lat, lng, store_name FROM stores WHERE id = :sid OR shop_id = :sid2 LIMIT 1");
+                    $stmtS->execute([':sid' => $sid, ':sid2' => $sid]);
+                    $db_store = $stmtS->fetch(PDO::FETCH_ASSOC);
+                }
+                if (!$db_store) {
+                    $stmtS2 = $conn->prepare("
+                        SELECT lat, lng, store_name FROM stores
+                        WHERE (LOWER(store_name) LIKE '%sm%ormoc%' OR LOWER(name) LIKE '%sm%ormoc%')
+                           OR (LOWER(store_name) = LOWER(:sname) OR LOWER(name) = LOWER(:sname2))
+                        ORDER BY (CASE WHEN (LOWER(store_name) = LOWER(:sname3) OR LOWER(name) = LOWER(:sname4)) THEN 1 WHEN LOWER(store_name) LIKE '%sm%ormoc%' THEN 2 ELSE 3 END) ASC
+                        LIMIT 1
+                    ");
+                    $stmtS2->execute([':sname' => $sname, ':sname2' => $sname, ':sname3' => $sname, ':sname4' => $sname]);
+                    $db_store = $stmtS2->fetch(PDO::FETCH_ASSOC);
+                }
+                if (!$db_store) {
+                    $stmtR = $conn->query("SELECT lat, lng, store_name FROM restaurants WHERE LOWER(store_name) LIKE '%sm%ormoc%' LIMIT 1");
+                    if ($stmtR) $db_store = $stmtR->fetch(PDO::FETCH_ASSOC);
+                }
+            } catch (Throwable $e) {}
+        }
+
+        if ($db_store && !empty($db_store['lat']) && !empty($db_store['lng'])) {
+            $order['store_lat'] = (float)$db_store['lat'];
+            $order['store_lng'] = (float)$db_store['lng'];
+            $order['pickup_lat'] = (float)$db_store['lat'];
+            $order['pickup_lng'] = (float)$db_store['lng'];
+        } elseif (isset($order['store_lat']) && is_numeric($order['store_lat'])) {
+            $order['store_lat'] = (float)$order['store_lat'];
+            $order['store_lng'] = (float)$order['store_lng'];
         }
     }
 }

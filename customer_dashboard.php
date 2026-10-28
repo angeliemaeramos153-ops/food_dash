@@ -6029,9 +6029,9 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     }
 
     const ord = data.order || {};
-    // SM Ormoc Store Coordinate Override: Permanently locked to SM Ormoc
-    const storeLat = 11.0062;
-    const storeLng = 124.6068;
+    // Dynamic Store Location: Fetched dynamically from database row via order_api
+    const storeLat = parseFloat(data.store_lat || ord.store_lat);
+    const storeLng = parseFloat(data.store_lng || ord.store_lng);
     const destLat = parseFloat(data.destination_lat || data.dest_lat || ord.destination_lat || ord.customer_lat);
     const destLng = parseFloat(data.destination_lng || data.dest_lng || ord.destination_lng || ord.customer_lng);
 

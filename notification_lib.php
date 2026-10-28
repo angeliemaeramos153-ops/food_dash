@@ -182,14 +182,19 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
     if ($order_id <= 0) return false;
 
     try {
-        // 1. Fetch order details from food_orders and joined tables
+        // 1. Dynamic Database Query: Fetch order details from food_orders, users, shops, and stores tables
         $stmt = $conn->prepare("
             SELECT 
-                fo.order_id, fo.order_ref, fo.customer_id, fo.user_id, fo.store_name, 
-                fo.delivery_address, fo.total_amount, fo.payment_method, fo.rider_id,
+                fo.order_id, fo.order_ref, fo.customer_id, fo.user_id, fo.customer_name, fo.store_name, 
+                fo.delivery_address, fo.total_amount, fo.payment_method, fo.rider_id, fo.shop_id,
+                COALESCE(NULLIF(TRIM(fo.customer_name), ''), u.full_name) AS dynamic_customer_name,
+                COALESCE(st.store_name, st.name, s.shop_name, fo.store_name) AS dynamic_store_name,
                 COALESCE(r.rider_name, 'Alex Gonzaga') AS assigned_rider_name,
                 COALESCE(r.user_id, 17) AS rider_user_id
             FROM food_orders fo
+            LEFT JOIN users u ON fo.customer_id = u.user_id
+            LEFT JOIN shops s ON fo.shop_id = s.shop_id
+            LEFT JOIN stores st ON (fo.shop_id = st.shop_id OR fo.shop_id = st.id)
             LEFT JOIN riders r ON fo.rider_id = r.rider_id
             WHERE fo.order_id = :oid
             LIMIT 1
@@ -198,7 +203,27 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
         $order = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$order) {
             try {
-                $stmt2 = $conn->prepare("SELECT COALESCE(o.id, o.order_id) AS order_id, o.order_number AS order_ref, o.user_id AS customer_id, o.user_id, COALESCE(s.shop_name, o.store_name, 'Partner Store') AS store_name, o.delivery_address, o.total_price AS total_amount, o.payment_method, o.rider_id, COALESCE(o.rider_name, 'Alex Gonzaga') AS assigned_rider_name, 17 AS rider_user_id FROM orders o LEFT JOIN shops s ON (o.store_id = s.shop_id OR o.shop_id = s.shop_id) WHERE o.id = :oid OR o.order_id = :oid2 LIMIT 1");
+                $stmt2 = $conn->prepare("
+                    SELECT 
+                        COALESCE(o.id, o.order_id) AS order_id, 
+                        o.order_number AS order_ref, 
+                        o.user_id AS customer_id, 
+                        o.user_id, 
+                        COALESCE(NULLIF(TRIM(o.customer_name), ''), u.full_name, '') AS dynamic_customer_name,
+                        COALESCE(st.store_name, st.name, s.shop_name, o.store_name, 'Partner Store') AS dynamic_store_name, 
+                        o.delivery_address, 
+                        o.total_price AS total_amount, 
+                        o.payment_method, 
+                        o.rider_id, 
+                        COALESCE(o.rider_name, 'Alex Gonzaga') AS assigned_rider_name, 
+                        17 AS rider_user_id 
+                    FROM orders o 
+                    LEFT JOIN users u ON o.user_id = u.user_id
+                    LEFT JOIN shops s ON (o.store_id = s.shop_id OR o.shop_id = s.shop_id) 
+                    LEFT JOIN stores st ON (o.store_id = s.shop_id OR o.store_id = st.id)
+                    WHERE o.id = :oid OR o.order_id = :oid2 
+                    LIMIT 1
+                ");
                 $stmt2->execute([':oid' => $order_id, ':oid2' => $order_id]);
                 $order = $stmt2->fetch(PDO::FETCH_ASSOC);
             } catch (Throwable $e) {}
@@ -212,50 +237,26 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
             return true; // Already dispatched
         }
 
-        // 3. Resolve Store Brand dynamically
-        $raw_store = trim((string)($order['store_name'] ?: ($order['ord_store_name'] ?? '')));
-        $store_brand = 'Jollibee';
-        if (stripos($raw_store, 'jollibee') !== false) {
-            $store_brand = 'Jollibee';
-        } elseif (stripos($raw_store, 'mcdonald') !== false || stripos($raw_store, 'mcdo') !== false) {
-            $store_brand = "McDonald's";
-        } elseif (stripos($raw_store, 'inasal') !== false) {
-            $store_brand = 'Mang Inasal';
-        } elseif (stripos($raw_store, 'chowking') !== false) {
-            $store_brand = 'Chowking';
-        } elseif (stripos($raw_store, 'greenwich') !== false) {
-            $store_brand = 'Greenwich';
-        } elseif (stripos($raw_store, 'ribshack') !== false || stripos($raw_store, 'rib shack') !== false) {
-            $store_brand = 'Ribshack';
-        } elseif (stripos($raw_store, 'shakey') !== false) {
-            $store_brand = "Shakey's";
-        } elseif (!empty($raw_store)) {
-            $store_brand = $raw_store;
-        }
+        // 3. Dynamically resolve Customer Name from database row
+        $raw_cust = trim((string)($order['dynamic_customer_name'] ?: ($order['customer_name'] ?? '')));
+        $customer_name = (!empty($raw_cust) && strtolower($raw_cust) !== 'customer') ? $raw_cust : '';
 
-        // 4. Resolve Destination Name dynamically
-        $raw_dest = trim((string)($order['delivery_address'] ?: ($order['ord_delivery_address'] ?? '')));
-        $dest_lower = strtolower($raw_dest);
-        $dest_brand = 'Western Leyte College';
-        if (
-            str_contains($dest_lower, 'western') ||
-            str_contains($dest_lower, 'leyte') ||
-            str_contains($dest_lower, 'college') ||
-            str_contains($dest_lower, 'wlc') ||
-            str_contains($dest_lower, 'bonifacio')
-        ) {
-            $dest_brand = 'Western Leyte College';
-        } elseif (!empty($raw_dest)) {
-            $dest_brand = $raw_dest;
-        }
+        // 4. Dynamically resolve Store Name from database row
+        $raw_store = trim((string)($order['dynamic_store_name'] ?: ($order['store_name'] ?: 'Store')));
+        $store_name = (!empty($raw_store) && strtolower($raw_store) !== 'store' && strtolower($raw_store) !== 'partner store') ? $raw_store : '';
 
-        // 5. Calculate Real Total Amount dynamically
+        // 5. Dynamically calculate Real Total Amount from database row
         $total_val = (float)($order['total_amount'] ?: ($order['ord_total_amount'] ?? 0));
         if ($total_val <= 0) {
             try {
-                $item_sum_stmt = $conn->prepare("SELECT COALESCE(SUM(COALESCE(line_total, price * quantity, unit_price * quantity, 0)), 0) FROM order_items WHERE order_id = :oid");
+                $item_sum_stmt = $conn->prepare("SELECT COALESCE(SUM(COALESCE(line_total, price * quantity, unit_price * quantity, 0)), 0) FROM food_order_items WHERE order_id = :oid");
                 $item_sum_stmt->execute([':oid' => $order_id]);
                 $sum = (float)$item_sum_stmt->fetchColumn();
+                if ($sum <= 0) {
+                    $item_sum_stmt2 = $conn->prepare("SELECT COALESCE(SUM(COALESCE(line_total, price * quantity, unit_price * quantity, 0)), 0) FROM order_items WHERE order_id = :oid");
+                    $item_sum_stmt2->execute([':oid' => $order_id]);
+                    $sum = (float)$item_sum_stmt2->fetchColumn();
+                }
                 if ($sum > 0) $total_val = $sum + 30.00;
             } catch (Throwable $e) {}
         }
@@ -274,16 +275,14 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
             $pm_brand = 'Apple Pay';
         } elseif (stripos($raw_pm, 'cod') !== false || stripos($raw_pm, 'delivery') !== false || strtolower(trim($raw_pm)) === 'cash') {
             $pm_brand = 'COD';
-        } elseif (stripos($raw_pm, 'maya') !== false) {
-            $pm_brand = 'Maya';
-        } elseif (stripos($raw_pm, 'gotyme') !== false) {
-            $pm_brand = 'GoTyme';
         } elseif (!empty($raw_pm)) {
             $pm_brand = $raw_pm;
         }
 
-        // 7. Construct the exact automated chat message
-        $auto_msg = "Hi! Your order has been picked up by the rider and is now on the way. Total amount due: ₱{$formatted_amount} ({$pm_brand}).";
+        // 7. Construct dynamic live chat message
+        $greeting = !empty($customer_name) ? "Hi {$customer_name}!" : "Hi!";
+        $store_phrase = !empty($store_name) ? " from {$store_name}" : "";
+        $auto_msg = "{$greeting} Your order{$store_phrase} has been picked up by the rider and is now on the way. Total amount due: ₱{$formatted_amount} ({$pm_brand}).";
 
         // 8. Resolve sender and receiver IDs
         $r_name = !empty($sender_name) ? $sender_name : ($order['assigned_rider_name'] ?: 'Alex Gonzaga');
@@ -338,7 +337,7 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
                 $conn,
                 $cust_uid,
                 'rider_message',
-                'Message from Rider (' . $r_name . ')',
+                'Message from Rider (' . $r_name . ')' . (!empty($store_name) ? ' - ' . $store_name : ''),
                 $auto_msg,
                 $order_id
             );

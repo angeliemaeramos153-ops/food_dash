@@ -343,8 +343,8 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
         COALESCE(cu.phone, o.customer_phone, ord.customer_phone, '') AS customer_phone,
         o.store_name, o.delivery_address,
         o.status, o.delivery_status, o.near_notified_at, o.location_updated_at,
-        COALESCE(o.store_lat, ord.store_lat, NULL) AS store_lat,
-        COALESCE(o.store_lng, ord.store_lng, NULL) AS store_lng,
+        COALESCE(st.lat, s.lat, o.store_lat, ord.store_lat, NULL) AS store_lat,
+        COALESCE(st.lng, s.lng, o.store_lng, ord.store_lng, NULL) AS store_lng,
         COALESCE(o.delivery_lat, o.customer_lat, ord.delivery_lat, NULL) AS destination_lat,
         COALESCE(o.delivery_lng, o.customer_lng, ord.delivery_lng, NULL) AS destination_lng,
         o.customer_lat, o.customer_lng,
@@ -356,6 +356,7 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
     FROM food_orders o
     LEFT JOIN orders ord ON (o.order_id = ord.id OR o.order_id = ord.order_id)
     LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name))))
+    LEFT JOIN stores st ON (o.shop_id = st.shop_id OR o.shop_id = st.id OR LOWER(TRIM(o.store_name)) = LOWER(TRIM(st.store_name)))
     LEFT JOIN riders r ON (o.rider_id = r.rider_id)
     LEFT JOIN users ru ON (r.user_id = ru.user_id)
     LEFT JOIN users cu ON (o.customer_id = cu.user_id)
