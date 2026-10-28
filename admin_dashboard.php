@@ -172,8 +172,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 }
             }
             if ($lat === null || $lng === null) {
-                $lat = 11.00650000;
-                $lng = 124.60750000;
+                $lat = 11.00620000;
+                $lng = 124.60680000;
             }
         }
 
@@ -2232,15 +2232,15 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
         <div style="margin: 8px 0 12px 0;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label style="font-size: 9px; color: #788A6E; font-weight: 600; margin: 0;"><i class="fa-solid fa-map-pin" style="color: #D88F2A;"></i> Store Location Pin</label>
-            <span id="add_shop_coords_text" style="font-size: 0.68rem; font-family: monospace; color: #4B5320; background: #FAF6EE; padding: 1px 6px; border-radius: 3px; border: 1px solid #d4c5a5;">11.0065, 124.6075</span>
+            <span id="add_shop_coords_text" style="font-size: 0.68rem; font-family: monospace; color: #4B5320; background: #FAF6EE; padding: 1px 6px; border-radius: 3px; border: 1px solid #d4c5a5;">11.0062, 124.6068</span>
           </div>
           <div id="add-shop-map" style="height: 180px; width: 100%; border-radius: 8px; border: 1px solid #d4c5a5; background: #e8e6df; z-index: 1;"></div>
           <small style="font-size: 0.68rem; color: #788A6E; display: flex; align-items: center; gap: 4px; margin-top: 4px;">
             <i class="fa-solid fa-arrows-up-down-left-right" style="color: #D88F2A;"></i> Type store name/address to auto-locate, or drag marker to pinpoint the store entrance.
           </small>
         </div>
-        <input type="hidden" name="lat" id="add_shop_lat" value="11.00650000">
-        <input type="hidden" name="lng" id="add_shop_lng" value="124.60750000">
+        <input type="hidden" name="lat" id="add_shop_lat" value="11.00620000">
+        <input type="hidden" name="lng" id="add_shop_lng" value="124.60680000">
         
         <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Official Logo Path or URL</label>
         <input type="text" name="logo_url" placeholder="assets/shops/default_store.png" value="assets/shops/default_store.png">
@@ -2273,7 +2273,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
         <div style="margin: 8px 0 12px 0;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label style="font-size: 9px; color: #788A6E; font-weight: 600; margin: 0;"><i class="fa-solid fa-map-pin" style="color: #D88F2A;"></i> Store Location Pin</label>
-            <span id="edit_shop_coords_text" style="font-size: 0.68rem; font-family: monospace; color: #4B5320; background: #FAF6EE; padding: 1px 6px; border-radius: 3px; border: 1px solid #d4c5a5;">11.0065, 124.6075</span>
+            <span id="edit_shop_coords_text" style="font-size: 0.68rem; font-family: monospace; color: #4B5320; background: #FAF6EE; padding: 1px 6px; border-radius: 3px; border: 1px solid #d4c5a5;">11.0062, 124.6068</span>
           </div>
           <div id="edit-shop-map" style="height: 180px; width: 100%; border-radius: 8px; border: 1px solid #d4c5a5; background: #e8e6df; z-index: 1;"></div>
           <small style="font-size: 0.68rem; color: #788A6E; display: flex; align-items: center; gap: 4px; margin-top: 4px;">
@@ -2624,7 +2624,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
     var addShopMap = null, addShopMarker = null;
     var editShopMap = null, editShopMarker = null;
-    var defaultOrmocCoords = [11.00650000, 124.60750000];
+    var defaultOrmocCoords = [11.00620000, 124.60680000];
 
     function initAddShopMap() {
       if (addShopMap) {

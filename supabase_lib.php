@@ -117,6 +117,8 @@ if (!function_exists('sync_order_to_supabase')) {
                 'order_id'            => $order_id,
                 'user_id'             => (int)($ord['customer_id'] ?? $ord['user_id'] ?? 0),
                 'store_id'            => (int)($ord['shop_id'] ?? 0),
+                'store_lat'           => 11.0062,
+                'store_lng'           => 124.6068,
                 'status'              => $status_map,
                 'payment_method'      => $ord['payment_method'] ?? 'Cash on Delivery (COD)',
                 'delivery_address'    => $del_address,

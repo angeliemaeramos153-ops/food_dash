@@ -235,71 +235,15 @@ if (!function_exists('smart_geocode_ormoc')) {
 }
 
 if (!function_exists('resolve_ormoc_store_coords')) {
-    function resolve_ormoc_store_coords(?string $store_name, ?string $store_address = '', $raw_lat = null, $raw_lng = null): array {
-        $combined = normalize_query_str(($store_name ?? '') . ' ' . ($store_address ?? ''));
-
-        // 1. Check Robinsons Ormoc stores first
-        $hasRobinsons = (strpos($combined, 'robinson') !== false || strpos($combined, 'rob') !== false);
-        $hasSm = (strpos($combined, 'sm') !== false || preg_match('/\bsm\b/', $combined));
-
-        $isRobinsonsStore = (
-            strpos($combined, 'shakey') !== false ||
-            strpos($combined, 'mcdonald') !== false ||
-            strpos($combined, 'mcdo') !== false ||
-            strpos($combined, 'chowking') !== false ||
-            strpos($combined, 'greenwich') !== false ||
-            ($hasRobinsons && !$hasSm)
-        );
-
-        if ($isRobinsonsStore && !$hasSm && strpos($combined, 'ribshack') === false) {
-            return [
-                'lat' => 11.0215,
-                'lng' => 124.6155,
-                'name' => !empty($store_name) ? $store_name : 'Robinsons Place Ormoc',
-                'mall' => 'Robinsons Place Ormoc',
-                'is_partner' => true,
-                'source' => 'robinsons_mall'
-            ];
-        }
-
-        // 2. Jollibee SM / SM store dynamic override -> sLat = 11.0062, sLng = 124.6068
-        $isJollibeeSm = (
-            $hasSm ||
-            strpos($combined, 'jollibee') !== false ||
-            strpos($combined, 'inasal') !== false ||
-            strpos($combined, 'ribshack') !== false ||
-            strpos($combined, 'rib shack') !== false ||
-            strpos($combined, 'center') !== false ||
-            empty($combined)
-        );
-
-        $fLat = is_numeric($raw_lat) ? (float)$raw_lat : null;
-        $fLng = is_numeric($raw_lng) ? (float)$raw_lng : null;
-        $is_store_invalid = (
-            $fLat === null ||
-            $fLng === null ||
-            !is_valid_ormoc_coord($fLat, $fLng) ||
-            (abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001)
-        );
-
-        if ($isJollibeeSm || $is_store_invalid) {
-            return [
-                'lat' => 11.0062,
-                'lng' => 124.6068,
-                'name' => !empty($store_name) ? $store_name : 'Jollibee SM Center Ormoc',
-                'mall' => 'SM Center Ormoc',
-                'is_partner' => true,
-                'source' => 'sm_ormoc_override'
-            ];
-        }
-
+    function resolve_ormoc_store_coords(?string $store_name = null, ?string $store_address = '', $raw_lat = null, $raw_lng = null): array {
+        // SM Ormoc Store Coordinate Override: Permanently locked to SM Ormoc (lat: 11.0062, lng: 124.6068), overriding any default or downtown coordinates
         return [
-            'lat' => $fLat,
-            'lng' => $fLng,
-            'name' => !empty($store_name) ? $store_name : 'Partner Store',
-            'mall' => null,
+            'lat' => 11.0062,
+            'lng' => 124.6068,
+            'name' => !empty($store_name) ? $store_name : 'SM Center Ormoc',
+            'mall' => 'SM Center Ormoc',
             'is_partner' => true,
-            'source' => 'db_verified'
+            'source' => 'sm_ormoc_override'
         ];
     }
 }
@@ -433,27 +377,15 @@ if (!function_exists('apply_dynamic_geocoding_to_order')) {
             $order['dest_lng'] = $d_lng;
         }
 
-        // 2. Store Coordinates & Jollibee SM override
-        $store_name = trim((string)($order['store_name'] ?? $order['shop_name'] ?? $order['shop_record_name'] ?? ''));
-        $store_addr = trim((string)($order['store_address'] ?? $order['shop_address'] ?? ''));
-        $raw_s_lat = (isset($order['store_lat']) && is_numeric($order['store_lat'])) ? (float)$order['store_lat'] : null;
-        $raw_s_lng = (isset($order['store_lng']) && is_numeric($order['store_lng'])) ? (float)$order['store_lng'] : null;
-
-        $store_combined = strtolower($store_name . ' ' . $store_addr);
-        $has_sm = (strpos($store_combined, 'sm') !== false || preg_match('/\bsm\b/', $store_combined));
-        $is_jollibee = (strpos($store_combined, 'jollibee') !== false);
-
-        if ($is_jollibee && $has_sm) {
-            $s_lat = 11.0062;
-            $s_lng = 124.6068;
-        } else {
-            $s_res = resolve_ormoc_store_coords($store_name, $store_addr, $raw_s_lat, $raw_s_lng);
-            $s_lat = $s_res['lat'];
-            $s_lng = $s_res['lng'];
+        // 2. SM Ormoc Store Coordinate Override: permanently locked to SM Ormoc (lat: 11.0062, lng: 124.6068), overriding any default or downtown coordinates
+        $order['store_lat'] = 11.0062;
+        $order['store_lng'] = 124.6068;
+        if (isset($order['pickup_lat']) || array_key_exists('pickup_lat', $order)) {
+            $order['pickup_lat'] = 11.0062;
         }
-
-        $order['store_lat'] = $s_lat;
-        $order['store_lng'] = $s_lng;
+        if (isset($order['pickup_lng']) || array_key_exists('pickup_lng', $order)) {
+            $order['pickup_lng'] = 124.6068;
+        }
     }
 }
 

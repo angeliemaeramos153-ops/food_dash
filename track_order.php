@@ -44,8 +44,8 @@ if ($order_id > 0) {
         o.order_id, o.order_ref, o.store_name, o.delivery_address, 
         o.status, o.total_amount, o.created_at,
         COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
-        COALESCE(o.store_lat, s.lat, s.lat, 11.00842) AS store_lat,
-        COALESCE(o.store_lng, s.lng, s.lng, 124.60721) AS store_lng,
+        COALESCE(o.store_lat, s.lat, s.lat, 11.0062) AS store_lat,
+        COALESCE(o.store_lng, s.lng, s.lng, 124.6068) AS store_lng,
         COALESCE(o.delivery_lat, o.customer_lat, 11.0076) AS destination_lat,
         COALESCE(o.delivery_lng, o.customer_lng, 124.6089) AS destination_lng,
         COALESCE(o.rider_lat, r.current_lat) AS rider_lat,
@@ -871,8 +871,8 @@ if (window.FoodDashCall) {
   FoodDashCall.init('customer');
 }
 const orderId = <?= (int)$order_id ?>;
-const initStoreLat = <?= (float)($order['store_lat'] ?? 11.00842) ?>;
-const initStoreLng = <?= (float)($order['store_lng'] ?? 124.60721) ?>;
+const initStoreLat = <?= (float)($order['store_lat'] ?? 11.0062) ?>;
+const initStoreLng = <?= (float)($order['store_lng'] ?? 124.6068) ?>;
 const initDestLat = <?= (float)($order['destination_lat'] ?? 11.00762) ?>;
 const initDestLng = <?= (float)($order['destination_lng'] ?? 124.60749) ?>;
 const initRiderLat = <?= !empty($order['rider_lat']) ? (float)$order['rider_lat'] : 'null' ?>;

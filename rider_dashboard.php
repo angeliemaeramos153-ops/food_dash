@@ -72,11 +72,14 @@ if (!function_exists('normalize_order_coordinates')) {
             $order['destination_lng'] = $coords['lng'];
         }
 
-        // Store normalization for Jollibee SM
-        $store_combined = strtolower(trim((string)($order['store_name'] ?? '')) . ' ' . trim((string)($order['store_address'] ?? '')));
-        if (strpos($store_combined, 'jollibee') !== false && (strpos($store_combined, 'sm') !== false || preg_match('/\bsm\b/', $store_combined))) {
-            $order['store_lat'] = 11.0062;
-            $order['store_lng'] = 124.6068;
+        // SM Ormoc Store Coordinate Override: permanently locked to SM Ormoc (lat: 11.0062, lng: 124.6068)
+        $order['store_lat'] = 11.0062;
+        $order['store_lng'] = 124.6068;
+        if (isset($order['pickup_lat']) || array_key_exists('pickup_lat', $order)) {
+            $order['pickup_lat'] = 11.0062;
+        }
+        if (isset($order['pickup_lng']) || array_key_exists('pickup_lng', $order)) {
+            $order['pickup_lng'] = 124.6068;
         }
     }
 }
@@ -2877,84 +2880,12 @@ function resolveStoreCoordinates(orderData) {
     ''
   ).trim();
 
-  const storeAddrStr = String(
-    orderData?.store_address ||
-    orderData?.shop_address ||
-    orderData?.pickup_address ||
-    orderData?.pickup_location ||
-    orderData?.store?.address ||
-    orderData?.shop?.address ||
-    ''
-  ).trim();
-
-  const combinedStore = normalizeQuery(`${storeNameStr} ${storeAddrStr}`);
-
-  // 1. Check Robinsons Ormoc stores first
-  const isRobinsons =
-    (combinedStore.includes('robinson') ||
-      combinedStore.includes('shakey') ||
-      combinedStore.includes('mcdonald') ||
-      combinedStore.includes('mcdo') ||
-      combinedStore.includes('chowking') ||
-      combinedStore.includes('greenwich')) &&
-    !combinedStore.includes('sm') &&
-    !combinedStore.includes('ribshack');
-
-  if (isRobinsons) {
-    const robMall = ORMOC_GEOCODING_DICTIONARY.malls.robinsons_place_ormoc;
-    return {
-      latitude: robMall.latitude,
-      longitude: robMall.longitude,
-      storeName: storeNameStr || robMall.name,
-      mall: 'Robinsons Place Ormoc',
-      isPartner: true,
-    };
-  }
-
-  // 2. Jollibee SM / SM store dynamic override -> sLat = 11.0062, sLng = 124.6068
-  const isSmStore =
-    combinedStore.includes('sm') ||
-    combinedStore.includes('jollibee') ||
-    combinedStore.includes('inasal') ||
-    combinedStore.includes('ribshack') ||
-    combinedStore.includes('rib shack') ||
-    combinedStore.includes('center') ||
-    /\bsm\b/.test(combinedStore) ||
-    combinedStore.length === 0;
-
-  const rawLat = parseFloat(
-    orderData?.store_lat ??
-    orderData?.store_latitude ??
-    orderData?.pickup_lat ??
-    orderData?.store?.latitude
-  );
-  const rawLng = parseFloat(
-    orderData?.store_lng ??
-    orderData?.store_longitude ??
-    orderData?.pickup_lng ??
-    orderData?.store?.longitude
-  );
-
-  const isStoreCoordInvalid =
-    isNaN(rawLat) ||
-    isNaN(rawLng) ||
-    !isValidOrmocCoordinate(rawLat, rawLng) ||
-    (Math.abs(rawLat - 11.0138) < 0.001 && Math.abs(rawLng - 124.6040) < 0.001);
-
-  if (isSmStore || isStoreCoordInvalid) {
-    return {
-      latitude: 11.0062,
-      longitude: 124.6068,
-      storeName: storeNameStr || 'Jollibee SM Center Ormoc',
-      mall: 'SM Center Ormoc',
-      isPartner: true,
-    };
-  }
-
+  // SM Ormoc Store Coordinate Override: permanently locked to SM Ormoc (lat: 11.0062, lng: 124.6068), overriding any default or downtown coordinates
   return {
-    latitude: rawLat,
-    longitude: rawLng,
-    storeName: storeNameStr || 'Partner Kitchen',
+    latitude: 11.0062,
+    longitude: 124.6068,
+    storeName: storeNameStr || 'SM Center Ormoc',
+    mall: 'SM Center Ormoc',
     isPartner: true,
   };
 }

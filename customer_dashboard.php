@@ -2919,10 +2919,12 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
            data-total-amount="<?= htmlspecialchars(number_format((float)$ord['total_amount'], 2)) ?>"
            data-delivery-lat="<?= !empty($ord['delivery_lat']) ? (float)$ord['delivery_lat'] : '' ?>"
            data-delivery-lng="<?= !empty($ord['delivery_lng']) ? (float)$ord['delivery_lng'] : '' ?>"
+            data-store-lat="11.0062"
+            data-store-lng="124.6068"
            data-rider-name="<?= htmlspecialchars($ord['rider_name'] ?? '') ?>"
            data-rider-phone="<?= htmlspecialchars($ord['rider_phone'] ?? '') ?>"
            id="order-card-<?= $ord['order_id'] ?>" 
-           onclick="openTrackingModal(<?= (int)$ord['order_id'] ?>, { orderId: <?= (int)$ord['order_id'] ?>, orderNum: '<?= htmlspecialchars(addslashes($clean_card_ref)) ?>', storeName: '<?= htmlspecialchars(addslashes($ord['store_name'])) ?>', itemsSummary: '<?= htmlspecialchars(addslashes($ord['items_summary'])) ?>', deliveryAddress: '<?= htmlspecialchars(addslashes($ord['delivery_address'] ?? '')) ?>', totalAmount: '<?= htmlspecialchars(addslashes((string)$ord['total_amount'])) ?>', orderStatus: '<?= htmlspecialchars(addslashes($norm_status)) ?>', deliveryLat: '<?= !empty($ord['delivery_lat']) ? (float)$ord['delivery_lat'] : '' ?>', deliveryLng: '<?= !empty($ord['delivery_lng']) ? (float)$ord['delivery_lng'] : '' ?>', riderName: '<?= htmlspecialchars(addslashes($ord['rider_name'] ?? '')) ?>', riderPhone: '<?= htmlspecialchars(addslashes($ord['rider_phone'] ?? '')) ?>' })" style="cursor:pointer;" title="Tap to view live delivery tracking map">
+           onclick="openTrackingModal(<?= (int)$ord['order_id'] ?>, { orderId: <?= (int)$ord['order_id'] ?>, orderNum: '<?= htmlspecialchars(addslashes($clean_card_ref)) ?>', storeName: '<?= htmlspecialchars(addslashes($ord['store_name'])) ?>', storeLat: '11.0062', storeLng: '124.6068', itemsSummary: '<?= htmlspecialchars(addslashes($ord['items_summary'])) ?>', deliveryAddress: '<?= htmlspecialchars(addslashes($ord['delivery_address'] ?? '')) ?>', totalAmount: '<?= htmlspecialchars(addslashes((string)$ord['total_amount'])) ?>', orderStatus: '<?= htmlspecialchars(addslashes($norm_status)) ?>', deliveryLat: '<?= !empty($ord['delivery_lat']) ? (float)$ord['delivery_lat'] : '' ?>', deliveryLng: '<?= !empty($ord['delivery_lng']) ? (float)$ord['delivery_lng'] : '' ?>', riderName: '<?= htmlspecialchars(addslashes($ord['rider_name'] ?? '')) ?>', riderPhone: '<?= htmlspecialchars(addslashes($ord['rider_phone'] ?? '')) ?>' })" style="cursor:pointer;" title="Tap to view live delivery tracking map">
         <div class="row-icon <?= $is_cancelled ? 'grey' : ($is_ontheway ? 'jolli' : ($is_settled ? 'settled-icon' : 'green')) ?>">
           <?= $is_cancelled ? '🚫' : ($is_ontheway ? '🛵' : ($is_settled ? '🛡️' : ($is_delivered ? '📦' : ($is_prep ? '🍳' : '🛍️')))) ?>
         </div>
@@ -2973,7 +2975,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
               <?= htmlspecialchars($status_label) ?>
             </span>
             <div id="track-actions-<?= $ord['order_id'] ?>" class="order-actions-wrap" style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
-              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(<?= (int)$ord['order_id'] ?>, { orderId: <?= (int)$ord['order_id'] ?>, orderNum: '<?= htmlspecialchars(addslashes($clean_card_ref)) ?>', storeName: '<?= htmlspecialchars(addslashes($ord['store_name'])) ?>', itemsSummary: '<?= htmlspecialchars(addslashes($ord['items_summary'])) ?>', deliveryAddress: '<?= htmlspecialchars(addslashes($ord['delivery_address'] ?? '')) ?>', totalAmount: '<?= htmlspecialchars(addslashes((string)$ord['total_amount'])) ?>', orderStatus: '<?= htmlspecialchars(addslashes($norm_status)) ?>' })" title="Tap to view live delivery map">
+              <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(<?= (int)$ord['order_id'] ?>, { orderId: <?= (int)$ord['order_id'] ?>, orderNum: '<?= htmlspecialchars(addslashes($clean_card_ref)) ?>', storeName: '<?= htmlspecialchars(addslashes($ord['store_name'])) ?>', storeLat: '11.0062', storeLng: '124.6068', itemsSummary: '<?= htmlspecialchars(addslashes($ord['items_summary'])) ?>', deliveryAddress: '<?= htmlspecialchars(addslashes($ord['delivery_address'] ?? '')) ?>', totalAmount: '<?= htmlspecialchars(addslashes((string)$ord['total_amount'])) ?>', orderStatus: '<?= htmlspecialchars(addslashes($norm_status)) ?>' })" title="Tap to view live delivery map">
                 <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
               </button>
               <button class="confirm-btn" id="confirm-btn-<?= $ord['order_id'] ?>" onclick="event.stopPropagation(); confirmOrderReceived(<?= $ord['order_id'] ?>)">
@@ -4940,7 +4942,7 @@ async function loadCustomerOrdersLive() {
             ${subMsg}
           </div>
           <div id="track-actions-${orderId}" class="order-actions-wrap" style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
-            <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(${orderId}, { orderId: ${orderId}, orderNum: '${escapeCustAttr(clean_card_ref)}', storeName: '${escapeCustAttr(ord.store_name || '')}', itemsSummary: '${escapeCustAttr(ord.items_summary || '')}', deliveryAddress: '${escapeCustAttr(ord.delivery_address || '')}', totalAmount: '${escapeCustAttr(ord.total_amount || ord.total_price || '')}', orderStatus: '${escapeCustAttr(norm_status)}' })" title="Tap to view live delivery map">
+            <button type="button" class="cust-track-btn" onclick="event.stopPropagation(); openTrackingModal(${orderId}, { orderId: ${orderId}, orderNum: '${escapeCustAttr(clean_card_ref)}', storeName: '${escapeCustAttr(ord.store_name || '')}', storeLat: '11.0062', storeLng: '124.6068', itemsSummary: '${escapeCustAttr(ord.items_summary || '')}', deliveryAddress: '${escapeCustAttr(ord.delivery_address || '')}', totalAmount: '${escapeCustAttr(ord.total_amount || ord.total_price || '')}', orderStatus: '${escapeCustAttr(norm_status)}' })" title="Tap to view live delivery map">
               <i class="fa-solid fa-location-dot"></i> 📍 Live Track Rider
             </button>
             <button class="confirm-btn" id="confirm-btn-${orderId}" onclick="event.stopPropagation(); confirmOrderReceived(${orderId})">
@@ -4954,7 +4956,7 @@ async function loadCustomerOrdersLive() {
           </div>`;
       }
 
-      const rowClick = `onclick="openTrackingModal(${orderId}, { orderId: ${orderId}, orderNum: '${escapeCustAttr(clean_card_ref)}', storeName: '${escapeCustAttr(ord.store_name || '')}', itemsSummary: '${escapeCustAttr(ord.items_summary || '')}', deliveryAddress: '${escapeCustAttr(ord.delivery_address || '')}', totalAmount: '${escapeCustAttr(ord.total_amount || ord.total_price || '')}', orderStatus: '${escapeCustAttr(norm_status)}', deliveryLat: '${ord.delivery_lat || ord.customer_lat || ''}', deliveryLng: '${ord.delivery_lng || ord.customer_lng || ''}', riderName: '${escapeCustAttr(ord.rider_name || '')}', riderPhone: '${escapeCustAttr(ord.rider_phone || '')}' })" style="cursor:pointer;" title="Tap to view live delivery tracking map"`;
+      const rowClick = `onclick="openTrackingModal(${orderId}, { orderId: ${orderId}, orderNum: '${escapeCustAttr(clean_card_ref)}', storeName: '${escapeCustAttr(ord.store_name || '')}', storeLat: '11.0062', storeLng: '124.6068', itemsSummary: '${escapeCustAttr(ord.items_summary || '')}', deliveryAddress: '${escapeCustAttr(ord.delivery_address || '')}', totalAmount: '${escapeCustAttr(ord.total_amount || ord.total_price || '')}', orderStatus: '${escapeCustAttr(norm_status)}', deliveryLat: '${ord.delivery_lat || ord.customer_lat || ''}', deliveryLng: '${ord.delivery_lng || ord.customer_lng || ''}', riderName: '${escapeCustAttr(ord.rider_name || '')}', riderPhone: '${escapeCustAttr(ord.rider_phone || '')}' })" style="cursor:pointer;" title="Tap to view live delivery tracking map"`;
 
       html += `
         <div class="row-card order-row ${is_ontheway ? 'on-the-way-card' : ''}" 
@@ -4967,6 +4969,8 @@ async function loadCustomerOrdersLive() {
              data-total-amount="${escapeCustAttr(ord.total_amount || ord.total_price || '')}"
              data-delivery-lat="${ord.delivery_lat || ord.customer_lat || ''}"
              data-delivery-lng="${ord.delivery_lng || ord.customer_lng || ''}"
+             data-store-lat="11.0062"
+             data-store-lng="124.6068"
              data-rider-name="${escapeCustAttr(ord.rider_name || '')}"
              data-rider-phone="${escapeCustAttr(ord.rider_phone || '')}"
              id="order-card-${orderId}" ${rowClick}>
@@ -5708,6 +5712,9 @@ function openTrackingModal(orderId, meta) {
   }
 
   // If inside Expo mobile app WebView, post message to native bridge and do not open web modal
+  payload.storeLat = 11.0062;
+  payload.storeLng = 124.6068;
+
   if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
     payload.type = 'OPEN_TRACKING_MODAL';
     try {
@@ -6022,8 +6029,9 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     }
 
     const ord = data.order || {};
-    const storeLat = parseFloat(data.store_lat || ord.store_lat);
-    const storeLng = parseFloat(data.store_lng || ord.store_lng);
+    // SM Ormoc Store Coordinate Override: Permanently locked to SM Ormoc
+    const storeLat = 11.0062;
+    const storeLng = 124.6068;
     const destLat = parseFloat(data.destination_lat || data.dest_lat || ord.destination_lat || ord.customer_lat);
     const destLng = parseFloat(data.destination_lng || data.dest_lng || ord.destination_lng || ord.customer_lng);
 

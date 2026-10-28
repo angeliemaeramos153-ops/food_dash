@@ -196,10 +196,17 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
         ");
         $stmt->execute([':oid' => $order_id]);
         $order = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$order) {
+            try {
+                $stmt2 = $conn->prepare("SELECT COALESCE(o.id, o.order_id) AS order_id, o.order_number AS order_ref, o.user_id AS customer_id, o.user_id, COALESCE(s.shop_name, o.store_name, 'Partner Store') AS store_name, o.delivery_address, o.total_price AS total_amount, o.payment_method, o.rider_id, COALESCE(o.rider_name, 'Alex Gonzaga') AS assigned_rider_name, 17 AS rider_user_id FROM orders o LEFT JOIN shops s ON (o.store_id = s.shop_id OR o.shop_id = s.shop_id) WHERE o.id = :oid OR o.order_id = :oid2 LIMIT 1");
+                $stmt2->execute([':oid' => $order_id, ':oid2' => $order_id]);
+                $order = $stmt2->fetch(PDO::FETCH_ASSOC);
+            } catch (Throwable $e) {}
+        }
         if (!$order) return false;
 
         // 2. Prevent duplicate departure messages for the same order
-        $chk = $conn->prepare("SELECT message_id FROM order_messages WHERE order_id = :oid AND (message_text LIKE '%picked up from%' OR message_text LIKE '%on the way to%') LIMIT 1");
+        $chk = $conn->prepare("SELECT message_id FROM order_messages WHERE order_id = :oid AND (message_text LIKE '%picked up by the rider%' OR message_text LIKE '%picked up from%' OR message_text LIKE '%now on the way%') LIMIT 1");
         $chk->execute([':oid' => $order_id]);
         if ($chk->fetch()) {
             return true; // Already dispatched
@@ -257,10 +264,16 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
         // 6. Resolve Payment Method dynamically
         $raw_pm = trim((string)($order['payment_method'] ?: ($order['ord_payment_method'] ?? 'COD')));
         $pm_brand = 'COD';
-        if (stripos($raw_pm, 'cod') !== false || stripos($raw_pm, 'cash') !== false) {
-            $pm_brand = 'COD';
-        } elseif (stripos($raw_pm, 'gcash') !== false) {
+        if (stripos($raw_pm, 'gcash') !== false) {
             $pm_brand = 'GCash';
+        } elseif (stripos($raw_pm, 'maya') !== false) {
+            $pm_brand = 'Maya';
+        } elseif (stripos($raw_pm, 'gotyme') !== false) {
+            $pm_brand = 'GoTyme';
+        } elseif (stripos($raw_pm, 'apple') !== false) {
+            $pm_brand = 'Apple Pay';
+        } elseif (stripos($raw_pm, 'cod') !== false || stripos($raw_pm, 'delivery') !== false || strtolower(trim($raw_pm)) === 'cash') {
+            $pm_brand = 'COD';
         } elseif (stripos($raw_pm, 'maya') !== false) {
             $pm_brand = 'Maya';
         } elseif (stripos($raw_pm, 'gotyme') !== false) {
@@ -270,7 +283,7 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
         }
 
         // 7. Construct the exact automated chat message
-        $auto_msg = "Hi! Your order has been picked up from {$store_brand} and is now on the way to {$dest_brand}. Total amount due: ₱{$formatted_amount} ({$pm_brand}). See you soon!";
+        $auto_msg = "Hi! Your order has been picked up by the rider and is now on the way. Total amount due: ₱{$formatted_amount} ({$pm_brand}).";
 
         // 8. Resolve sender and receiver IDs
         $r_name = !empty($sender_name) ? $sender_name : ($order['assigned_rider_name'] ?: 'Alex Gonzaga');

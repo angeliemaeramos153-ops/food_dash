@@ -46,8 +46,8 @@ if ($is_cli) {
 @set_time_limit(300);
 
 // Default Ormoc City center fallback coordinates if Nominatim finds no match for custom/fictional store names
-$ormoc_default_lat = 11.00650000;
-$ormoc_default_lng = 124.60750000;
+$ormoc_default_lat = 11.00620000;
+$ormoc_default_lng = 124.60680000;
 
 // Query shops missing coordinates (or all if force is enabled)
 if ($force) {

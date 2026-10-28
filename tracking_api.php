@@ -255,8 +255,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     // 1. Query all partner stores with active orders count
     $store_stmt = $conn->query("SELECT 
         s.shop_id, s.shop_name, s.category, s.address,
-        COALESCE(s.lat, s.lat, 11.00650000) AS lat,
-        COALESCE(s.lng, s.lng, 124.60750000) AS lng,
+        COALESCE(s.lat, 11.00620000) AS lat,
+        COALESCE(s.lng, 124.60680000) AS lng,
         COALESCE(s.logo_url, 'assets/shops/default_store.png') AS logo_url,
         (SELECT COUNT(*) FROM food_orders fo 
          WHERE (fo.shop_id = s.shop_id OR (fo.shop_id = 0 AND LOWER(TRIM(fo.store_name)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(s.shop_name)) COLLATE utf8mb4_unicode_ci))
@@ -323,8 +323,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
             o.items_summary, o.total_amount, o.status AS order_status, o.delivery_status,
             COALESCE(o.delivery_lat, o.customer_lat) AS dest_lat,
             COALESCE(o.delivery_lng, o.customer_lng) AS dest_lng,
-            COALESCE(o.store_lat, sh.lat, sh.lat, 11.0065) AS store_lat,
-            COALESCE(o.store_lng, sh.lng, sh.lng, 124.6075) AS store_lng,
+            COALESCE(o.store_lat, sh.lat, 11.0062) AS store_lat,
+            COALESCE(o.store_lng, sh.lng, 124.6068) AS store_lng,
             COALESCE(o.rider_lat, ?) AS live_rider_lat,
             COALESCE(o.rider_lng, ?) AS live_rider_lng
         FROM food_orders o

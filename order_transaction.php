@@ -500,19 +500,9 @@ if ($method === 'POST') {
 
                 // Automated departure and bill message from rider
                 try {
-                    $chk_m = $conn->prepare("SELECT COUNT(*) FROM order_messages WHERE order_id = :oid AND sender_role = 'rider' AND message_text LIKE 'Hello! I have picked up your order%'");
-                    $chk_m->execute([':oid' => $order_id]);
-                    if ((int)$chk_m->fetchColumn() === 0) {
-                        $bill_amt = number_format((float)($order['total_amount'] ?? 0), 2);
-                        $bill_pm = !empty($order['payment_method']) ? trim($order['payment_method']) : 'Cash on Delivery (COD)';
-                        $auto_dep_msg = "Hello! I have picked up your order and I'm on the way. Your total bill is ₱{$bill_amt} ({$bill_pm}). Please have the payment or recipient ready!";
-                        $ins_m = $conn->prepare("INSERT INTO order_messages (order_id, sender_role, sender_id, sender_name, message_text, created_at) VALUES (:oid, 'rider', :uid, :rname, :txt, NOW())");
-                        $ins_m->execute([
-                            ':oid'   => $order_id,
-                            ':uid'   => $user_id,
-                            ':rname' => $user_name,
-                            ':txt'   => $auto_dep_msg
-                        ]);
+                    require_once __DIR__ . '/notification_lib.php';
+                    if (function_exists('send_on_delivery_chat_message')) {
+                        send_on_delivery_chat_message($conn, $order_id, $user_id, $user_name);
                     }
                 } catch (Throwable $e) {}
             } elseif ($target_status === 'DELIVERED') {
