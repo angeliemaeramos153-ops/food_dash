@@ -6852,15 +6852,24 @@ async function pollCustomerCommunicationUpdates() {
       dismissIncomingCallIfRinging();
     }
 
-    if (Array.isArray(data.messages) && data.messages.length > 0) {
-      data.messages.forEach(msg => {
-        if (msg.sender_role === 'rider' && (!msg.order_id || !targetOrderId || parseInt(msg.order_id, 10) === parseInt(targetOrderId, 10))) {
-          handleLiveRiderMessage(msg);
+    const sNorm = String(data.status || '').toUpperCase().trim();
+    const dNorm = String(data.delivery_status || '').toLowerCase().trim();
+    const sLower = String(data.status || '').toLowerCase().trim();
+    const isPendingPrepReady = ['PENDING', 'PLACED', 'PREPARING', 'READY_FOR_PICKUP', 'READY', 'CANCELLED'].includes(sNorm)
+                            || ['waiting', 'pending', 'preparing', 'cooking', 'ready', 'ready_for_pickup', 'cancelled'].includes(dNorm)
+                            || ['pending', 'placed', 'preparing', 'ready', 'ready_for_pickup'].includes(sLower);
+
+    if (!isPendingPrepReady) {
+      if (Array.isArray(data.messages) && data.messages.length > 0) {
+        data.messages.forEach(msg => {
+          if (msg.sender_role === 'rider' && (!msg.order_id || !targetOrderId || parseInt(msg.order_id, 10) === parseInt(targetOrderId, 10))) {
+            handleLiveRiderMessage(msg);
+          }
+        });
+      } else if (data.latest_banner && data.latest_banner.sender_role === 'rider') {
+        if (!data.latest_banner.order_id || !targetOrderId || parseInt(data.latest_banner.order_id, 10) === parseInt(targetOrderId, 10)) {
+          handleLiveRiderMessage(data.latest_banner);
         }
-      });
-    } else if (data.latest_banner && data.latest_banner.sender_role === 'rider') {
-      if (!data.latest_banner.order_id || !targetOrderId || parseInt(data.latest_banner.order_id, 10) === parseInt(targetOrderId, 10)) {
-        handleLiveRiderMessage(data.latest_banner);
       }
     }
 

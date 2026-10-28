@@ -185,7 +185,7 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
         // 1. Dynamic Database Query: Fetch order details from food_orders, users, shops, stores, and riders
         $stmt = $conn->prepare("
             SELECT 
-                fo.order_id, fo.order_ref, fo.customer_id, fo.user_id, fo.customer_name, fo.store_name, 
+                fo.order_id, fo.order_ref, fo.status, fo.delivery_status, fo.customer_id, fo.user_id, fo.customer_name, fo.store_name, 
                 fo.delivery_address, fo.total_amount, fo.delivery_fee, fo.payment_method, fo.rider_id, fo.shop_id,
                 COALESCE(NULLIF(TRIM(fo.customer_name), ''), u.full_name) AS dynamic_customer_name,
                 COALESCE(st.store_name, st.name, s.shop_name, fo.store_name) AS dynamic_store_name,
@@ -209,6 +209,7 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
                     SELECT 
                         COALESCE(o.id, o.order_id) AS order_id, 
                         o.order_number AS order_ref, 
+                        o.status,
                         o.user_id AS customer_id, 
                         o.user_id, 
                         COALESCE(NULLIF(TRIM(o.customer_name), ''), u.full_name, '') AS dynamic_customer_name,
@@ -234,6 +235,25 @@ function send_on_delivery_chat_message(PDO $conn, int $order_id, ?int $sender_id
             } catch (Throwable $e) {}
         }
         if (!$order) return false;
+
+        // Strict State Gatekeeping: NEVER allow if order is in pending, preparing, ready, or cancelled state
+        $st_clean = strtolower(trim((string)($order['status'] ?? '')));
+        $dst_clean = strtolower(trim((string)($order['delivery_status'] ?? '')));
+        if (in_array($st_clean, ['pending', 'placed', 'preparing', 'cooking', 'ready', 'ready_for_pickup', 'cancelled']) ||
+            in_array($dst_clean, ['waiting', 'pending', 'preparing', 'cooking', 'ready', 'ready_for_pickup', 'cancelled'])) {
+            return false;
+        }
+
+        $is_strictly_on_delivery = in_array($st_clean, ['on_delivery', 'out_for_delivery', 'on_the_way']) ||
+                                  in_array($dst_clean, ['on_delivery', 'out_for_delivery', 'on_the_way']);
+        if (!$is_strictly_on_delivery) {
+            return false;
+        }
+
+        // Must verify rider pickup action was explicitly triggered
+        if (empty($order['rider_id']) && ($sender_id === null || $sender_id <= 0)) {
+            return false;
+        }
 
         // 2. Prevent duplicate departure messages for the same order
         $chk = $conn->prepare("SELECT message_id FROM order_messages WHERE order_id = :oid AND (message_text LIKE '%picked up by the rider%' OR message_text LIKE '%picked up from%' OR message_text LIKE '%now on the way%') LIMIT 1");

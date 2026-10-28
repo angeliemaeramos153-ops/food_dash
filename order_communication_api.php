@@ -476,7 +476,12 @@ if ($action === 'get_updates' || $method === 'GET') {
 
     // Latest message overall for banner notifications - only for fresh messages (< 60s) or new incoming messages
     $latest_banner = null;
-    if (!empty($messages)) {
+    $ord_st_norm = strtolower(trim((string)($order['status'] ?? '')));
+    $ord_dst_norm = strtolower(trim((string)($order['delivery_status'] ?? '')));
+    $is_pending_prep_ready = in_array($ord_st_norm, ['pending', 'placed', 'preparing', 'cooking', 'ready', 'ready_for_pickup', 'cancelled']) ||
+                             in_array($ord_dst_norm, ['waiting', 'pending', 'preparing', 'cooking', 'ready', 'ready_for_pickup', 'cancelled']);
+
+    if (!$is_pending_prep_ready && !empty($messages)) {
         $last_one = end($messages);
         $msg_age = time() - strtotime($last_one['created_at']);
         if ($after_id > 0 || $msg_age <= 60) {
