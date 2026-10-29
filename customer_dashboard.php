@@ -1472,68 +1472,40 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
   }
 }
 
-/* Header Relocated Gmail Inbox Widget: clean flex row alignment, zero bottom touch blocking */
+/* Floating Gmail Inbox Widget - floats cleanly right above fixed navbar at bottom right */
+.gmail-widget, #gmailInboxWidget, .fd-gmail-floating-btn, #fdGmailFloatingBtn {
+  position: fixed !important;
+  bottom: calc(75px + env(safe-area-inset-bottom, 10px)) !important;
+  right: 16px !important;
+  z-index: 10000 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  background: #ffffff !important;
+  color: #202124 !important;
+  padding: 10px 16px !important;
+  border-radius: 28px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.08) !important;
+  cursor: pointer !important;
+  border: 1px solid #dadce0 !important;
+  font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  user-select: none !important;
+}
+.gmail-widget:hover, #gmailInboxWidget:hover, .fd-gmail-floating-btn:hover, #fdGmailFloatingBtn:hover {
+  box-shadow: 0 8px 24px rgba(234,67,53,0.25), 0 2px 6px rgba(0,0,0,0.12) !important;
+  transform: translateY(-2px) !important;
+  border-color: #ea4335 !important;
+}
 .top-icons {
   display: flex !important;
   align-items: center !important;
   gap: 8px !important;
   position: relative !important;
-}
-.top-icons .fd-gmail-floating-btn,
-.top-icons #fdGmailFloatingBtn,
-.fd-gmail-header-btn {
-  position: static !important;
-  inset: auto !important;
-  bottom: auto !important;
-  right: auto !important;
-  width: 34px !important;
-  height: 34px !important;
-  min-width: 34px !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border-radius: 50% !important;
-  background: #ffffff !important;
-  border: 1px solid var(--line, #dadce0) !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
-  display: grid !important;
-  place-items: center !important;
-  cursor: pointer !important;
-  z-index: 2 !important;
-  pointer-events: auto !important;
-  touch-action: manipulation !important;
-  transform: none !important;
-}
-.top-icons .fd-gmail-floating-btn:hover,
-.top-icons #fdGmailFloatingBtn:hover,
-.fd-gmail-header-btn:hover {
-  transform: scale(1.06) !important;
-  border-color: #ea4335 !important;
-  box-shadow: 0 2px 8px rgba(234,67,53,0.2) !important;
-}
-.top-icons .fd-gmail-floating-btn .fd-gmail-btn-label,
-.top-icons #fdGmailFloatingBtn .fd-gmail-btn-label,
-.fd-gmail-header-btn .fd-gmail-btn-label {
-  display: none !important;
-}
-.top-icons .fd-gmail-floating-btn .fd-gmail-btn-icon,
-.top-icons #fdGmailFloatingBtn .fd-gmail-btn-icon,
-.fd-gmail-header-btn .fd-gmail-btn-icon {
-  position: relative !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-.top-icons .fd-gmail-badge,
-.fd-gmail-header-btn .fd-gmail-badge {
-  position: absolute !important;
-  top: -6px !important;
-  right: -8px !important;
-  min-width: 15px !important;
-  height: 15px !important;
-  font-size: 8.5px !important;
-  font-weight: 800 !important;
-  padding: 0 3px !important;
-  line-height: 13px !important;
 }
 
 .nav{border:0;background:transparent;color:#72776a;font-size:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;position:relative}.nav i{font-size:15px}.nav.active{color:var(--olive-dark);font-weight:700}.badge{position:absolute;background:#e7352d;color:white;font-size:7px;border-radius:10px;padding:2px 5px;top:4px;right:20px}
@@ -2661,17 +2633,8 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
         <i class="fa-regular fa-bell"></i>
         <span id="custNoteBadge" class="bell-badge" style="display:none">0</span>
       </button>
-      <!-- Relocated Gmail Inbox Widget: neatly nestled right between notification bell and profile avatar (N) -->
-      <button type="button" id="fdGmailFloatingBtn" class="fd-gmail-floating-btn fd-gmail-header-btn icon-btn" onclick="openGmailModal()" title="Open Simulated Gmail Webmail Inbox">
-        <div class="fd-gmail-btn-icon">
-          <!-- Gmail Red Envelope SVG -->
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M20 4H4C2.9 4 2.01 4.9 2.01 6L2 18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4Z" fill="#EA4335" opacity="0.15"/>
-            <path d="M20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4ZM20 8L12 13L4 8V6L12 11L20 6V8Z" fill="#EA4335"/>
-          </svg>
-          <span class="fd-gmail-badge" id="fdGmailUnreadBadge">0</span>
-        </div>
-        <span class="fd-gmail-btn-label" style="display:none;">Gmail Inbox</span>
+      <button type="button" class="icon-btn" onclick="openGmailModal()" title="Gmail Inbox">
+        <i class="fa-regular fa-envelope"></i>
       </button>
       <div class="avatar"><?php echo strtoupper(substr($full_name,0,1)); ?></div>
     </div>
@@ -7365,7 +7328,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<?php $fd_gmail_btn_in_header = true; require_once 'gmail_simulator_modal.php'; ?>
+<?php require_once 'gmail_simulator_modal.php'; ?>
 <script>
 function closeCustomerPaymentModal(modalId) {
     const el = document.getElementById(modalId);

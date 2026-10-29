@@ -14,7 +14,6 @@ if (isset($_SESSION['user']['email'])) {
     $current_sim_email = 'customer@gmail.com';
 }
 ?>
-<?php if (empty($fd_gmail_btn_in_header)): ?>
 <!-- FLOATING GMAIL INBOX BUTTON -->
 <div id="fdGmailFloatingBtn" class="fd-gmail-floating-btn" onclick="openGmailModal()" title="Open Simulated Gmail Webmail Inbox">
   <div class="fd-gmail-btn-icon">
@@ -27,7 +26,6 @@ if (isset($_SESSION['user']['email'])) {
   </div>
   <span class="fd-gmail-btn-label">Gmail Inbox</span>
 </div>
-<?php endif; ?>
 
 <!-- GMAIL SIMULATOR MODAL BACKDROP -->
 <div id="fdGmailModal" class="fd-gmail-modal-backdrop" onclick="handleGmailBackdropClick(event)">
