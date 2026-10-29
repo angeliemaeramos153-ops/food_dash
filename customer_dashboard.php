@@ -646,15 +646,19 @@ body {
   justify-content: flex-start;
   font-family: 'Poppins', Arial, sans-serif;
   touch-action: manipulation;
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 1 !important;
 }
 
 button, input { font: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
 
-/* Ensure all interactive buttons, store cards, and touch targets are responsive and clickable */
-button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip, .row-card, .hero button, .icon-btn, [onclick], [data-action],
+/* Ensure all interactive buttons, store cards, chips, and touch targets are responsive and clickable */
+button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip, .row-card, .hero button, .icon-btn, [onclick], [data-action], [data-screen], [data-category],
 .banner-store *, .bottom-nav, nav,
-#fdGmailHeaderBtn, .fd-gmail-header-btn {
+#fdGmailHeaderBtn, .fd-gmail-header-btn,
+.cancel-chip, .btn-fd-primary, .btn-fd-secondary, .btn-arrival-action, .logout-cancel, .logout-confirm {
   pointer-events: auto !important;
   cursor: pointer !important;
   touch-action: manipulation !important;
@@ -662,6 +666,26 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Active state tactile styles for instant touch feedback */
+button:active,
+a:active,
+.store:active,
+.food-card:active,
+.row-card:active,
+.chip:active,
+.cancel-chip:active,
+.add:active,
+.btn-qty-minus:active,
+.btn-qty-plus:active,
+.nav:active,
+.icon-btn:active,
+.hero button:active,
+.is-touch-active {
+  transform: scale(0.96) !important;
+  opacity: 0.88 !important;
+  transition: transform 0.08s ease, opacity 0.08s ease !important;
 }
 
 /* Ensure child icons, badges, SVG paths, and decorative text never swallow parent card clicks */
@@ -681,12 +705,16 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
   pointer-events: auto !important;
 }
 
-/* Guarantee inactive modals, Gmail backdrops, and hidden floating elements never block clicks */
+/* Guarantee inactive modals, backdrops, and hidden floating elements never block clicks */
 .sim-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
 .sim-modal[style*="display:none"],
 .sim-modal[style*="display: none"],
-.fd-modal:not(.show):not([style*="display: flex"]):not([style*="display:flex"]),
-.logout-modal:not(.show):not([style*="display: flex"]):not([style*="display:flex"]),
+.fd-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
+.fd-modal[style*="display:none"],
+.fd-modal[style*="display: none"],
+.logout-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
+.logout-modal[style*="display:none"],
+.logout-modal[style*="display: none"],
 .incoming-call-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
 .incoming-call-modal[style*="display:none"],
 .incoming-call-modal[style*="display: none"],
@@ -697,7 +725,9 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 .customer-floating-banner[style*="display: none"],
 .fd-gmail-modal-backdrop:not(.active),
 #fdGmailModal:not(.active),
-.toast:not(.show) {
+.toast:not(.show),
+.cust-toast:not(.show),
+.fd-modal-backdrop:not(.active) {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
@@ -711,11 +741,17 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 .sim-modal[style*="display: flex"],
 .sim-modal[style*="display:flex"],
 .fd-modal.show,
+.fd-modal.active,
 .fd-modal[style*="display: flex"],
 .fd-modal[style*="display:flex"],
 .logout-modal.show,
+.logout-modal.active,
+.logout-modal[style*="display: flex"],
+.logout-modal[style*="display:flex"],
 .incoming-call-modal.show,
 .incoming-call-modal.active,
+.incoming-call-modal[style*="display: flex"],
+.incoming-call-modal[style*="display:flex"],
 .fd-gmail-modal-backdrop.active,
 #fdGmailModal.active {
   display: flex !important;
@@ -732,7 +768,9 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
   box-sizing: border-box !important;
   overflow-x: hidden !important;
   background: var(--paper);
-  position: relative;
+  position: relative !important;
+  z-index: 1 !important;
+  pointer-events: auto !important;
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
@@ -1262,6 +1300,8 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 }
 .fd-modal {
   display: none;
+  visibility: hidden;
+  pointer-events: none;
   position: fixed;
   inset: 0;
   background: rgba(75, 83, 32, 0.40);
@@ -1271,7 +1311,11 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
   padding: 16px;
   z-index: 2000;
 }
-.fd-modal.show { display: flex; }
+.fd-modal.show, .fd-modal.active, .fd-modal[style*="display: flex"], .fd-modal[style*="display:flex"] {
+  display: flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
 .fd-modal-box {
   width: min(420px, 100%);
   background: #FFFDF9;
@@ -1551,7 +1595,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 .toast{position:fixed;left:50%;bottom:82px;transform:translateX(-50%) translateY(20px);background:var(--olive-dark);color:white;padding:9px 13px;border-radius:20px;font-size:9px;opacity:0;pointer-events:none;transition:.25s;z-index:200;white-space:nowrap}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 .logout{width:100%;background:#fff;cursor:pointer;font-family:inherit;margin-top:12px;border:1px solid #e55b52;color:#d33b32;border-radius:11px;padding:10px;font-size:9px;font-weight:600}
-.logout-modal{display:none;position:fixed;inset:0;background:rgba(28,32,6,.38);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:18px;z-index:1000}.logout-modal.show{display:flex}.logout-box{width:min(360px,100%);background:#fffdf7;border:1px solid var(--line);border-radius:22px;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(55,65,22,.22)}.logout-box .logout-logo{width:58px;height:58px;border-radius:50%;object-fit:cover;border:1px solid #d7c98d;margin-bottom:9px}.logout-box h3{font-size:16px;color:var(--olive-dark);margin:0 0 5px}.logout-box p{font-size:9px;color:var(--muted);line-height:1.5;margin-bottom:17px}.logout-actions{display:flex;gap:8px}.logout-actions button,.logout-actions a{flex:1;padding:10px;border-radius:11px;font-size:9px;font-weight:700;text-decoration:none;border:0;font-family:inherit}.logout-cancel{background:#eee9d7;color:var(--olive)}.logout-confirm{background:var(--olive);color:white;display:grid;place-items:center}
+.logout-modal{display:none;visibility:hidden;pointer-events:none;position:fixed;inset:0;background:rgba(28,32,6,.38);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:18px;z-index:1000}.logout-modal.show,.logout-modal.active,.logout-modal[style*="display: flex"],.logout-modal[style*="display:flex"]{display:flex !important;visibility:visible !important;pointer-events:auto !important;}.logout-box{width:min(360px,100%);background:#fffdf7;border:1px solid var(--line);border-radius:22px;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(55,65,22,.22)}.logout-box .logout-logo{width:58px;height:58px;border-radius:50%;object-fit:cover;border:1px solid #d7c98d;margin-bottom:9px}.logout-box h3{font-size:16px;color:var(--olive-dark);margin:0 0 5px}.logout-box p{font-size:9px;color:var(--muted);line-height:1.5;margin-bottom:17px}.logout-actions{display:flex;gap:8px}.logout-actions button,.logout-actions a{flex:1;padding:10px;border-radius:11px;font-size:9px;font-weight:700;text-decoration:none;border:0;font-family:inherit}.logout-cancel{background:#eee9d7;color:var(--olive)}.logout-confirm{background:var(--olive);color:white;display:grid;place-items:center}
 
 /* Customer Live Tracking & Chat Styles */
 .cust-track-btn {
@@ -2673,8 +2717,8 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 }
 </style>
 </head>
-<body class="<?php echo !empty($is_mobile_webview) ? 'is-mobile-webview' : ''; ?>">
-<div class="app">
+<body class="<?php echo !empty($is_mobile_webview) ? 'is-mobile-webview' : ''; ?>" style="pointer-events: auto !important; position: relative; z-index: 1;">
+<div class="app" style="pointer-events: auto !important; position: relative; z-index: 1;">
 
 <header class="top">
   <div class="brand-row">
@@ -3078,7 +3122,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </section>
 
 <!-- Delivery Address Prompt Modal with Leaflet Map Pin Picker -->
-<div class="fd-modal" id="addressPromptModal" onclick="if(event.target===this)closeAddressPromptModal()">
+<div class="fd-modal" id="addressPromptModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeAddressPromptModal()">
   <div class="fd-modal-box">
     <div class="fd-modal-header">
       <h3><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> Delivery Address & Pin</h3>
@@ -3128,7 +3172,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- In-App Notifications Modal (Food Dash Palette) -->
-<div class="fd-modal" id="customerNoteModal" onclick="if(event.target===this)closeNotifications()">
+<div class="fd-modal" id="customerNoteModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeNotifications()">
   <div class="fd-modal-box">
     <div class="fd-modal-header">
       <h3><span>🔔</span> Notifications</h3>
@@ -3144,10 +3188,10 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
   </div>
 </div>
 
-<div class="logout-modal" id="logoutModal" onclick="if(event.target===this)closeLogout()"><div class="logout-box"><img class="logout-logo" src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out. You can log in again anytime.</p><div class="logout-actions"><button class="logout-cancel" type="button" onclick="closeLogout()">Cancel</button><button class="logout-confirm" type="button" onclick="executeLogout()">Yes, Log Out</button></div></div></div>
+<div class="logout-modal" id="logoutModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeLogout()"><div class="logout-box"><img class="logout-logo" src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out. You can log in again anytime.</p><div class="logout-actions"><button class="logout-cancel" type="button" onclick="closeLogout()">Cancel</button><button class="logout-confirm" type="button" onclick="executeLogout()">Yes, Log Out</button></div></div></div>
 
 <!-- Customer Live Delivery Tracking Modal -->
-<div class="fd-modal tracking-modal" id="customerTrackingModal" style="display: none;" onclick="if(event.target===this)closeCustomerTrackingModal()">
+<div class="fd-modal tracking-modal" id="customerTrackingModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeCustomerTrackingModal()">
   <div class="fd-modal-box cust-track-modal-box modal-content">
     <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone); flex-shrink:0;">
       <div style="display:flex; align-items:center; gap:8px;">
@@ -3227,7 +3271,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- Customer Message / Chat Modal -->
-<div class="fd-modal" id="customerChatModal" onclick="if(event.target===this)closeCustomerChat()">
+<div class="fd-modal" id="customerChatModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeCustomerChat()">
   <div class="fd-modal-box chat-modal-box">
     <div class="chat-modal-header">
       <div style="display:flex; align-items:center; gap:8px;">
@@ -3266,7 +3310,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- Incoming Call Floating Overlay Modal -->
-<div id="incomingCallModal" class="incoming-call-modal" style="display:none;">
+<div id="incomingCallModal" class="incoming-call-modal" style="display:none; pointer-events:none; visibility:hidden;">
   <div class="incoming-call-card">
     <div class="incoming-call-avatar">
       <i class="fa-solid fa-phone-volume fa-shake"></i>
@@ -3294,7 +3338,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- Prominent Rider Arrived Live Notification Modal -->
-<div class="fd-modal" id="riderArrivedModal" style="display:none; z-index:9999999;">
+<div class="fd-modal" id="riderArrivedModal" style="display:none; pointer-events:none; visibility:hidden; z-index:9999999;">
   <div class="fd-modal-backdrop" onclick="/* Persistent alarm: must click one of the explicit actions below */"></div>
   <div class="fd-modal-box" style="text-align:center; padding:28px 22px 24px; max-width:350px; border-radius:24px; border:2px solid #86efac; box-shadow:0 24px 60px rgba(0,0,0,0.35); background:#ffffff; position:relative; z-index:1; animation:scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
     <div style="width:72px; height:72px; border-radius:50%; background:#dcfce7; color:#15803d; font-size:34px; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; box-shadow:0 0 0 10px rgba(22,163,74,0.18);">
@@ -3332,7 +3376,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- Generic In-App Confirmation Modal (Food Dash Palette) -->
-<div class="fd-modal" id="customerConfirmModal" onclick="if(event.target===this)closeCustConfirm()">
+<div class="fd-modal" id="customerConfirmModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeCustConfirm()">
   <div class="fd-modal-box" style="max-width:340px; padding:24px 20px 20px; text-align:center; border-radius:20px; border:1px solid var(--sandstone);">
     <div style="font-size:32px; color:var(--harvest-sun); margin-bottom:10px;">
       <i class="fa-solid fa-circle-question"></i>
@@ -3347,7 +3391,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- 1. Order Cancellation Confirmation Modal -->
-<div class="fd-modal" id="cancelOrderModal" onclick="if(event.target===this)closeCancelOrderModal()">
+<div class="fd-modal" id="cancelOrderModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeCancelOrderModal()">
   <div class="fd-modal-box" style="max-width:360px; padding:22px 20px;">
     <div class="fd-modal-header" style="padding-bottom:8px; border-bottom:1px solid #fee2e2;">
       <h3 style="color:#b91c1c; display:flex; align-items:center; gap:8px;">
@@ -3387,7 +3431,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- 2. Saved Addresses Modal -->
-<div class="fd-modal" id="savedAddressesModal" onclick="if(event.target===this)closeSavedAddressesModal()">
+<div class="fd-modal" id="savedAddressesModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeSavedAddressesModal()">
   <div class="fd-modal-box" style="max-width:400px; max-height:85vh; display:flex; flex-direction:column; padding:20px;">
     <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
       <h3><i class="fa-solid fa-location-dot" style="color:var(--harvest-sun)"></i> Saved Addresses</h3>
@@ -3403,7 +3447,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- 3. Add New Address Modal with Map Pin Picker -->
-<div class="fd-modal" id="addAddressModal" onclick="if(event.target===this)closeAddAddressModal()">
+<div class="fd-modal" id="addAddressModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeAddAddressModal()">
   <div class="fd-modal-box" style="max-width:400px; max-height:90vh; overflow-y:auto; padding:20px;">
     <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
       <h3><i class="fa-solid fa-map-location-dot" style="color:var(--harvest-sun)"></i> Add New Delivery Address</h3>
@@ -3469,7 +3513,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- 4. Payment Methods Modal / Drawer -->
-<div class="fd-modal" id="paymentMethodsModal" onclick="if(event.target===this)closePaymentMethodsModal()">
+<div class="fd-modal" id="paymentMethodsModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closePaymentMethodsModal()">
   <div class="fd-modal-box" style="max-width:390px; padding:22px 20px;">
     <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
       <h3><i class="fa-regular fa-credit-card" style="color:var(--harvest-sun)"></i> Payment Methods</h3>
@@ -3555,7 +3599,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- 5. Help & Support Modal -->
-<div class="fd-modal" id="helpSupportModal" onclick="if(event.target===this)closeHelpSupportModal()">
+<div class="fd-modal" id="helpSupportModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeHelpSupportModal()">
   <div class="fd-modal-box" style="max-width:400px; max-height:88vh; overflow-y:auto; padding:22px 20px;">
     <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
       <h3><i class="fa-regular fa-circle-question" style="color:var(--harvest-sun)"></i> Help & Support</h3>
@@ -3627,7 +3671,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- 6. About Food Dash Modal -->
-<div class="fd-modal" id="aboutModal" onclick="if(event.target===this)closeAboutModal()">
+<div class="fd-modal" id="aboutModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeAboutModal()">
   <div class="fd-modal-box" style="max-width:390px; max-height:88vh; overflow-y:auto; padding:22px 20px;">
     <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
       <h3><i class="fa-solid fa-circle-info" style="color:var(--harvest-sun)"></i> About Food Dash</h3>
@@ -3671,7 +3715,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 </div>
 
 <!-- 7. Terms & Privacy Viewer Sub-Modal -->
-<div class="fd-modal" id="termsPrivacyModal" onclick="if(event.target===this)closeTermsModal()">
+<div class="fd-modal" id="termsPrivacyModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeTermsModal()">
   <div class="fd-modal-box" style="max-width:400px; max-height:85vh; overflow-y:auto; padding:20px;">
     <div class="fd-modal-header" style="padding-bottom:10px; border-bottom:1px solid var(--sandstone);">
       <h3 id="termsModalTitle">Terms of Service</h3>
@@ -7248,7 +7292,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- ============================================== -->
 
 <!-- 1. APPLE PAY NATIVE IOS BIOMETRIC MODAL -->
-<div class="sim-modal" id="customerApplePayModal" style="display:none;" onclick="if(event.target===this)closeCustomerPaymentModal('customerApplePayModal')">
+<div class="sim-modal" id="customerApplePayModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeCustomerPaymentModal('customerApplePayModal')">
   <div class="sim-sheet" style="background:#1c1c1e; color:#ffffff;">
     <div class="sheet-grabber" style="background:#3a3a3c;"></div>
     <div style="display:flex; align-items:center; justify-content:space-between; padding:4px 22px 14px 22px; border-bottom:1px solid #2c2c2e;">
@@ -7307,7 +7351,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- 2. DIGITAL WALLET QUICKPAY MODAL (GCash / Maya / GoTyme) -->
-<div class="sim-modal" id="customerWalletModal" style="display:none;" onclick="if(event.target===this)closeCustomerPaymentModal('customerWalletModal')">
+<div class="sim-modal" id="customerWalletModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeCustomerPaymentModal('customerWalletModal')">
   <div class="sim-sheet" style="background:#ffffff;">
     <div id="custWalletHeader" class="sim-sheet-header" style="background:#007DFE; color:#ffffff; padding:16px 20px 18px 20px;">
       <div class="sheet-grabber"></div>
@@ -7350,7 +7394,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- 3. CASH ON DELIVERY (COD) ORDER SUMMARY MODAL -->
-<div class="sim-modal" id="customerCodModal" style="display:none;" onclick="if(event.target===this)closeCustomerPaymentModal('customerCodModal')">
+<div class="sim-modal" id="customerCodModal" style="display:none; pointer-events:none; visibility:hidden;" onclick="if(event.target===this)closeCustomerPaymentModal('customerCodModal')">
   <div class="sim-sheet" style="background:#ffffff;">
     <div class="sim-sheet-header" style="background:#283d23; color:#ffffff; padding:16px 20px 18px 20px;">
       <div class="sheet-grabber"></div>
@@ -7390,7 +7434,12 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
 function closeCustomerPaymentModal(modalId) {
     const el = document.getElementById(modalId);
-    if (el) el.style.display = 'none';
+    if (el) {
+        el.style.display = 'none';
+        el.style.pointerEvents = 'none';
+        el.style.visibility = 'hidden';
+        el.classList.remove('show', 'active');
+    }
 }
 
 function openCustomerPaymentConfirmationModal() {
@@ -7423,12 +7472,20 @@ function openCustomerPaymentConfirmationModal() {
         const modal = document.getElementById('customerApplePayModal');
         if (modal) {
             modal.style.display = 'flex';
+            modal.style.pointerEvents = 'auto';
+            modal.style.visibility = 'visible';
+            modal.classList.add('show', 'active');
             startCustomerApplePayScan();
         }
     } else if (m.includes('gcash') || m.includes('maya') || m.includes('tyme')) {
         updateCustomerWalletTheme(m, totalFormatted, address);
         const modal = document.getElementById('customerWalletModal');
-        if (modal) modal.style.display = 'flex';
+        if (modal) {
+            modal.style.display = 'flex';
+            modal.style.pointerEvents = 'auto';
+            modal.style.visibility = 'visible';
+            modal.classList.add('show', 'active');
+        }
     } else {
         // Cash on Delivery (COD)
         const dest = document.getElementById('custCodDest');
@@ -7440,7 +7497,12 @@ function openCustomerPaymentConfirmationModal() {
         const btnTot = document.getElementById('custCodBtnTotal');
         if (btnTot) btnTot.textContent = totalFormatted;
         const modal = document.getElementById('customerCodModal');
-        if (modal) modal.style.display = 'flex';
+        if (modal) {
+            modal.style.display = 'flex';
+            modal.style.pointerEvents = 'auto';
+            modal.style.visibility = 'visible';
+            modal.classList.add('show', 'active');
+        }
     }
 }
 
@@ -7562,71 +7624,207 @@ function handlePayAction(e) {
 }
 </script>
 
-<!-- Mobile Touch Event Harmonizer: Guarantees 100% responsive tap execution on mobile WebViews & touch screens -->
+<!-- Global Touch & Click Event Delegation Engine: 100% Instantaneous Tap Execution Inside Mobile WebViews -->
 <script>
-(function initMobileTouchHarmonizer() {
-  if (window.__fdTouchHarmonizerInstalled) return;
-  window.__fdTouchHarmonizerInstalled = true;
+(function initGlobalTouchDelegation() {
+  if (window.__fdGlobalTouchDelegationInstalled) return;
+  window.__fdGlobalTouchDelegationInstalled = true;
 
   var touchStartX = 0;
   var touchStartY = 0;
   var touchStartTime = 0;
   var touchMoved = false;
+  var lastActionTimestamp = 0;
+  var lastTriggeredElement = null;
 
+  // Global touchstart: track coordinates & provide instant tactile active state
   document.addEventListener('touchstart', function(e) {
     if (e.touches && e.touches.length === 1) {
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
       touchStartTime = Date.now();
       touchMoved = false;
+
+      var touch = e.touches[0];
+      var target = document.elementFromPoint(touch.clientX, touch.clientY) || e.target;
+      if (target) {
+        var clickable = target.closest(
+          'button, a, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
+        );
+        if (clickable && !clickable.disabled) {
+          clickable.classList.add('is-touch-active');
+        }
+      }
     }
   }, { passive: true, capture: true });
 
+  // Global touchmove: distinguish genuine swipe/scroll from taps
   document.addEventListener('touchmove', function(e) {
     if (e.touches && e.touches.length === 1) {
       var dx = Math.abs(e.touches[0].clientX - touchStartX);
       var dy = Math.abs(e.touches[0].clientY - touchStartY);
       if (dx > 10 || dy > 10) {
         touchMoved = true;
+        // Clean active touch styling during scrolling
+        var activeEls = document.querySelectorAll('.is-touch-active');
+        for (var i = 0; i < activeEls.length; i++) {
+          activeEls[i].classList.remove('is-touch-active');
+        }
       }
     }
   }, { passive: true, capture: true });
 
+  // Global touchend: instant delegation handler for all dashboard buttons and interactive elements
   document.addEventListener('touchend', function(e) {
-    if (touchMoved) return;
+    setTimeout(function() {
+      var activeEls = document.querySelectorAll('.is-touch-active');
+      for (var i = 0; i < activeEls.length; i++) {
+        activeEls[i].classList.remove('is-touch-active');
+      }
+    }, 120);
+
+    if (touchMoved) return; // User was scrolling
     var duration = Date.now() - touchStartTime;
-    if (duration > 380) return; // Ignore long presses
+    if (duration > 400) return; // Ignore long presses
 
     if (!e.changedTouches || e.changedTouches.length === 0) return;
     var touch = e.changedTouches[0];
-    var target = document.elementFromPoint(touch.clientX, touch.clientY);
+    var target = document.elementFromPoint(touch.clientX, touch.clientY) || e.target;
     if (!target) return;
 
-    // Do not interfere with native editable form elements
-    var inputEl = target.closest('input:not([readonly]), textarea, select');
-    if (inputEl) return;
+    // Allow normal focus on native editable inputs and textareas
+    var editableInput = target.closest('input:not([readonly]), textarea, select');
+    if (editableInput) {
+      editableInput.focus();
+      return;
+    }
 
     // Resolve closest interactive element
     var clickable = target.closest(
-      'button, a, .store, .food-card, .row-card, .chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action]'
+      'button, a, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
     );
     if (!clickable || clickable.disabled) return;
 
-    // Prevent browser's delayed or cancelled synthetic click in scroll views
+    // Prevent delayed or cancelled synthetic click in React Native WebView
     if (e.cancelable) {
       e.preventDefault();
     }
 
-    // Debounce rapid double-taps
+    // Debounce rapid duplicate taps (320ms threshold)
     var now = Date.now();
-    if (clickable._lastTouchTrigger && (now - clickable._lastTouchTrigger) < 320) {
+    if (clickable === lastTriggeredElement && (now - lastActionTimestamp) < 320) {
       return;
     }
-    clickable._lastTouchTrigger = now;
+    lastTriggeredElement = clickable;
+    lastActionTimestamp = now;
 
-    // Trigger click instantaneously
-    clickable.click();
+    // Execute the interactive action instantaneously
+    dispatchInteractiveEvent(clickable, e);
   }, { passive: false, capture: true });
+
+  // Global click: handle desktop clicks and debounce delayed WebView ghost clicks
+  document.addEventListener('click', function(e) {
+    var target = e.target;
+    if (!target) return;
+
+    var clickable = target.closest(
+      'button, a, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
+    );
+    if (!clickable) return;
+
+    var now = Date.now();
+    if ((now - lastActionTimestamp) < 400 && (clickable === lastTriggeredElement || clickable.contains(lastTriggeredElement))) {
+      // Prevent double invocation from synthetic click
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    lastTriggeredElement = clickable;
+    lastActionTimestamp = now;
+  }, { capture: true });
+
+  // Centralized action execution engine
+  function dispatchInteractiveEvent(el, originalEvent) {
+    // 1. Bottom navigation tabs
+    var screen = el.getAttribute('data-screen');
+    if (screen && typeof window.showScreen === 'function') {
+      window.showScreen(screen);
+      return;
+    }
+
+    // 2. Readonly search bar on home screen
+    if (el.classList.contains('search') && el.querySelector('input[readonly]')) {
+      if (typeof window.showScreen === 'function') {
+        window.showScreen('search');
+        return;
+      }
+    }
+
+    // 3. Category filters and chip selection
+    if (el.classList.contains('chip') || el.classList.contains('cancel-chip') || el.hasAttribute('data-category')) {
+      if (typeof el.onclick === 'function') {
+        try { el.onclick.call(el, originalEvent); return; } catch(err) {}
+      }
+    }
+
+    // 4. "Order Now" button in hero banner
+    if (el.tagName === 'BUTTON' && el.closest('.hero')) {
+      if (typeof window.showScreen === 'function') {
+        window.showScreen('stores');
+        return;
+      }
+    }
+
+    // 5. Native click trigger for quick-add buttons (+), cards, modals, and actions
+    try {
+      el.click();
+    } catch (err) {
+      if (typeof el.onclick === 'function') {
+        el.onclick.call(el, originalEvent);
+      }
+    }
+  }
+
+  // Ensure all interactive DOM elements have explicit pointer-events: auto
+  function ensureTouchReadiness(root) {
+    var scope = root || document;
+    var elements = scope.querySelectorAll(
+      'button, a, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
+    );
+    for (var i = 0; i < elements.length; i++) {
+      var item = elements[i];
+      if (!item._touchConfigured) {
+        item._touchConfigured = true;
+        item.style.pointerEvents = 'auto';
+        item.style.touchAction = 'manipulation';
+        item.style.webkitTapHighlightColor = 'transparent';
+      }
+    }
+  }
+
+  // Initialize on load and observe future DOM mutations
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { ensureTouchReadiness(document); });
+  } else {
+    ensureTouchReadiness(document);
+  }
+
+  if (window.MutationObserver) {
+    var observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.addedNodes && mutation.addedNodes.length) {
+          for (var j = 0; j < mutation.addedNodes.length; j++) {
+            var node = mutation.addedNodes[j];
+            if (node.nodeType === 1) {
+              ensureTouchReadiness(node);
+            }
+          }
+        }
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
 })();
 </script>
 
