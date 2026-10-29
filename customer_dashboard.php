@@ -651,20 +651,34 @@ body {
 button, input { font: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
 
-/* Ensure all interactive buttons and touch targets are responsive and clickable */
-button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .hero button, .icon-btn, [onclick],
-.store *, .food-card *, .row-card *, .banner-store *, .bottom-nav *, .nav *, nav *,
+/* Ensure all interactive buttons, store cards, and touch targets are responsive and clickable */
+button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip, .row-card, .hero button, .icon-btn, [onclick], [data-action],
+.banner-store *, .bottom-nav, nav,
 #fdGmailHeaderBtn, .fd-gmail-header-btn {
   pointer-events: auto !important;
   cursor: pointer !important;
   touch-action: manipulation !important;
   user-select: none;
-  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent !important;
 }
+
+/* Ensure child icons, badges, SVG paths, and decorative text never swallow parent card clicks */
 .icon-btn svg, .icon-btn path, .icon-btn i,
 #fdGmailHeaderBtn svg, #fdGmailHeaderBtn path,
-.nav i, .nav span, .nav b {
+.nav i, .nav span, .nav b,
+.store-logo, .store-logo *, .store strong, .store small,
+.row-icon, .row-icon *, .row-details strong, .row-details small, .row-card i,
+.food-card .food-img, .food-body strong, .food-body small, .price-row .price,
+.search i, .search input[readonly],
+.chip *, .hero button * {
   pointer-events: none !important;
+}
+
+/* Re-enable explicit pointer events on child action buttons */
+.add, .btn-qty-minus, .btn-qty-plus, .food-card .add {
+  pointer-events: auto !important;
 }
 
 /* Guarantee inactive modals, Gmail backdrops, and hidden floating elements never block clicks */
@@ -7523,6 +7537,74 @@ function handlePayAction(e) {
     openCustomerPaymentConfirmationModal();
     return false;
 }
+</script>
+
+<!-- Mobile Touch Event Harmonizer: Guarantees 100% responsive tap execution on mobile WebViews & touch screens -->
+<script>
+(function initMobileTouchHarmonizer() {
+  if (window.__fdTouchHarmonizerInstalled) return;
+  window.__fdTouchHarmonizerInstalled = true;
+
+  var touchStartX = 0;
+  var touchStartY = 0;
+  var touchStartTime = 0;
+  var touchMoved = false;
+
+  document.addEventListener('touchstart', function(e) {
+    if (e.touches && e.touches.length === 1) {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchStartTime = Date.now();
+      touchMoved = false;
+    }
+  }, { passive: true, capture: true });
+
+  document.addEventListener('touchmove', function(e) {
+    if (e.touches && e.touches.length === 1) {
+      var dx = Math.abs(e.touches[0].clientX - touchStartX);
+      var dy = Math.abs(e.touches[0].clientY - touchStartY);
+      if (dx > 10 || dy > 10) {
+        touchMoved = true;
+      }
+    }
+  }, { passive: true, capture: true });
+
+  document.addEventListener('touchend', function(e) {
+    if (touchMoved) return;
+    var duration = Date.now() - touchStartTime;
+    if (duration > 380) return; // Ignore long presses
+
+    if (!e.changedTouches || e.changedTouches.length === 0) return;
+    var touch = e.changedTouches[0];
+    var target = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!target) return;
+
+    // Do not interfere with native editable form elements
+    var inputEl = target.closest('input:not([readonly]), textarea, select');
+    if (inputEl) return;
+
+    // Resolve closest interactive element
+    var clickable = target.closest(
+      'button, a, .store, .food-card, .row-card, .chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action]'
+    );
+    if (!clickable || clickable.disabled) return;
+
+    // Prevent browser's delayed or cancelled synthetic click in scroll views
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+
+    // Debounce rapid double-taps
+    var now = Date.now();
+    if (clickable._lastTouchTrigger && (now - clickable._lastTouchTrigger) < 320) {
+      return;
+    }
+    clickable._lastTouchTrigger = now;
+
+    // Trigger click instantaneously
+    clickable.click();
+  }, { passive: false, capture: true });
+})();
 </script>
 
 </body>
