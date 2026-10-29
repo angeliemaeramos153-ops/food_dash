@@ -234,11 +234,17 @@ if (isset($_SESSION['user']['email'])) {
     justify-content: center;
     padding: 20px;
     opacity: 0;
+    pointer-events: none !important;
     transition: opacity 0.2s ease-in-out;
   }
   .fd-gmail-modal-backdrop.active {
-    display: flex;
-    opacity: 1;
+    display: flex !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+  .fd-gmail-modal-backdrop:not(.active) {
+    display: none !important;
+    pointer-events: none !important;
   }
 
   /* MODAL WINDOW */

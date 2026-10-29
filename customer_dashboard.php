@@ -640,15 +640,21 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Guarantee inactive modals and hidden floating elements never block clicks */
+/* Guarantee inactive modals, Gmail backdrops, and hidden floating elements never block clicks */
 .sim-modal[style*="display:none"],
 .sim-modal[style*="display: none"],
 .fd-modal:not(.show):not([style*="display: flex"]),
 .logout-modal:not(.show):not([style*="display: flex"]),
 .incoming-call-modal[style*="display:none"],
 .incoming-call-modal[style*="display: none"],
+.customer-floating-banner:not(.show),
+#liveRiderMessageBanner:not(.show),
+.live-rider-msg-banner:not(.show),
 .customer-floating-banner[style*="display:none"],
-.customer-floating-banner[style*="display: none"] {
+.customer-floating-banner[style*="display: none"],
+.fd-gmail-modal-backdrop:not(.active),
+#fdGmailModal:not(.active),
+.toast:not(.show) {
   display: none !important;
   pointer-events: none !important;
 }
@@ -2058,7 +2064,8 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
   box-shadow: 0 10px 25px rgba(0,0,0,0.12) !important;
   border: 1px solid #e2e8f0 !important;
   padding: 12px 14px !important;
-  display: none;
+  display: none !important;
+  pointer-events: none !important;
   align-items: center !important;
   gap: 12px !important;
   cursor: pointer !important;
@@ -2070,6 +2077,13 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
 #liveRiderMessageBanner.show,
 .live-rider-msg-banner.show {
   display: flex !important;
+  pointer-events: auto !important;
+}
+.customer-floating-banner:not(.show),
+#liveRiderMessageBanner:not(.show),
+.live-rider-msg-banner:not(.show) {
+  display: none !important;
+  pointer-events: none !important;
 }
 @keyframes bannerSlideDown {
   0% { transform: translateY(-25px); opacity: 0; }
