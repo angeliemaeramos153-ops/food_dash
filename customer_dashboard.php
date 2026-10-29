@@ -699,7 +699,30 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip,
 #fdGmailModal:not(.active),
 .toast:not(.show) {
   display: none !important;
+  visibility: hidden !important;
   pointer-events: none !important;
+  opacity: 0 !important;
+  z-index: -9999 !important;
+}
+
+/* Explicit active modal rules */
+.sim-modal.show,
+.sim-modal.active,
+.sim-modal[style*="display: flex"],
+.sim-modal[style*="display:flex"],
+.fd-modal.show,
+.fd-modal[style*="display: flex"],
+.fd-modal[style*="display:flex"],
+.logout-modal.show,
+.incoming-call-modal.show,
+.incoming-call-modal.active,
+.fd-gmail-modal-backdrop.active,
+#fdGmailModal.active {
+  display: flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  z-index: 10000 !important;
 }
 
 .app {

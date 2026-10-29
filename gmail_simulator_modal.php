@@ -30,7 +30,7 @@ if (isset($_SESSION['user']['email'])) {
 <?php endif; ?>
 
 <!-- GMAIL SIMULATOR MODAL BACKDROP -->
-<div id="fdGmailModal" class="fd-gmail-modal-backdrop" onclick="handleGmailBackdropClick(event)">
+<div id="fdGmailModal" class="fd-gmail-modal-backdrop" style="display: none; visibility: hidden; pointer-events: none; opacity: 0;" onclick="handleGmailBackdropClick(event)">
   <div class="fd-gmail-modal-window" role="dialog" aria-modal="true" aria-labelledby="fdGmailModalTitle">
     
     <!-- MODAL TOP BAR (GMAIL HEADER) -->
@@ -289,6 +289,7 @@ if (isset($_SESSION['user']['email'])) {
   /* MODAL BACKDROP */
   .fd-gmail-modal-backdrop {
     display: none;
+    visibility: hidden;
     position: fixed;
     inset: 0;
     background: rgba(32, 33, 36, 0.6);
@@ -303,12 +304,15 @@ if (isset($_SESSION['user']['email'])) {
   }
   .fd-gmail-modal-backdrop.active {
     display: flex !important;
+    visibility: visible !important;
     opacity: 1 !important;
     pointer-events: auto !important;
   }
   .fd-gmail-modal-backdrop:not(.active) {
     display: none !important;
+    visibility: hidden !important;
     pointer-events: none !important;
+    opacity: 0 !important;
   }
 
   /* MODAL WINDOW */
@@ -700,6 +704,10 @@ if (isset($_SESSION['user']['email'])) {
     const modal = document.getElementById('fdGmailModal');
     if (modal) {
       modal.classList.add('active');
+      modal.style.display = 'flex';
+      modal.style.visibility = 'visible';
+      modal.style.pointerEvents = 'auto';
+      modal.style.opacity = '1';
       if (preselectEmail) {
         const picker = document.getElementById('fdGmRecipientSelect');
         if (picker) {
@@ -713,7 +721,13 @@ if (isset($_SESSION['user']['email'])) {
 
   function closeGmailModal() {
     const modal = document.getElementById('fdGmailModal');
-    if (modal) modal.classList.remove('active');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.style.display = 'none';
+      modal.style.visibility = 'hidden';
+      modal.style.pointerEvents = 'none';
+      modal.style.opacity = '0';
+    }
   }
 
   function handleGmailBackdropClick(e) {
