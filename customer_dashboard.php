@@ -2665,8 +2665,15 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
         <i class="fa-regular fa-bell"></i>
         <span id="custNoteBadge" class="bell-badge" style="display:none">0</span>
       </button>
-      <button type="button" class="icon-btn" onclick="openGmailModal()" title="Gmail Inbox">
-        <i class="fa-regular fa-envelope"></i>
+      <!-- Dynamically injected & static fallback Gmail button nestled precisely between bell and avatar -->
+      <button type="button" id="fdGmailHeaderBtn" class="icon-btn fd-gmail-header-btn" onclick="openGmailModal()" title="Gmail Inbox" aria-label="Gmail Inbox">
+        <div class="fd-gmail-btn-icon" style="position:relative;display:flex;align-items:center;justify-content:center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M20 4H4C2.9 4 2.01 4.9 2.01 6L2 18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4Z" fill="#EA4335" opacity="0.18"/>
+            <path d="M20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4ZM20 8L12 13L4 8V6L12 11L20 6V8Z" fill="#EA4335"/>
+          </svg>
+          <span class="fd-gmail-badge" id="fdGmailUnreadBadge" style="display:none;">0</span>
+        </div>
       </button>
       <div class="avatar"><?php echo strtoupper(substr($full_name,0,1)); ?></div>
     </div>
@@ -7360,7 +7367,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
-<?php require_once 'gmail_simulator_modal.php'; ?>
+<?php $fd_gmail_btn_in_header = true; require_once 'gmail_simulator_modal.php'; ?>
 <script>
 function closeCustomerPaymentModal(modalId) {
     const el = document.getElementById(modalId);
@@ -7534,6 +7541,75 @@ function handlePayAction(e) {
     openCustomerPaymentConfirmationModal();
     return false;
 }
+</script>
+
+<script>
+// Relocate / inject Gmail icon dynamically into the web header between bell and avatar (zero hardcoding)
+function injectGmailIntoWebHeader() {
+  try {
+    var headerContainer = document.querySelector('.top-icons') || 
+                           document.querySelector('header .brand-row > :last-child') ||
+                           document.querySelector('header.top');
+    if (!headerContainer) return;
+
+    var avatar = headerContainer.querySelector('.avatar, [class*="avatar"]');
+    var bell = headerContainer.querySelector('button[onclick*="openNotifications"], [class*="bell"], button:has(.fa-bell)');
+    
+    var gmailBtn = document.getElementById('fdGmailHeaderBtn') || 
+                   headerContainer.querySelector('button[onclick*="openGmailModal"]');
+
+    if (!gmailBtn) {
+      gmailBtn = document.createElement('button');
+      gmailBtn.type = 'button';
+      gmailBtn.id = 'fdGmailHeaderBtn';
+      gmailBtn.className = 'icon-btn fd-gmail-header-btn';
+      gmailBtn.title = 'Gmail Inbox';
+      gmailBtn.setAttribute('aria-label', 'Gmail Inbox');
+      gmailBtn.onclick = function() {
+        if (typeof window.openGmailModal === 'function') {
+          window.openGmailModal();
+        }
+      };
+      gmailBtn.innerHTML = [
+        '<div class="fd-gmail-btn-icon" style="position:relative;display:flex;align-items:center;justify-content:center;">',
+        '  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">',
+        '    <path d="M20 4H4C2.9 4 2.01 4.9 2.01 6L2 18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4Z" fill="#EA4335" opacity="0.18"/>',
+        '    <path d="M20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4ZM20 8L12 13L4 8V6L12 11L20 6V8Z" fill="#EA4335"/>',
+        '  </svg>',
+        '  <span class="fd-gmail-badge" id="fdGmailUnreadBadge" style="position:absolute;top:-6px;right:-8px;background:#ea4335;color:#fff;border-radius:10px;font-size:8.5px;font-weight:800;padding:0 3px;height:14px;line-height:14px;min-width:14px;text-align:center;border:1.5px solid #fff;display:none;">0</span>',
+        '</div>'
+      ].join('');
+    }
+
+    gmailBtn.classList.add('fd-gmail-header-btn', 'icon-btn');
+    gmailBtn.style.setProperty('position', 'static', 'important');
+    gmailBtn.style.setProperty('display', 'grid', 'important');
+    gmailBtn.style.setProperty('place-items', 'center', 'important');
+    gmailBtn.style.setProperty('pointer-events', 'auto', 'important');
+    gmailBtn.style.setProperty('opacity', '1', 'important');
+    gmailBtn.style.setProperty('visibility', 'visible', 'important');
+
+    if (avatar && avatar.parentNode) {
+      if (gmailBtn.nextElementSibling !== avatar || gmailBtn.parentNode !== avatar.parentNode) {
+        avatar.parentNode.insertBefore(gmailBtn, avatar);
+      }
+    } else if (bell && bell.parentNode) {
+      if (bell.nextSibling) {
+        bell.parentNode.insertBefore(gmailBtn, bell.nextSibling);
+      } else {
+        bell.parentNode.appendChild(gmailBtn);
+      }
+    } else {
+      headerContainer.appendChild(gmailBtn);
+    }
+  } catch(e) {}
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', injectGmailIntoWebHeader);
+} else {
+  injectGmailIntoWebHeader();
+}
+setInterval(injectGmailIntoWebHeader, 1500);
 </script>
 </body>
 </html>
