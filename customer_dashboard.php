@@ -34,6 +34,24 @@ try {
     $full_name = $_SESSION['full_name'] ?? $username;
 }
 
+// Detect Mobile WebView (React Native Expo app, ?mobile query param, custom User-Agent, or session flag)
+$is_mobile_webview = (
+    isset($_GET['mobile']) ||
+    !empty($_SESSION['is_mobile_app']) ||
+    (!empty($_SERVER['HTTP_USER_AGENT']) && (
+        stripos($_SERVER['HTTP_USER_AGENT'], 'FoodDashMobile') !== false ||
+        stripos($_SERVER['HTTP_USER_AGENT'], 'ReactNativeWebView') !== false ||
+        stripos($_SERVER['HTTP_USER_AGENT'], 'Expo') !== false
+    )) ||
+    (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && stripos($_SERVER['HTTP_X_REQUESTED_WITH'], 'fooddash') !== false) ||
+    !empty($_SERVER['HTTP_X_FOOD_DASH_MOBILE'])
+);
+
+if (isset($_GET['mobile']) || $is_mobile_webview) {
+    $_SESSION['is_mobile_app'] = true;
+}
+
+
 // Helper: Clean API response and exit
 function api_response($data, $status = 200) {
     if (ob_get_level()) ob_end_clean();
@@ -634,17 +652,21 @@ button, input { font: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
 
 /* Ensure all interactive buttons and touch targets are responsive and clickable */
-button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .hero button, .icon-btn {
+button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .hero button, .icon-btn, [onclick] {
   pointer-events: auto !important;
+  cursor: pointer !important;
+  touch-action: manipulation !important;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
 /* Guarantee inactive modals, Gmail backdrops, and hidden floating elements never block clicks */
+.sim-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
 .sim-modal[style*="display:none"],
 .sim-modal[style*="display: none"],
-.fd-modal:not(.show):not([style*="display: flex"]),
-.logout-modal:not(.show):not([style*="display: flex"]),
+.fd-modal:not(.show):not([style*="display: flex"]):not([style*="display:flex"]),
+.logout-modal:not(.show):not([style*="display: flex"]):not([style*="display:flex"]),
+.incoming-call-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
 .incoming-call-modal[style*="display:none"],
 .incoming-call-modal[style*="display: none"],
 .customer-floating-banner:not(.show),
@@ -1473,28 +1495,22 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
 }
 
 /* Floating Gmail Inbox Widget - floats cleanly right above fixed navbar at bottom right */
+/* Zero absolute positioning or touch-blocking layers: Gmail is accessed via top header row icon */
 .gmail-widget, #gmailInboxWidget, .fd-gmail-floating-btn, #fdGmailFloatingBtn {
-  position: fixed !important;
-  bottom: calc(75px + env(safe-area-inset-bottom, 10px)) !important;
-  right: 16px !important;
-  z-index: 10000 !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  background: #ffffff !important;
-  color: #202124 !important;
-  padding: 10px 16px !important;
-  border-radius: 28px !important;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.08) !important;
-  cursor: pointer !important;
-  border: 1px solid #dadce0 !important;
-  font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-  font-size: 13px !important;
-  font-weight: 600 !important;
-  pointer-events: auto !important;
-  touch-action: manipulation !important;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  user-select: none !important;
+  display: none !important;
+  pointer-events: none !important;
+  position: static !important;
+  width: 0 !important;
+  height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  z-index: -1 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
 .gmail-widget:hover, #gmailInboxWidget:hover, .fd-gmail-floating-btn:hover, #fdGmailFloatingBtn:hover {
   box-shadow: 0 8px 24px rgba(234,67,53,0.25), 0 2px 6px rgba(0,0,0,0.12) !important;
@@ -1960,11 +1976,19 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
   background: rgba(15, 23, 42, 0.78);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  display: flex;
+  display: none;
+  pointer-events: none;
   align-items: center;
   justify-content: center;
   padding: 16px;
   animation: fadeIn 0.25s ease-out;
+}
+.incoming-call-modal.show,
+.incoming-call-modal.active,
+.incoming-call-modal[style*="display: flex"],
+.incoming-call-modal[style*="display:flex"] {
+  display: flex !important;
+  pointer-events: auto !important;
 }
 .incoming-call-card {
   position: relative;
@@ -2493,10 +2517,18 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
   background: rgba(0,0,0,0.65);
   backdrop-filter: blur(8px);
   z-index: 999999;
-  display: flex;
+  display: none;
+  pointer-events: none;
   align-items: flex-end;
   justify-content: center;
   box-sizing: border-box;
+}
+.sim-modal.show,
+.sim-modal.active,
+.sim-modal[style*="display: flex"],
+.sim-modal[style*="display:flex"] {
+  display: flex !important;
+  pointer-events: auto !important;
 }
 .sim-sheet {
   width: 100%;
@@ -2619,7 +2651,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
 }
 </style>
 </head>
-<body>
+<body class="<?php echo !empty($is_mobile_webview) ? 'is-mobile-webview' : ''; ?>">
 <div class="app">
 
 <header class="top">
@@ -2670,10 +2702,10 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
 
   <div class="section-title"><h3>Popular Near You</h3><a onclick="showScreen('stores')">See All</a></div>
   <div class="grid">
-    <div class="food-card"><div class="food-img">🍔</div><div class="food-body"><strong>Big Mac</strong><small>McDonalds</small><div class="price-row"><span class="price">₱179.00</span><button class="add" onclick="addCart('Big Mac',179,'🍔','McDonalds')">+</button></div></div></div>
-    <div class="food-card"><div class="food-img">🍗</div><div class="food-body"><strong>Chickenjoy</strong><small>Jollibee</small><div class="price-row"><span class="price">₱129.00</span><button class="add" onclick="addCart('Chickenjoy',129,'🍗','Jollibee')">+</button></div></div></div>
-    <div class="food-card"><div class="food-img">🍚</div><div class="food-body"><strong>Chicken Inasal</strong><small>Mang Inasal</small><div class="price-row"><span class="price">₱189.00</span><button class="add" onclick="addCart('Chicken Inasal',189,'🍚','Mang Inasal')">+</button></div></div></div>
-    <div class="food-card"><div class="food-img">🍕</div><div class="food-body"><strong>Managers Choice Pizza</strong><small>Shakeys</small><div class="price-row"><span class="price">₱499.00</span><button class="add" onclick="addCart('Managers Choice Pizza',499,'🍕','Shakeys')">+</button></div></div></div>
+    <div class="food-card" onclick="openItem('Big Mac',179,'🍔','','McDonalds')"><div class="food-img">🍔</div><div class="food-body"><strong>Big Mac</strong><small>McDonalds</small><div class="price-row"><span class="price">₱179.00</span><button class="add" onclick="event.stopPropagation();addCart('Big Mac',179,'🍔','McDonalds')">+</button></div></div></div>
+    <div class="food-card" onclick="openItem('Chickenjoy',129,'🍗','','Jollibee')"><div class="food-img">🍗</div><div class="food-body"><strong>Chickenjoy</strong><small>Jollibee</small><div class="price-row"><span class="price">₱129.00</span><button class="add" onclick="event.stopPropagation();addCart('Chickenjoy',129,'🍗','Jollibee')">+</button></div></div></div>
+    <div class="food-card" onclick="openItem('Chicken Inasal',189,'🍚','','Mang Inasal')"><div class="food-img">🍚</div><div class="food-body"><strong>Chicken Inasal</strong><small>Mang Inasal</small><div class="price-row"><span class="price">₱189.00</span><button class="add" onclick="event.stopPropagation();addCart('Chicken Inasal',189,'🍚','Mang Inasal')">+</button></div></div></div>
+    <div class="food-card" onclick="openItem('Managers Choice Pizza',499,'🍕','','Shakeys')"><div class="food-img">🍕</div><div class="food-body"><strong>Managers Choice Pizza</strong><small>Shakeys</small><div class="price-row"><span class="price">₱499.00</span><button class="add" onclick="event.stopPropagation();addCart('Managers Choice Pizza',499,'🍕','Shakeys')">+</button></div></div></div>
   </div>
 </section>
 

@@ -15,7 +15,7 @@ if (isset($_SESSION['user']['email'])) {
 }
 ?>
 <!-- FLOATING GMAIL INBOX BUTTON -->
-<div id="fdGmailFloatingBtn" class="fd-gmail-floating-btn" onclick="openGmailModal()" title="Open Simulated Gmail Webmail Inbox">
+<div id="fdGmailFloatingBtn" class="fd-gmail-floating-btn" style="display:none !important; pointer-events:none !important;" onclick="openGmailModal()" title="Open Simulated Gmail Webmail Inbox">
   <div class="fd-gmail-btn-icon">
     <!-- Gmail Red Envelope SVG -->
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -164,27 +164,23 @@ if (isset($_SESSION['user']['email'])) {
 <!-- GMAIL SIMULATOR STYLES -->
 <style>
   /* FLOATING TRIGGER BUTTON */
-  .fd-gmail-floating-btn, .gmail-widget, #gmailInboxWidget, #fdGmailFloatingBtn {
-    position: fixed !important;
-    bottom: calc(75px + env(safe-area-inset-bottom, 10px)) !important;
-    right: 16px !important;
-    z-index: 10000 !important;
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    background: #ffffff;
-    color: #202124;
-    padding: 10px 16px;
-    border-radius: 28px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.08);
-    cursor: pointer;
-    border: 1px solid #dadce0;
-    font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    user-select: none;
-  }
+  /* Zero absolute positioning or touch-blocking layers: Gmail is accessed via top header row icon */
+.gmail-widget, #gmailInboxWidget, .fd-gmail-floating-btn, #fdGmailFloatingBtn {
+  display: none !important;
+  pointer-events: none !important;
+  position: static !important;
+  width: 0 !important;
+  height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  z-index: -1 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
   /* Header Relocated Overrides */
   .top-icons #fdGmailFloatingBtn,
   .top-icons .fd-gmail-floating-btn,
@@ -671,13 +667,23 @@ if (isset($_SESSION['user']['email'])) {
     line-height: 1.5;
   }
   @media (max-width: 768px) {
-    .fd-gmail-floating-btn, .gmail-widget, #gmailInboxWidget, #fdGmailFloatingBtn {
-      bottom: calc(75px + env(safe-area-inset-bottom, 10px)) !important;
-      right: 16px !important;
-      z-index: 10000 !important;
-      padding: 8px 12px;
-      font-size: 12px;
-    }
+    /* Zero absolute positioning or touch-blocking layers: Gmail is accessed via top header row icon */
+.gmail-widget, #gmailInboxWidget, .fd-gmail-floating-btn, #fdGmailFloatingBtn {
+  display: none !important;
+  pointer-events: none !important;
+  position: static !important;
+  width: 0 !important;
+  height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  z-index: -1 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
     .fd-gm-mini-sidebar { display: none; }
     .fd-gm-col-sender { width: 110px; }
     .fd-gmail-modal-window { height: 95vh; max-height: none; border-radius: 12px; }
