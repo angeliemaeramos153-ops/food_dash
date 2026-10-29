@@ -14,6 +14,7 @@ if (isset($_SESSION['user']['email'])) {
     $current_sim_email = 'customer@gmail.com';
 }
 ?>
+<?php if (empty($fd_gmail_btn_in_header)): ?>
 <!-- FLOATING GMAIL INBOX BUTTON -->
 <div id="fdGmailFloatingBtn" class="fd-gmail-floating-btn" onclick="openGmailModal()" title="Open Simulated Gmail Webmail Inbox">
   <div class="fd-gmail-btn-icon">
@@ -26,6 +27,7 @@ if (isset($_SESSION['user']['email'])) {
   </div>
   <span class="fd-gmail-btn-label">Gmail Inbox</span>
 </div>
+<?php endif; ?>
 
 <!-- GMAIL SIMULATOR MODAL BACKDROP -->
 <div id="fdGmailModal" class="fd-gmail-modal-backdrop" onclick="handleGmailBackdropClick(event)">
@@ -184,6 +186,65 @@ if (isset($_SESSION['user']['email'])) {
     font-weight: 600;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: none;
+  }
+  /* Header Relocated Overrides */
+  .top-icons #fdGmailFloatingBtn,
+  .top-icons .fd-gmail-floating-btn,
+  .fd-gmail-header-btn,
+  #fdGmailFloatingBtn.fd-gmail-header-btn {
+    position: static !important;
+    inset: auto !important;
+    bottom: auto !important;
+    right: auto !important;
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 50% !important;
+    background: #ffffff !important;
+    border: 1px solid var(--line, #dadce0) !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+    display: grid !important;
+    place-items: center !important;
+    cursor: pointer !important;
+    z-index: 2 !important;
+    pointer-events: auto !important;
+    touch-action: manipulation !important;
+    transform: none !important;
+  }
+  .top-icons #fdGmailFloatingBtn:hover,
+  .top-icons .fd-gmail-floating-btn:hover,
+  .fd-gmail-header-btn:hover {
+    transform: scale(1.06) !important;
+    border-color: #ea4335 !important;
+    box-shadow: 0 2px 8px rgba(234,67,53,0.2) !important;
+  }
+  .top-icons #fdGmailFloatingBtn .fd-gmail-btn-label,
+  .top-icons .fd-gmail-floating-btn .fd-gmail-btn-label,
+  .fd-gmail-header-btn .fd-gmail-btn-label {
+    display: none !important;
+  }
+  .top-icons #fdGmailFloatingBtn .fd-gmail-btn-icon,
+  .top-icons .fd-gmail-floating-btn .fd-gmail-btn-icon,
+  .fd-gmail-header-btn .fd-gmail-btn-icon {
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  .top-icons #fdGmailFloatingBtn .fd-gmail-badge,
+  .top-icons .fd-gmail-floating-btn .fd-gmail-badge,
+  .fd-gmail-header-btn .fd-gmail-badge {
+    position: absolute !important;
+    top: -6px !important;
+    right: -8px !important;
+    min-width: 15px !important;
+    height: 15px !important;
+    font-size: 8.5px !important;
+    font-weight: 800 !important;
+    padding: 0 3px !important;
+    line-height: 13px !important;
   }
   .fd-gmail-floating-btn:hover {
     box-shadow: 0 8px 24px rgba(234,67,53,0.25), 0 2px 6px rgba(0,0,0,0.12);
