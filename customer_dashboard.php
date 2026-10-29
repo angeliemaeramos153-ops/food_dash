@@ -77,9 +77,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($shop_id > 0) {
             $stmt = $conn->prepare("SELECT DISTINCT category FROM menu_items WHERE shop_id = ? AND is_available = TRUE AND category IS NOT NULL AND TRIM(category) != '' ORDER BY category ASC");
             $stmt->execute([$shop_id]);
+        } elseif ($shop_name !== '') {
+            $stmt = $conn->prepare("SELECT DISTINCT m.category FROM menu_items m JOIN shops s ON m.shop_id = s.shop_id WHERE (LOWER(s.shop_name) = LOWER(?) OR s.shop_name LIKE CONCAT('%', ?, '%')) AND m.is_available = TRUE AND m.category IS NOT NULL AND TRIM(m.category) != '' ORDER BY m.category ASC");
+            $stmt->execute([$shop_name, $shop_name]);
         } else {
-            $stmt = $conn->prepare("SELECT DISTINCT m.category FROM menu_items m JOIN shops s ON m.shop_id = s.shop_id WHERE s.shop_name = ? AND m.is_available = TRUE AND m.category IS NOT NULL AND TRIM(m.category) != '' ORDER BY m.category ASC");
-            $stmt->execute([$shop_name]);
+            $stmt = $conn->prepare("SELECT DISTINCT category FROM menu_items WHERE is_available = TRUE AND category IS NOT NULL AND TRIM(category) != '' ORDER BY category ASC");
+            $stmt->execute();
         }
         
         if ($stmt) {
@@ -88,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         
-        api_response(['success' => true, 'store' => $shop_name, 'categories' => $categories]);
+        api_response(['success' => true, 'status' => 'success', 'store' => $shop_name, 'categories' => $categories]);
     }
 
     // Dynamically fetch dishes for the active store from the database
@@ -96,28 +99,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $shop_name = trim((string)($input['shop_name'] ?? ''));
         $shop_id = (int)($input['shop_id'] ?? 0);
         $items = [];
-        $stmt = $conn->prepare("
-            SELECT m.item_id, m.shop_id, s.shop_name, m.item_name, m.category, m.price, m.description, m.icon, m.is_recommended 
-            FROM menu_items m 
-            JOIN shops s ON m.shop_id = s.shop_id 
-            WHERE (s.shop_name = ? OR m.shop_id = ?) AND m.is_available = TRUE 
-            ORDER BY m.is_recommended DESC, m.item_name ASC
-        ");
+        
+        if ($shop_id > 0) {
+            $stmt = $conn->prepare("
+                SELECT m.item_id, m.shop_id, s.shop_name, m.item_name, m.category, m.price, m.description, m.icon, m.image_url, m.is_recommended 
+                FROM menu_items m 
+                JOIN shops s ON m.shop_id = s.shop_id 
+                WHERE m.shop_id = ? AND m.is_available = TRUE 
+                ORDER BY m.is_recommended DESC, m.item_name ASC
+            ");
+            $stmt->execute([$shop_id]);
+        } elseif ($shop_name !== '') {
+            $stmt = $conn->prepare("
+                SELECT m.item_id, m.shop_id, s.shop_name, m.item_name, m.category, m.price, m.description, m.icon, m.image_url, m.is_recommended 
+                FROM menu_items m 
+                JOIN shops s ON m.shop_id = s.shop_id 
+                WHERE (LOWER(s.shop_name) = LOWER(?) OR s.shop_name LIKE CONCAT('%', ?, '%')) AND m.is_available = TRUE 
+                ORDER BY m.is_recommended DESC, m.item_name ASC
+            ");
+            $stmt->execute([$shop_name, $shop_name]);
+        } else {
+            $stmt = $conn->prepare("
+                SELECT m.item_id, m.shop_id, s.shop_name, m.item_name, m.category, m.price, m.description, m.icon, m.image_url, m.is_recommended 
+                FROM menu_items m 
+                JOIN shops s ON m.shop_id = s.shop_id 
+                WHERE m.is_available = TRUE 
+                ORDER BY m.is_recommended DESC, m.item_name ASC
+            ");
+            $stmt->execute();
+        }
+        
         if ($stmt) {
-            $stmt->execute([$shop_name, $shop_id]);
             while ($m_row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $items[] = [
                     'id'          => (int)$m_row['item_id'],
+                    'item_id'     => (int)$m_row['item_id'],
+                    'shop_id'     => (int)$m_row['shop_id'],
+                    'store'       => $m_row['shop_name'],
+                    'shop_name'   => $m_row['shop_name'],
                     'name'        => $m_row['item_name'],
                     'price'       => (float)$m_row['price'],
                     'icon'        => !empty($m_row['icon']) ? $m_row['icon'] : '🍽️',
-                    'desc'        => !empty($m_row['description']) ? $m_row['description'] : '',
+                    'desc'        => !empty($m_row['description']) ? $m_row['description'] : 'Fresh and delicious meal prepared to order.',
+                    'description' => !empty($m_row['description']) ? $m_row['description'] : 'Fresh and delicious meal prepared to order.',
                     'category'    => !empty($m_row['category']) ? $m_row['category'] : 'Main',
+                    'image_url'   => $m_row['image_url'] ?? null,
                     'recommended' => (!empty($m_row['is_recommended']) && $m_row['is_recommended'] !== 'f' && $m_row['is_recommended'] !== false) ? 1 : 0
                 ];
             }
         }
-        api_response(['success' => true, 'items' => $items]);
+        api_response(['success' => true, 'status' => 'success', 'items' => $items, 'data' => $items]);
     }
     
     // Customer confirms receipt of delivery -> status 'DELIVERED'
@@ -515,17 +546,16 @@ if ($shops_res) {
     }
 }
 
-// Dynamically fetch unique categories and dishes for each store from the database
-// Dynamically fetch recommended dishes from database
+// Dynamically fetch recommended dishes from database (falling back to top available items)
 $popular_dishes = [];
 try {
     $p_stmt = $conn->query("
-        SELECT m.item_id, m.shop_id, s.shop_name, m.item_name, m.price, m.icon, m.description 
+        SELECT m.item_id, m.shop_id, s.shop_name, m.item_name, m.price, m.icon, m.description, m.category 
         FROM menu_items m 
         INNER JOIN shops s ON m.shop_id = s.shop_id 
         WHERE m.is_available = TRUE 
         ORDER BY m.is_recommended DESC, m.item_id ASC 
-        LIMIT 6
+        LIMIT 8
     ");
     if ($p_stmt) {
         $popular_dishes = $p_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -533,38 +563,63 @@ try {
 } catch (Throwable $e) {
     $popular_dishes = [];
 }
+
+// Dynamically fetch unique categories and dishes for each store from the database
 $db_store_menus = [];
 $db_store_categories = [];
-$menu_items_res = $conn->query("
-    SELECT m.item_id, m.shop_id, s.shop_name, m.item_name, m.category, m.price, m.description, m.icon, m.is_recommended, m.is_available 
-    FROM menu_items m 
-    INNER JOIN shops s ON m.shop_id = s.shop_id 
-    WHERE m.is_available = TRUE 
-    ORDER BY m.shop_id ASC, m.is_recommended DESC, m.item_name ASC
-");
-if ($menu_items_res) {
-    while ($mi = $menu_items_res->fetch(PDO::FETCH_ASSOC)) {
-        $sname = trim($mi['shop_name']);
-        if (!isset($db_store_menus[$sname])) {
-            $db_store_menus[$sname] = [];
-            $db_store_categories[$sname] = [];
+$unique_shop_categories = [];
+if (!empty($db_shops)) {
+    foreach ($db_shops as $sh) {
+        $sc = trim($sh['category'] ?? '');
+        if ($sc !== '' && !in_array($sc, $unique_shop_categories, true)) {
+            $unique_shop_categories[] = $sc;
         }
-        $cat = trim($mi['category'] ?? 'Main');
-        if ($cat === '') $cat = 'Main';
-        if (!in_array($cat, $db_store_categories[$sname], true)) {
-            $db_store_categories[$sname][] = $cat;
-        }
-        $db_store_menus[$sname][] = [
-            'id'          => (int)$mi['item_id'],
-            'name'        => $mi['item_name'],
-            'price'       => (float)$mi['price'],
-            'icon'        => !empty($mi['icon']) ? $mi['icon'] : '🍽️',
-            'desc'        => !empty($mi['description']) ? $mi['description'] : 'Fresh and delicious meal prepared to order.',
-            'category'    => $cat,
-            'recommended' => (!empty($mi['is_recommended']) && $mi['is_recommended'] !== 'f' && $mi['is_recommended'] !== false) ? 1 : 0
-        ];
     }
 }
+
+try {
+    $menu_items_res = $conn->query("
+        SELECT m.item_id, m.shop_id, s.shop_name, m.item_name, m.category, m.price, m.description, m.icon, m.is_recommended, m.is_available 
+        FROM menu_items m 
+        INNER JOIN shops s ON m.shop_id = s.shop_id 
+        WHERE m.is_available = TRUE 
+        ORDER BY m.shop_id ASC, m.is_recommended DESC, m.item_name ASC
+    ");
+    if ($menu_items_res) {
+        while ($mi = $menu_items_res->fetch(PDO::FETCH_ASSOC)) {
+            $sname = trim($mi['shop_name']);
+            $sid = (string)$mi['shop_id'];
+            $snorm = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $sname));
+            $cat = trim($mi['category'] ?? 'Main');
+            if ($cat === '') $cat = 'Main';
+
+            $dish = [
+                'id'          => (int)$mi['item_id'],
+                'item_id'     => (int)$mi['item_id'],
+                'shop_id'     => (int)$mi['shop_id'],
+                'store'       => $sname,
+                'name'        => $mi['item_name'],
+                'price'       => (float)$mi['price'],
+                'icon'        => !empty($mi['icon']) ? $mi['icon'] : '🍽️',
+                'desc'        => !empty($mi['description']) ? $mi['description'] : 'Fresh and delicious meal prepared to order.',
+                'description' => !empty($mi['description']) ? $mi['description'] : 'Fresh and delicious meal prepared to order.',
+                'category'    => $cat,
+                'recommended' => (!empty($mi['is_recommended']) && $mi['is_recommended'] !== 'f' && $mi['is_recommended'] !== false) ? 1 : 0
+            ];
+
+            foreach (array_unique([$sname, $sid, $snorm]) as $lookupKey) {
+                if (!isset($db_store_menus[$lookupKey])) {
+                    $db_store_menus[$lookupKey] = [];
+                    $db_store_categories[$lookupKey] = [];
+                }
+                if (!in_array($cat, $db_store_categories[$lookupKey], true)) {
+                    $db_store_categories[$lookupKey][] = $cat;
+                }
+                $db_store_menus[$lookupKey][] = $dish;
+            }
+        }
+    }
+} catch (Throwable $e) {}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -2760,7 +2815,7 @@ a:active,
         $p_name = $ps['shop_name'];
         $p_cat = $ps['category'] ?? 'Restaurant';
     ?>
-    <div class="store" onclick="openStore('<?php echo htmlspecialchars(addslashes($p_name)); ?>', '<?php echo htmlspecialchars(addslashes($p_logo)); ?>')">
+    <div class="store" onclick="openStore('<?php echo htmlspecialchars(addslashes($p_name)); ?>', '<?php echo htmlspecialchars(addslashes($p_logo)); ?>', <?php echo (int)($ps['shop_id'] ?? 0); ?>)">
       <div class="store-logo">
         <img src="<?php echo htmlspecialchars($p_logo); ?>" alt="<?php echo htmlspecialchars($p_name); ?>" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='assets/shops/default_store.png';}else{this.onerror=null;this.src='logo.jpg';}">
       </div>
@@ -2771,11 +2826,30 @@ a:active,
   </div>
 
   <div class="section-title"><h3>Popular Near You</h3><a onclick="showScreen('stores')">See All</a></div>
-  <div class="grid">
-    <div class="food-card" onclick="openItem('Big Mac',179,'🍔','','McDonalds')"><div class="food-img">🍔</div><div class="food-body"><strong>Big Mac</strong><small>McDonalds</small><div class="price-row"><span class="price">₱179.00</span><button class="add" onclick="event.stopPropagation();addCart('Big Mac',179,'🍔','McDonalds')">+</button></div></div></div>
-    <div class="food-card" onclick="openItem('Chickenjoy',129,'🍗','','Jollibee')"><div class="food-img">🍗</div><div class="food-body"><strong>Chickenjoy</strong><small>Jollibee</small><div class="price-row"><span class="price">₱129.00</span><button class="add" onclick="event.stopPropagation();addCart('Chickenjoy',129,'🍗','Jollibee')">+</button></div></div></div>
-    <div class="food-card" onclick="openItem('Chicken Inasal',189,'🍚','','Mang Inasal')"><div class="food-img">🍚</div><div class="food-body"><strong>Chicken Inasal</strong><small>Mang Inasal</small><div class="price-row"><span class="price">₱189.00</span><button class="add" onclick="event.stopPropagation();addCart('Chicken Inasal',189,'🍚','Mang Inasal')">+</button></div></div></div>
-    <div class="food-card" onclick="openItem('Managers Choice Pizza',499,'🍕','','Shakeys')"><div class="food-img">🍕</div><div class="food-body"><strong>Managers Choice Pizza</strong><small>Shakeys</small><div class="price-row"><span class="price">₱499.00</span><button class="add" onclick="event.stopPropagation();addCart('Managers Choice Pizza',499,'🍕','Shakeys')">+</button></div></div></div>
+  <div class="grid" id="popularNearYouGrid">
+    <?php
+    $disp_popular = !empty($popular_dishes) ? $popular_dishes : [];
+    if (empty($disp_popular)): ?>
+      <div style="color:var(--muted); font-size:12px; padding:12px 6px;">No popular dishes currently available.</div>
+    <?php else: foreach ($disp_popular as $pd): 
+        $pd_name = $pd['item_name'];
+        $pd_price = (float)$pd['price'];
+        $pd_icon = !empty($pd['icon']) ? $pd['icon'] : '🍽️';
+        $pd_desc = !empty($pd['description']) ? $pd['description'] : 'Fresh and delicious meal prepared to order.';
+        $pd_store = !empty($pd['shop_name']) ? $pd['shop_name'] : 'FoodDash Grill';
+    ?>
+    <div class="food-card" data-category="Popular" onclick="openItem('<?php echo htmlspecialchars(addslashes($pd_name)); ?>',<?php echo $pd_price; ?>,'<?php echo htmlspecialchars(addslashes($pd_icon)); ?>','<?php echo htmlspecialchars(addslashes($pd_desc)); ?>','<?php echo htmlspecialchars(addslashes($pd_store)); ?>')">
+      <div class="food-img"><?php echo htmlspecialchars($pd_icon); ?></div>
+      <div class="food-body">
+        <strong><?php echo htmlspecialchars($pd_name); ?></strong>
+        <small><?php echo htmlspecialchars($pd_store); ?></small>
+        <div class="price-row">
+          <span class="price">₱<?php echo number_format($pd_price, 2); ?></span>
+          <button class="add" type="button" data-name="<?php echo htmlspecialchars($pd_name); ?>" data-price="<?php echo $pd_price; ?>" data-icon="<?php echo htmlspecialchars($pd_icon); ?>" data-store="<?php echo htmlspecialchars($pd_store); ?>" onclick="if(window.event)window.event.stopPropagation();addCart('<?php echo htmlspecialchars(addslashes($pd_name)); ?>',<?php echo $pd_price; ?>,'<?php echo htmlspecialchars(addslashes($pd_icon)); ?>','<?php echo htmlspecialchars(addslashes($pd_store)); ?>')">+</button>
+        </div>
+      </div>
+    </div>
+    <?php endforeach; endif; ?>
   </div>
 </section>
 
@@ -2783,12 +2857,16 @@ a:active,
   <div class="section-title"><h3>All Partner Stores</h3><i class="fa-regular fa-clock"></i></div>
   <div class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="storeSearch" oninput="filterStores()" placeholder="Search for a store..."></div>
   <div class="chips" id="storeCategoryChips">
-    <button class="chip active" onclick="filterStoreCategory('all', this)">All</button>
-    <button class="chip" onclick="filterStoreCategory('Grill', this)">Grill & BBQ</button>
-    <button class="chip" onclick="filterStoreCategory('Fast Food', this)">Fast Food</button>
-    <button class="chip" onclick="filterStoreCategory('Chicken', this)">Chicken</button>
-    <button class="chip" onclick="filterStoreCategory('Pizza', this)">Pizza</button>
-    <button class="chip" onclick="filterStoreCategory('Chinese', this)">Chinese</button>
+    <button class="chip active" data-category="all" onclick="filterStoreCategory('all', this)">All</button>
+    <?php if (!empty($unique_shop_categories)): foreach ($unique_shop_categories as $scat): ?>
+      <button class="chip" data-category="<?php echo htmlspecialchars(strtolower($scat)); ?>" onclick="filterStoreCategory('<?php echo htmlspecialchars(addslashes($scat)); ?>', this)"><?php echo htmlspecialchars($scat); ?></button>
+    <?php endforeach; else: ?>
+      <button class="chip" data-category="grill" onclick="filterStoreCategory('Grill', this)">Grill & BBQ</button>
+      <button class="chip" data-category="fast food" onclick="filterStoreCategory('Fast Food', this)">Fast Food</button>
+      <button class="chip" data-category="chicken" onclick="filterStoreCategory('Chicken', this)">Chicken</button>
+      <button class="chip" data-category="pizza" onclick="filterStoreCategory('Pizza', this)">Pizza</button>
+      <button class="chip" data-category="chinese" onclick="filterStoreCategory('Chinese', this)">Chinese</button>
+    <?php endif; ?>
   </div>
   <div class="list" id="storeList">
     <?php
@@ -2799,8 +2877,9 @@ a:active,
       $sh_logo = !empty($sh['logo_url']) ? $sh['logo_url'] : 'assets/shops/default_store.png';
       $sh_name = $sh['shop_name'];
       $sh_cat = $sh['category'] ?? 'Specialty Food';
+      $sh_id = (int)($sh['shop_id'] ?? 0);
     ?>
-    <div class="row-card" data-name="<?php echo strtolower(htmlspecialchars($sh_name)); ?>" data-category="<?php echo strtolower(htmlspecialchars($sh_cat)); ?>" onclick="openStore('<?php echo htmlspecialchars(addslashes($sh_name)); ?>', '<?php echo htmlspecialchars(addslashes($sh_logo)); ?>')">
+    <div class="row-card" data-name="<?php echo strtolower(htmlspecialchars($sh_name)); ?>" data-category="<?php echo strtolower(htmlspecialchars($sh_cat)); ?>" onclick="openStore('<?php echo htmlspecialchars(addslashes($sh_name)); ?>', '<?php echo htmlspecialchars(addslashes($sh_logo)); ?>', <?php echo $sh_id; ?>)">
       <div class="row-icon">
         <img src="<?php echo htmlspecialchars($sh_logo); ?>" alt="<?php echo htmlspecialchars($sh_name); ?>" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='assets/shops/default_store.png';}else{this.onerror=null;this.src='logo.jpg';}">
       </div>
@@ -2850,11 +2929,19 @@ a:active,
   <div class="section-title"><h3>Popular Searches</h3></div>
   <div class="chips"><button class="chip" onclick="setSearch('big mac')">Big Mac</button><button class="chip" onclick="setSearch('chickenjoy')">Chickenjoy</button><button class="chip" onclick="setSearch('mcspaghetti')">McSpaghetti</button><button class="chip" onclick="setSearch('inasal')">Inasal</button><button class="chip" onclick="setSearch('pizza')">Pizza</button></div>
   <div class="list" id="searchResults">
-    <div class="row-card" onclick="openStore('FoodDash Grill','logo.jpg')"><div class="row-icon"><img src="logo.jpg" alt="FoodDash Grill" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>FoodDash Grill</strong><small>Smoked Ribs • Flame-Grilled BBQ • Angus Burgers</small></div></div>
-    <div class="row-card" onclick="openStore('McDonalds','assets/shops/mcdonalds.png')"><div class="row-icon"><img src="assets/shops/mcdonalds.png" alt="McDonalds" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>McDonalds</strong><small>Big Mac • McSpaghetti • French Fries</small></div></div>
-    <div class="row-card" onclick="openStore('Jollibee','assets/shops/jollibee.png')"><div class="row-icon"><img src="assets/shops/jollibee.png" alt="Jollibee" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>Jollibee</strong><small>Chickenjoy • Jolly Spaghetti • Yumburger</small></div></div>
-    <div class="row-card" onclick="openStore('Mang Inasal','assets/shops/mang_inasal.png')"><div class="row-icon"><img src="assets/shops/mang_inasal.png" alt="Mang Inasal" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>Mang Inasal</strong><small>Chicken Inasal • Pork BBQ • Halo-Halo</small></div></div>
-    <div class="row-card" onclick="openStore('Ribshack','assets/shops/ribshack.png')"><div class="row-icon"><img src="assets/shops/ribshack.png" alt="Ribshack" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>Ribshack</strong><small>Baby Back Ribs • Chicken BBQ • Meals</small></div></div>
+    <?php if (!empty($db_shops)): foreach ($db_shops as $sh): 
+        $sh_logo = !empty($sh['logo_url']) ? $sh['logo_url'] : 'assets/shops/default_store.png';
+        $sh_name = $sh['shop_name'];
+        $sh_cat = $sh['category'] ?? 'Specialty Food';
+        $sh_id = (int)($sh['shop_id'] ?? 0);
+    ?>
+    <div class="row-card" data-name="<?php echo strtolower(htmlspecialchars($sh_name)); ?>" data-category="<?php echo strtolower(htmlspecialchars($sh_cat)); ?>" onclick="openStore('<?php echo htmlspecialchars(addslashes($sh_name)); ?>', '<?php echo htmlspecialchars(addslashes($sh_logo)); ?>', <?php echo $sh_id; ?>)">
+      <div class="row-icon"><img src="<?php echo htmlspecialchars($sh_logo); ?>" alt="<?php echo htmlspecialchars($sh_name); ?>" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='assets/shops/default_store.png';}else{this.onerror=null;this.src='logo.jpg';}"></div>
+      <div class="info"><strong><?php echo htmlspecialchars($sh_name); ?></strong><small><?php echo htmlspecialchars($sh_cat); ?></small></div>
+    </div>
+    <?php endforeach; else: ?>
+    <div class="row-card" onclick="openStore('FoodDash Grill','logo.jpg', 1)"><div class="row-icon"><img src="logo.jpg" alt="FoodDash Grill" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>FoodDash Grill</strong><small>Smoked Ribs • Flame-Grilled BBQ • Angus Burgers</small></div></div>
+    <?php endif; ?>
   </div>
 </section>
 
@@ -3994,32 +4081,13 @@ function safeJs(str) {
   return encodeURIComponent(String(str ?? '')).replace(/'/g, '%27');
 }
 
-function openStore(name, logoUrl){
-  const storeKey = normalizeStoreName(name);
-  document.getElementById('storeTitle').textContent = storeKey;
-  document.getElementById('storeName').textContent = storeKey;
-  
-  const logoSrc = logoUrl || storeLogos[storeKey] || 'assets/shops/default_store.svg';
-  const logoEl = document.getElementById('storeBannerLogo');
-  if (logoEl) {
-    logoEl.src = logoSrc;
-  }
-  
-  document.getElementById('storeDesc').textContent = storeDescriptions[storeKey] || 'Popular favorites delivered to your door fresh and fast.';
-  
-  // Resolve dishes for active store from database (with static fallback)
-  const list = (dbStoreMenus && dbStoreMenus[storeKey] && dbStoreMenus[storeKey].length)
-    ? dbStoreMenus[storeKey]
-    : (menus[storeKey] ? menus[storeKey].map(m => ({
-        name: m[0], price: m[1], icon: m[2], desc: m[3], category: m[4] || 'Main'
-      })) : []);
-      
+function renderStoreDishes(storeKey, list) {
   // Dynamically resolve unique categories for this specific active store
-  let categories = (dbStoreCategories && dbStoreCategories[storeKey] && dbStoreCategories[storeKey].length)
+  let categories = (typeof dbStoreCategories !== 'undefined' && dbStoreCategories && dbStoreCategories[storeKey] && dbStoreCategories[storeKey].length)
     ? [...dbStoreCategories[storeKey]]
-    : Array.from(new Set(list.map(d => d.category || (Array.isArray(d) ? d[4] : '')).filter(Boolean)));
+    : Array.from(new Set((list || []).map(d => d.category || (Array.isArray(d) ? d[4] : '')).filter(Boolean)));
     
-  // Always render "All" (or "Popular") as default active button, followed by unique categories for this shop
+  // Always render "All" as default active button, followed by unique categories for this shop
   const allCategoryPills = ['All', ...categories];
   const chipsContainer = document.getElementById('storeDishCategoryChips');
   if (chipsContainer) {
@@ -4033,33 +4101,87 @@ function openStore(name, logoUrl){
   const emptyState = document.getElementById('storeNoDishes');
   if (emptyState) emptyState.style.display = 'none';
   
-  if (!list.length) {
-    storeItemsContainer.innerHTML = '';
+  if (!list || !list.length) {
+    if (storeItemsContainer) storeItemsContainer.innerHTML = '';
     if (emptyState) emptyState.style.display = 'flex';
   } else {
-    storeItemsContainer.innerHTML = list.map(item => {
-      const isArr = Array.isArray(item);
-      const itemName = isArr ? item[0] : item.name;
-      const itemPrice = isArr ? item[1] : item.price;
-      const itemIcon = isArr ? item[2] : item.icon;
-      const itemDesc = isArr ? item[3] : item.desc;
-      const itemCat = isArr ? (item[4] || 'Main') : (item.category || 'Main');
-      
-      return `<div class="food-card" data-category="${safeAttr(itemCat)}" onclick="openItem('${safeJs(itemName)}',${Number(itemPrice)},'${safeJs(itemIcon)}','${safeJs(itemDesc)}','${safeJs(storeKey)}')">
-        <div class="food-img">${esc(itemIcon)}</div>
-        <div class="food-body">
-          <strong>${esc(itemName)}</strong>
-          <small>${esc(storeKey)}</small>
-          <div class="price-row">
-            <span class="price">${money(itemPrice)}</span>
-            <button class="add" type="button" onclick="event.stopPropagation();addCart(decodeURIComponent('${safeJs(itemName)}'),${Number(itemPrice)},decodeURIComponent('${safeJs(itemIcon)}'),decodeURIComponent('${safeJs(storeKey)}'))">+</button>
+    if (storeItemsContainer) {
+      storeItemsContainer.innerHTML = list.map(item => {
+        const isArr = Array.isArray(item);
+        const itemName = isArr ? item[0] : (item.name || item.item_name);
+        const itemPrice = isArr ? item[1] : item.price;
+        const itemIcon = isArr ? item[2] : (item.icon || '🍽️');
+        const itemDesc = isArr ? item[3] : (item.desc || item.description || '');
+        const itemCat = isArr ? (item[4] || 'Main') : (item.category || 'Main');
+        
+        return `<div class="food-card" data-category="${safeAttr(itemCat)}" onclick="openItem('${safeJs(itemName)}',${Number(itemPrice)},'${safeJs(itemIcon)}','${safeJs(itemDesc)}','${safeJs(storeKey)}')">
+          <div class="food-img">${esc(itemIcon)}</div>
+          <div class="food-body">
+            <strong>${esc(itemName)}</strong>
+            <small>${esc(storeKey)}</small>
+            <div class="price-row">
+              <span class="price">${money(itemPrice)}</span>
+              <button class="add" type="button" data-name="${safeAttr(itemName)}" data-price="${Number(itemPrice)}" data-icon="${safeAttr(itemIcon)}" data-store="${safeAttr(storeKey)}" onclick="if(window.event)window.event.stopPropagation();addCart(decodeURIComponent('${safeJs(itemName)}'),${Number(itemPrice)},decodeURIComponent('${safeJs(itemIcon)}'),decodeURIComponent('${safeJs(storeKey)}'))">+</button>
+            </div>
           </div>
-        </div>
-      </div>`;
-    }).join('');
+        </div>`;
+      }).join('');
+    }
+  }
+}
+
+function openStore(name, logoUrl, shopId){
+  const storeKey = normalizeStoreName(name);
+  document.getElementById('storeTitle').textContent = storeKey;
+  document.getElementById('storeName').textContent = storeKey;
+  
+  const logoSrc = logoUrl || storeLogos[storeKey] || 'assets/shops/default_store.svg';
+  const logoEl = document.getElementById('storeBannerLogo');
+  if (logoEl) {
+    logoEl.src = logoSrc;
   }
   
+  document.getElementById('storeDesc').textContent = storeDescriptions[storeKey] || 'Popular favorites delivered to your door fresh and fast.';
+  
+  // Resolve dishes for active store from database (with static fallback)
+  let list = [];
+  const normKey = (storeKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const rawKey = (name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  if (typeof dbStoreMenus !== 'undefined' && dbStoreMenus) {
+    if (dbStoreMenus[storeKey] && dbStoreMenus[storeKey].length) list = dbStoreMenus[storeKey];
+    else if (name && dbStoreMenus[name] && dbStoreMenus[name].length) list = dbStoreMenus[name];
+    else if (shopId && dbStoreMenus[shopId] && dbStoreMenus[shopId].length) list = dbStoreMenus[shopId];
+    else if (shopId && dbStoreMenus[String(shopId)] && dbStoreMenus[String(shopId)].length) list = dbStoreMenus[String(shopId)];
+    else if (normKey && dbStoreMenus[normKey] && dbStoreMenus[normKey].length) list = dbStoreMenus[normKey];
+    else if (rawKey && dbStoreMenus[rawKey] && dbStoreMenus[rawKey].length) list = dbStoreMenus[rawKey];
+  }
+  if (!list.length && typeof menus !== 'undefined' && menus && menus[storeKey]) {
+    list = menus[storeKey].map(m => ({
+      name: m[0], price: m[1], icon: m[2], desc: m[3], category: m[4] || 'Main'
+    }));
+  }
+  
+  renderStoreDishes(storeKey, list);
   showScreen('store');
+
+  // If menu list was empty, asynchronously query api_menu.php to ensure zero blank states
+  if (!list.length) {
+    const queryParam = shopId ? ('shop_id=' + encodeURIComponent(shopId)) : ('shop_name=' + encodeURIComponent(name || storeKey));
+    fetch('api_menu.php?' + queryParam)
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        var fetchedItems = (res && (res.items || res.data)) ? (res.items || res.data) : [];
+        if (fetchedItems.length) {
+          if (typeof dbStoreMenus !== 'undefined' && dbStoreMenus) {
+            dbStoreMenus[storeKey] = fetchedItems;
+            if (shopId) dbStoreMenus[shopId] = fetchedItems;
+          }
+          renderStoreDishes(storeKey, fetchedItems);
+        }
+      })
+      .catch(function(e) { console.warn('Could not load menu dynamically:', e); });
+  }
 }
 
 function filterStoreDishes(catParam, btn) {
@@ -7636,6 +7758,8 @@ function handlePayAction(e) {
   var touchMoved = false;
   var lastActionTimestamp = 0;
   var lastTriggeredElement = null;
+  var touchJustHandled = false;
+  var touchResetTimer = null;
 
   // Global touchstart: track coordinates & provide instant tactile active state
   document.addEventListener('touchstart', function(e) {
@@ -7710,13 +7834,18 @@ function handlePayAction(e) {
       e.preventDefault();
     }
 
-    // Debounce rapid duplicate taps (320ms threshold)
+    // Debounce rapid duplicate taps (300ms threshold)
     var now = Date.now();
-    if (clickable === lastTriggeredElement && (now - lastActionTimestamp) < 320) {
+    if (clickable === lastTriggeredElement && (now - lastActionTimestamp) < 300) {
       return;
     }
     lastTriggeredElement = clickable;
     lastActionTimestamp = now;
+    touchJustHandled = true;
+    if (touchResetTimer) clearTimeout(touchResetTimer);
+    touchResetTimer = setTimeout(function() {
+      touchJustHandled = false;
+    }, 500);
 
     // Execute the interactive action instantaneously
     dispatchInteractiveEvent(clickable, e);
@@ -7724,6 +7853,10 @@ function handlePayAction(e) {
 
   // Global click: handle desktop clicks and debounce delayed WebView ghost clicks
   document.addEventListener('click', function(e) {
+    if (e.__isSyntheticTouchClick) {
+      return; // Allow programmatic clicks through!
+    }
+
     var target = e.target;
     if (!target) return;
 
@@ -7733,8 +7866,8 @@ function handlePayAction(e) {
     if (!clickable) return;
 
     var now = Date.now();
-    if ((now - lastActionTimestamp) < 400 && (clickable === lastTriggeredElement || clickable.contains(lastTriggeredElement))) {
-      // Prevent double invocation from synthetic click
+    // Only swallow delayed browser ghost click after a touch was handled in the last 450ms
+    if (touchJustHandled && (now - lastActionTimestamp) < 450 && (clickable === lastTriggeredElement || clickable.contains(lastTriggeredElement))) {
       e.preventDefault();
       e.stopPropagation();
       return;
@@ -7746,14 +7879,41 @@ function handlePayAction(e) {
 
   // Centralized action execution engine
   function dispatchInteractiveEvent(el, originalEvent) {
-    // 1. Bottom navigation tabs
-    var screen = el.getAttribute('data-screen');
-    if (screen && typeof window.showScreen === 'function') {
-      window.showScreen(screen);
-      return;
+    // 1. Quick-add buttons (+) on food cards or lists
+    var addBtn = el.classList.contains('add') ? el : el.closest('.add');
+    if (addBtn) {
+      var dName = addBtn.getAttribute('data-name');
+      var dPrice = parseFloat(addBtn.getAttribute('data-price') || '0');
+      var dIcon = addBtn.getAttribute('data-icon') || '🍽️';
+      var dStore = addBtn.getAttribute('data-store') || 'FoodDash Grill';
+      if (dName && typeof window.addCart === 'function') {
+        window.addCart(dName, dPrice, dIcon, dStore);
+        return;
+      }
+      if (typeof addBtn.onclick === 'function') {
+        try { addBtn.onclick.call(addBtn, originalEvent); return; } catch(err) {}
+      }
     }
 
-    // 2. Readonly search bar on home screen
+    // 2. Quantity decrement / increment buttons
+    if (el.classList.contains('btn-qty-minus') || el.classList.contains('btn-qty-plus') || el.closest('.qty')) {
+      var qBtn = el.tagName === 'BUTTON' ? el : el.closest('button');
+      if (qBtn && typeof qBtn.onclick === 'function') {
+        try { qBtn.onclick.call(qBtn, originalEvent); return; } catch(err) {}
+      }
+    }
+
+    // 3. Bottom navigation tabs
+    var navItem = el.getAttribute('data-screen') ? el : el.closest('[data-screen], .nav');
+    if (navItem) {
+      var screen = navItem.getAttribute('data-screen');
+      if (screen && typeof window.showScreen === 'function') {
+        window.showScreen(screen);
+        return;
+      }
+    }
+
+    // 4. Readonly search bar on home screen
     if (el.classList.contains('search') && el.querySelector('input[readonly]')) {
       if (typeof window.showScreen === 'function') {
         window.showScreen('search');
@@ -7761,14 +7921,15 @@ function handlePayAction(e) {
       }
     }
 
-    // 3. Category filters and chip selection
+    // 5. Category filters and chip selection
     if (el.classList.contains('chip') || el.classList.contains('cancel-chip') || el.hasAttribute('data-category')) {
-      if (typeof el.onclick === 'function') {
-        try { el.onclick.call(el, originalEvent); return; } catch(err) {}
+      var chipTarget = el.classList.contains('chip') || el.classList.contains('cancel-chip') ? el : el.closest('.chip, .cancel-chip');
+      if (chipTarget && typeof chipTarget.onclick === 'function') {
+        try { chipTarget.onclick.call(chipTarget, originalEvent); return; } catch(err) {}
       }
     }
 
-    // 4. "Order Now" button in hero banner
+    // 6. "Order Now" button in hero banner
     if (el.tagName === 'BUTTON' && el.closest('.hero')) {
       if (typeof window.showScreen === 'function') {
         window.showScreen('stores');
@@ -7776,13 +7937,24 @@ function handlePayAction(e) {
       }
     }
 
-    // 5. Native click trigger for quick-add buttons (+), cards, modals, and actions
+    // 7. Store cards or row cards
+    var card = el.closest('.store, .row-card, .food-card');
+    if (card && typeof card.onclick === 'function') {
+      try { card.onclick.call(card, originalEvent); return; } catch(err) {}
+    }
+
+    // 8. Explicit inline onclick handler
+    if (typeof el.onclick === 'function') {
+      try { el.onclick.call(el, originalEvent); return; } catch(err) {}
+    }
+
+    // 9. Standard programmatic click with synthetic flag
     try {
-      el.click();
+      var evt = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+      evt.__isSyntheticTouchClick = true;
+      el.dispatchEvent(evt);
     } catch (err) {
-      if (typeof el.onclick === 'function') {
-        el.onclick.call(el, originalEvent);
-      }
+      if (typeof el.click === 'function') el.click();
     }
   }
 
