@@ -189,6 +189,8 @@ if (isset($_SESSION['user']['email'])) {
     pointer-events: auto !important;
   }
   /* Header Relocated Overrides */
+  #fdGmailHeaderBtn,
+  .top-icons #fdGmailHeaderBtn,
   .top-icons #fdGmailFloatingBtn,
   .top-icons .fd-gmail-floating-btn,
   .fd-gmail-header-btn,

@@ -653,12 +653,18 @@ button { cursor: pointer; touch-action: manipulation; }
 
 /* Ensure all interactive buttons and touch targets are responsive and clickable */
 button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .hero button, .icon-btn, [onclick],
-.store *, .food-card *, .row-card *, .banner-store * {
+.store *, .food-card *, .row-card *, .banner-store *, .bottom-nav *, .nav *, nav *,
+#fdGmailHeaderBtn, .fd-gmail-header-btn {
   pointer-events: auto !important;
   cursor: pointer !important;
   touch-action: manipulation !important;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+}
+.icon-btn svg, .icon-btn path, .icon-btn i,
+#fdGmailHeaderBtn svg, #fdGmailHeaderBtn path,
+.nav i, .nav span, .nav b {
+  pointer-events: none !important;
 }
 
 /* Guarantee inactive modals, Gmail backdrops, and hidden floating elements never block clicks */
@@ -1471,6 +1477,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
   grid-template-columns: repeat(5, 1fr) !important;
   border-top: 1px solid var(--line) !important;
   margin: 0 !important;
+  pointer-events: auto !important;
 }
 
 @media (min-width: 600px) {
@@ -2643,7 +2650,7 @@ button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .he
         <i class="fa-regular fa-bell"></i>
         <span id="custNoteBadge" class="bell-badge" style="display:none">0</span>
       </button>
-      <button type="button" id="fdGmailHeaderBtn" class="icon-btn" onclick="openGmailModal()" title="Gmail Inbox" aria-label="Gmail Inbox">
+      <button type="button" id="fdGmailHeaderBtn" class="icon-btn fd-gmail-header-btn" onclick="openGmailModal()" title="Gmail Inbox" aria-label="Gmail Inbox">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
           <path d="M20 4H4C2.9 4 2.01 4.9 2.01 6L2 18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4Z" fill="#EA4335" opacity="0.18"/>
           <path d="M20 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4ZM20 8L12 13L4 8V6L12 11L20 6V8Z" fill="#EA4335"/>
