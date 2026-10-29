@@ -652,7 +652,8 @@ button, input { font: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
 
 /* Ensure all interactive buttons and touch targets are responsive and clickable */
-button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .hero button, .icon-btn, [onclick] {
+button, a, .store, .food-card, .add, .btn-qty-minus, .nav, .chip, .row-card, .hero button, .icon-btn, [onclick],
+.store *, .food-card *, .row-card *, .banner-store * {
   pointer-events: auto !important;
   cursor: pointer !important;
   touch-action: manipulation !important;
