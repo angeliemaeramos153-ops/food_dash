@@ -710,7 +710,7 @@ button, input { font: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
 
 /* Ensure all interactive buttons, store cards, chips, and touch targets are responsive and clickable */
-button, a, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip, .row-card, .hero button, .icon-btn, [onclick], [data-action], [data-screen], [data-category],
+button, a, .card, .add-to-cart-btn, .store, .food-card, .add, .btn-qty-minus, .btn-qty-plus, .nav, .chip, .row-card, .hero button, .icon-btn, [onclick], [data-action], [data-screen], [data-category],
 .banner-store *, .bottom-nav, nav,
 #fdGmailHeaderBtn, .fd-gmail-header-btn,
 .cancel-chip, .btn-fd-primary, .btn-fd-secondary, .btn-arrival-action, .logout-cancel, .logout-confirm {
@@ -7773,7 +7773,7 @@ function handlePayAction(e) {
       var target = document.elementFromPoint(touch.clientX, touch.clientY) || e.target;
       if (target) {
         var clickable = target.closest(
-          'button, a, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
+          'button, a, .card, .add-to-cart-btn, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
         );
         if (clickable && !clickable.disabled) {
           clickable.classList.add('is-touch-active');
@@ -7825,7 +7825,7 @@ function handlePayAction(e) {
 
     // Resolve closest interactive element
     var clickable = target.closest(
-      'button, a, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
+      'button, a, .card, .add-to-cart-btn, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
     );
     if (!clickable || clickable.disabled) return;
 
@@ -7861,7 +7861,7 @@ function handlePayAction(e) {
     if (!target) return;
 
     var clickable = target.closest(
-      'button, a, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
+      'button, a, .card, .add-to-cart-btn, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
     );
     if (!clickable) return;
 
@@ -7880,7 +7880,7 @@ function handlePayAction(e) {
   // Centralized action execution engine
   function dispatchInteractiveEvent(el, originalEvent) {
     // 1. Quick-add buttons (+) on food cards or lists
-    var addBtn = el.classList.contains('add') ? el : el.closest('.add');
+    var addBtn = (el.classList.contains('add') || el.classList.contains('add-to-cart-btn')) ? el : el.closest('.add, .add-to-cart-btn');
     if (addBtn) {
       var dName = addBtn.getAttribute('data-name');
       var dPrice = parseFloat(addBtn.getAttribute('data-price') || '0');
@@ -7938,7 +7938,7 @@ function handlePayAction(e) {
     }
 
     // 7. Store cards or row cards
-    var card = el.closest('.store, .row-card, .food-card');
+    var card = el.closest('.card, .store, .row-card, .food-card');
     if (card && typeof card.onclick === 'function') {
       try { card.onclick.call(card, originalEvent); return; } catch(err) {}
     }
@@ -7962,7 +7962,7 @@ function handlePayAction(e) {
   function ensureTouchReadiness(root) {
     var scope = root || document;
     var elements = scope.querySelectorAll(
-      'button, a, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
+      'button, a, .card, .add-to-cart-btn, .store, .food-card, .row-card, .chip, .cancel-chip, .search, .icon-btn, .nav, .add, .btn-qty-minus, .btn-qty-plus, [onclick], [data-action], [data-screen], [data-category]'
     );
     for (var i = 0; i < elements.length; i++) {
       var item = elements[i];
@@ -7997,6 +7997,131 @@ function handlePayAction(e) {
     });
     observer.observe(document.body, { childList: true, subtree: true });
   }
+})();
+</script>
+
+<!-- Global Event Delegation for Mobile Webviews: All buttons, .card elements, and .add-to-cart-btn elements -->
+<script id="global-event-delegation-script">
+(function() {
+  var DELEGATION_SELECTOR = 'button, .card, .add-to-cart-btn';
+
+  function findDelegatedTarget(node) {
+    if (!node || node === document || node === document.body) return null;
+    return typeof node.closest === 'function' ? node.closest(DELEGATION_SELECTOR) : null;
+  }
+
+  function handleDelegatedAction(target, event) {
+    if (!target || target.disabled || target.getAttribute('disabled')) return;
+
+    // Direct handling for add-to-cart elements
+    var addBtn = target.matches('.add-to-cart-btn, .add') ? target : target.closest('.add-to-cart-btn, .add');
+    if (addBtn) {
+      var name = addBtn.getAttribute('data-name') || (addBtn.dataset && addBtn.dataset.name);
+      var price = parseFloat(addBtn.getAttribute('data-price') || (addBtn.dataset && addBtn.dataset.price) || '0');
+      var icon = addBtn.getAttribute('data-icon') || (addBtn.dataset && addBtn.dataset.icon) || '🍽️';
+      var store = addBtn.getAttribute('data-store') || (addBtn.dataset && addBtn.dataset.store) || 'FoodDash Grill';
+      if (name && typeof window.addCart === 'function') {
+        window.addCart(name, price, icon, store);
+        if (typeof window.toast === 'function') {
+          window.toast('Added to cart');
+        }
+        return;
+      }
+    }
+
+    // Execute inline or assigned onclick handler
+    if (typeof target.onclick === 'function') {
+      try {
+        target.onclick.call(target, event);
+        return;
+      } catch (err) {
+        console.error('Error in target onclick:', err);
+      }
+    }
+
+    // Programmatic click dispatch if not synthetic
+    if (!event.__isSyntheticTouchClick && typeof target.click === 'function') {
+      try {
+        var synClick = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+        synClick.__isSyntheticTouchClick = true;
+        target.dispatchEvent(synClick);
+      } catch (e) {
+        target.click();
+      }
+    }
+  }
+
+  // Mobile Webview Touch Delegation
+  var touchTarget = null;
+  var touchMoved = false;
+  var startX = 0;
+  var startY = 0;
+  var lastHandled = 0;
+
+  document.addEventListener('touchstart', function(e) {
+    if (!e.touches || e.touches.length !== 1) return;
+    touchMoved = false;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    var target = document.elementFromPoint(startX, startY) || e.target;
+    touchTarget = findDelegatedTarget(target);
+  }, { passive: true, capture: true });
+
+  document.addEventListener('touchmove', function(e) {
+    if (!e.touches || e.touches.length !== 1) return;
+    var dx = Math.abs(e.touches[0].clientX - startX);
+    var dy = Math.abs(e.touches[0].clientY - startY);
+    if (dx > 10 || dy > 10) {
+      touchMoved = true;
+      touchTarget = null;
+    }
+  }, { passive: true, capture: true });
+
+  document.addEventListener('touchend', function(e) {
+    if (touchMoved || !touchTarget) {
+      touchTarget = null;
+      return;
+    }
+
+    var el = touchTarget;
+    touchTarget = null;
+
+    var now = Date.now();
+    if (now - lastHandled < 280) return;
+    lastHandled = now;
+
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+
+    handleDelegatedAction(el, e);
+  }, { passive: false, capture: true });
+
+  // Click Delegation Fallback for Webview and Desktop
+  document.addEventListener('click', function(e) {
+    if (e.__isSyntheticTouchClick) return;
+
+    var now = Date.now();
+    if (now - lastHandled < 400) return;
+
+    var target = findDelegatedTarget(e.target);
+    if (!target) return;
+
+    var addBtn = target.matches('.add-to-cart-btn, .add') ? target : target.closest('.add-to-cart-btn, .add');
+    if (addBtn) {
+      var name = addBtn.getAttribute('data-name') || (addBtn.dataset && addBtn.dataset.name);
+      var price = parseFloat(addBtn.getAttribute('data-price') || (addBtn.dataset && addBtn.dataset.price) || '0');
+      var icon = addBtn.getAttribute('data-icon') || (addBtn.dataset && addBtn.dataset.icon) || '🍽️';
+      var store = addBtn.getAttribute('data-store') || (addBtn.dataset && addBtn.dataset.store) || 'FoodDash Grill';
+      if (name && typeof window.addCart === 'function') {
+        e.preventDefault();
+        window.addCart(name, price, icon, store);
+        if (typeof window.toast === 'function') {
+          window.toast('Added to cart');
+        }
+      }
+    }
+  }, { capture: true });
 })();
 </script>
 
