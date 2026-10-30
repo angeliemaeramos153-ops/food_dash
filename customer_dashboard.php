@@ -2630,8 +2630,7 @@ a:active,
 .about-link-row:hover {
   background: #f9fafb;
 }
-</style>
-<style>
+
 .sim-modal {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -4197,7 +4196,7 @@ function filterStoreDishes(catParam, btn) {
   cards.forEach(card => {
     const itemCat = (card.getAttribute('data-category') || card.dataset.category || '').trim().toLowerCase();
     if (selectedCat === 'all' || selectedCat === 'popular' || itemCat === selectedCat) {
-      card.style.display = '';
+      card.style.display = 'block';
       visibleCount++;
     } else {
       card.style.display = 'none';
@@ -7144,10 +7143,6 @@ async function pollCustomerCommunicationUpdates() {
     }
 
     // Automated "Rider Arrived" Live Notification
-    const sNorm = String(data.status || '').toUpperCase().trim();
-    const dNorm = String(data.delivery_status || '').toLowerCase().trim();
-    const sLower = String(data.status || '').toLowerCase().trim();
-
     if (data.is_arrived || dNorm === 'arrived' || sNorm === 'ARRIVED') {
       if (data.arrival_acknowledged) {
         if (window.FoodDashCall) FoodDashCall.stopAllTones();
