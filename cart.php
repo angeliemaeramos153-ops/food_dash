@@ -199,6 +199,18 @@ $grand_total = $subtotal + $delivery_fee;
       align-items: center;
       gap: 10px;
     }
+    .btn-qty-minus, .btn-qty-plus {
+      pointer-events: auto !important;
+      cursor: pointer !important;
+      touch-action: manipulation !important;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: transform 0.08s ease, opacity 0.08s ease;
+    }
+    .btn-qty-minus:active, .btn-qty-plus:active {
+      transform: scale(0.90) !important;
+      opacity: 0.8 !important;
+    }
     .item-icon {
       font-size: 24px;
       background: var(--sandstone-light);
@@ -543,16 +555,26 @@ $grand_total = $subtotal + $delivery_fee;
       </div>
       <div id="orderSummaryItems">
         <?php if (!empty($cart_items)): ?>
-          <?php foreach ($cart_items as $ci): ?>
-            <div class="order-item-row">
+          <?php foreach ($cart_items as $cIdx => $ci): 
+            $cQty = max(1, (int)($ci['qty'] ?? 1));
+            $cPrice = (float)($ci['price'] ?? 0);
+          ?>
+            <div class="order-item-row" data-index="<?= $cIdx ?>">
               <div class="order-item-desc">
                 <div class="item-icon"><?= htmlspecialchars($ci['icon'] ?? '🍱') ?></div>
                 <div>
                   <strong style="display:block; font-size:13px;"><?= htmlspecialchars($ci['name'] ?? 'Meal') ?></strong>
-                  <small style="color:#6b7280;"><?= htmlspecialchars($ci['store'] ?? 'Food Dash') ?> • <?= (int)($ci['qty'] ?? 1) ?>x</small>
+                  <div style="display:flex; align-items:center; gap:8px; margin-top:3px;">
+                    <small style="color:#6b7280;"><?= htmlspecialchars($ci['store'] ?? 'Food Dash') ?></small>
+                    <div class="qty" style="display:inline-flex; align-items:center; gap:5px; background:#f3f4f6; padding:2px 6px; border-radius:12px;">
+                      <button type="button" class="btn-qty-minus" onclick="updateCartItemQty(<?= $cIdx ?>, -1, event)" aria-label="Decrease quantity" style="width:20px; height:20px; border-radius:50%; border:1px solid #d1d5db; background:#fff; cursor:pointer; font-size:11px; display:inline-flex; align-items:center; justify-content:center; line-height:1; padding:0; touch-action:manipulation;">−</button>
+                      <span style="font-weight:700; font-size:11px; min-width:14px; text-align:center;"><?= $cQty ?></span>
+                      <button type="button" class="btn-qty-plus" onclick="updateCartItemQty(<?= $cIdx ?>, 1, event)" aria-label="Increase quantity" style="width:20px; height:20px; border-radius:50%; border:1px solid #d1d5db; background:#fff; cursor:pointer; font-size:11px; display:inline-flex; align-items:center; justify-content:center; line-height:1; padding:0; touch-action:manipulation;">+</button>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <span style="font-weight:700; font-size:14px;">₱<?= number_format(((float)($ci['price'] ?? 0)) * max(1, (int)($ci['qty'] ?? 1)), 2) ?></span>
+              <span style="font-weight:700; font-size:14px;">₱<?= number_format($cPrice * $cQty, 2) ?></span>
             </div>
           <?php endforeach; ?>
         <?php else: ?>
@@ -846,12 +868,19 @@ function syncCartFromLocalStorage() {
                     var icon = item.icon || '🍱';
                     var name = item.name || item.title || 'Meal Item';
                     var store = item.store || 'Food Dash Grill';
-                    html += '<div class="order-item-row">' +
+                    html += '<div class="order-item-row" data-index="' + idx + '">' +
                         '<div class="order-item-desc">' +
                         '<div class="item-icon">' + icon + '</div>' +
                         '<div>' +
                         '<strong style="display:block; font-size:13px;">' + name + '</strong>' +
-                        '<small style="color:#6b7280;">' + store + ' • ' + qty + 'x</small>' +
+                        '<div style="display:flex; align-items:center; gap:8px; margin-top:3px;">' +
+                        '<small style="color:#6b7280;">' + store + '</small>' +
+                        '<div class="qty" style="display:inline-flex; align-items:center; gap:5px; background:#f3f4f6; padding:2px 6px; border-radius:12px;">' +
+                        '<button type="button" class="btn-qty-minus" onclick="updateCartItemQty(' + idx + ', -1, event)" aria-label="Decrease quantity" style="width:20px; height:20px; border-radius:50%; border:1px solid #d1d5db; background:#fff; cursor:pointer; font-size:11px; display:inline-flex; align-items:center; justify-content:center; line-height:1; padding:0; touch-action:manipulation;">−</button>' +
+                        '<span style="font-weight:700; font-size:11px; min-width:14px; text-align:center;">' + qty + '</span>' +
+                        '<button type="button" class="btn-qty-plus" onclick="updateCartItemQty(' + idx + ', 1, event)" aria-label="Increase quantity" style="width:20px; height:20px; border-radius:50%; border:1px solid #d1d5db; background:#fff; cursor:pointer; font-size:11px; display:inline-flex; align-items:center; justify-content:center; line-height:1; padding:0; touch-action:manipulation;">+</button>' +
+                        '</div>' +
+                        '</div>' +
                         '</div>' +
                         '</div>' +
                         '<span style="font-weight:700; font-size:14px;">₱' + (price * qty).toFixed(2) + '</span>' +
@@ -902,6 +931,63 @@ function syncCartFromLocalStorage() {
         console.error('Cart sync error:', e);
     }
 }
+
+// Debounce execution guard to strictly prevent double-firing (+2 increment) on mobile touch/click
+var _isCartQtyUpdating = false;
+var _lastCartQtyActionTime = 0;
+
+function updateCartItemQty(index, change, event) {
+    if (event) {
+        if (event.preventDefault && event.cancelable) event.preventDefault();
+        if (event.stopPropagation) event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    }
+
+    var now = Date.now();
+    // 1. Debounce threshold: ignore duplicate events within 300ms
+    if (now - _lastCartQtyActionTime < 300) {
+        return;
+    }
+    // 2. Atomic mutex guard: ignore any trigger if already executing
+    if (_isCartQtyUpdating) {
+        return;
+    }
+
+    _isCartQtyUpdating = true;
+    _lastCartQtyActionTime = now;
+
+    try {
+        var rawCart = localStorage.getItem('foodDashCart');
+        var cartData = rawCart ? JSON.parse(rawCart) : <?= json_encode(!empty($cart_items) ? $cart_items : []) ?>;
+        
+        if (Array.isArray(cartData) && cartData[index]) {
+            var currentQty = Number(cartData[index].qty || cartData[index].quantity) || 1;
+            var nextQty = currentQty + change;
+            
+            if (nextQty <= 0) {
+                cartData.splice(index, 1);
+            } else {
+                cartData[index].qty = nextQty;
+            }
+            
+            localStorage.setItem('foodDashCart', JSON.stringify(cartData));
+            syncCartFromLocalStorage();
+            if (typeof selectMethod === 'function') {
+                selectMethod(activePaymentMethod || 'gcash');
+            }
+        }
+    } catch(err) {
+        console.error('Error updating cart quantity:', err);
+    } finally {
+        setTimeout(function() {
+            _isCartQtyUpdating = false;
+        }, 300);
+    }
+}
+
+window.updateCartItemQty = updateCartItemQty;
+window.updateCartQty = updateCartItemQty;
+window.changeQty = updateCartItemQty;
 
 // 3. DYNAMIC BUTTON THEME & LOGO UPDATE: (Direct getElementById ONLY, NO querySelector)
 function selectMethod(method) {

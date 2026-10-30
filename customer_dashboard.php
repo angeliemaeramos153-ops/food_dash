@@ -4226,7 +4226,16 @@ function openItem(name, price, icon, desc, store){
   showScreen('item');
 }
 
-function changeQty(n){
+let _lastChangeQtyActionTime = 0;
+function changeQty(n, event){
+  if (event) {
+    if (event.preventDefault && event.cancelable) event.preventDefault();
+    if (event.stopPropagation) event.stopPropagation();
+  }
+  const now = Date.now();
+  if (now - _lastChangeQtyActionTime < 300) return;
+  _lastChangeQtyActionTime = now;
+
   itemQty = Math.max(1, itemQty + n);
   document.getElementById('itemQty').textContent = itemQty;
 }
@@ -4283,9 +4292,9 @@ function renderCart(){
         <div class="cart-bottom">
           <span style="font-size:10px;font-weight:700;color:var(--olive-dark)">${money(item.price * item.qty)}</span>
           <div class="qty">
-            <button type="button" class="btn-qty-minus" onclick="updateCartQty(${index}, -1)" aria-label="Decrease quantity"><i class="fa-solid fa-minus"></i></button>
+            <button type="button" class="btn-qty-minus" onclick="updateCartQty(${index}, -1, event)" aria-label="Decrease quantity"><i class="fa-solid fa-minus"></i></button>
             <span>${item.qty}</span>
-            <button onclick="updateCartQty(${index}, 1)">+</button>
+            <button type="button" class="btn-qty-plus" onclick="updateCartQty(${index}, 1, event)" aria-label="Increase quantity">+</button>
           </div>
         </div>
       </div>
@@ -4313,15 +4322,36 @@ function renderCart(){
   }
 }
 
-function updateCartQty(index, change) {
-  if (cart[index]) {
-    cart[index].qty += change;
-    if (cart[index].qty <= 0) {
-      cart.splice(index, 1);
+let _isCartQtyUpdating = false;
+let _lastCartQtyActionTime = 0;
+
+function updateCartQty(index, change, event) {
+  if (event) {
+    if (event.preventDefault && event.cancelable) event.preventDefault();
+    if (event.stopPropagation) event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+  }
+  const now = Date.now();
+  if (now - _lastCartQtyActionTime < 300 || _isCartQtyUpdating) {
+    return;
+  }
+  _isCartQtyUpdating = true;
+  _lastCartQtyActionTime = now;
+
+  try {
+    if (cart[index]) {
+      cart[index].qty += change;
+      if (cart[index].qty <= 0) {
+        cart.splice(index, 1);
+      }
+      saveCart();
+      updateBadge();
+      renderCart();
     }
-    saveCart();
-    updateBadge();
-    renderCart();
+  } finally {
+    setTimeout(() => {
+      _isCartQtyUpdating = false;
+    }, 300);
   }
 }
 
@@ -8007,6 +8037,11 @@ function handlePayAction(e) {
 
   function handleDelegatedAction(target, event) {
     if (!target || target.disabled || target.getAttribute('disabled')) return;
+
+    // Avoid double-firing on quantity buttons already handled by primary delegation
+    if (target.matches('.btn-qty-minus, .btn-qty-plus') || target.closest('.qty')) {
+      return;
+    }
 
     // Direct handling for add-to-cart elements
     var addBtn = target.matches('.add-to-cart-btn, .add') ? target : target.closest('.add-to-cart-btn, .add');
