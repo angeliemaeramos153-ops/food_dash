@@ -1588,6 +1588,11 @@ a:active,
   color: var(--harvest-sun);
   border: 1px solid rgba(216, 143, 42, 0.25);
 }
+.gps-status-pill.info {
+  background: rgba(75, 83, 32, 0.12);
+  color: var(--olive);
+  border: 1px solid rgba(75, 83, 32, 0.25);
+}
 .gps-status-pill.error {
   background: rgba(146, 61, 50, 0.1);
   color: var(--earth-clay);
@@ -2844,7 +2849,7 @@ a:active,
         <small><?php echo htmlspecialchars($pd_store); ?></small>
         <div class="price-row">
           <span class="price">₱<?php echo number_format($pd_price, 2); ?></span>
-          <button class="add" type="button" data-name="<?php echo htmlspecialchars($pd_name); ?>" data-price="<?php echo $pd_price; ?>" data-icon="<?php echo htmlspecialchars($pd_icon); ?>" data-store="<?php echo htmlspecialchars($pd_store); ?>" onclick="if(window.event)window.event.stopPropagation();addCart('<?php echo htmlspecialchars(addslashes($pd_name)); ?>',<?php echo $pd_price; ?>,'<?php echo htmlspecialchars(addslashes($pd_icon)); ?>','<?php echo htmlspecialchars(addslashes($pd_store)); ?>')">+</button>
+          <button class="add" type="button" data-name="<?php echo htmlspecialchars($pd_name); ?>" data-price="<?php echo $pd_price; ?>" data-icon="<?php echo htmlspecialchars($pd_icon); ?>" data-store="<?php echo htmlspecialchars($pd_store); ?>" onclick="if(window.event){window.event.stopPropagation();if(window.event.stopImmediatePropagation)window.event.stopImmediatePropagation();}addCart('<?php echo htmlspecialchars(addslashes($pd_name)); ?>',<?php echo $pd_price; ?>,'<?php echo htmlspecialchars(addslashes($pd_icon)); ?>','<?php echo htmlspecialchars(addslashes($pd_store)); ?>',false,1,event)">+</button>
         </div>
       </div>
     </div>
@@ -3830,7 +3835,20 @@ a:active,
 if (window.FoodDashCall) {
   FoodDashCall.init('customer');
 }
-let cart = JSON.parse(localStorage.getItem('foodDashCart') || '[]');
+let cart = [];
+try {
+  const _savedCart = JSON.parse(localStorage.getItem('foodDashCart') || '[]');
+  if (Array.isArray(_savedCart)) {
+    cart = _savedCart.map(function(item) {
+      return {
+        ...item,
+        qty: Math.max(1, parseInt(item.qty || item.quantity, 10) || 1)
+      };
+    });
+  }
+} catch (e) {
+  cart = [];
+}
 let itemQty = 1;
 let currentItem = {name:'Big Mac', price:179, icon:'🍔', desc:'Two beef patties, special sauce, lettuce and cheese.', store:'McDonalds'};
 
@@ -4120,7 +4138,7 @@ function renderStoreDishes(storeKey, list) {
             <small>${esc(storeKey)}</small>
             <div class="price-row">
               <span class="price">${money(itemPrice)}</span>
-              <button class="add" type="button" data-name="${safeAttr(itemName)}" data-price="${Number(itemPrice)}" data-icon="${safeAttr(itemIcon)}" data-store="${safeAttr(storeKey)}" onclick="if(window.event)window.event.stopPropagation();addCart(decodeURIComponent('${safeJs(itemName)}'),${Number(itemPrice)},decodeURIComponent('${safeJs(itemIcon)}'),decodeURIComponent('${safeJs(storeKey)}'))">+</button>
+              <button class="add" type="button" data-name="${safeAttr(itemName)}" data-price="${Number(itemPrice)}" data-icon="${safeAttr(itemIcon)}" data-store="${safeAttr(storeKey)}" onclick="if(window.event){window.event.stopPropagation();if(window.event.stopImmediatePropagation)window.event.stopImmediatePropagation();}addCart(decodeURIComponent('${safeJs(itemName)}'),${Number(itemPrice)},decodeURIComponent('${safeJs(itemIcon)}'),decodeURIComponent('${safeJs(storeKey)}'),false,1,event)">+</button>
             </div>
           </div>
         </div>`;
@@ -4241,25 +4259,52 @@ function changeQty(n, event){
 }
 
 function addCurrentItem(){
-  for(let i=0; i<itemQty; i++){
-    addCart(currentItem.name, currentItem.price, currentItem.icon, currentItem.store, true);
-  }
+  const count = Math.max(1, parseInt(itemQty, 10) || 1);
+  addCart(currentItem.name, currentItem.price, currentItem.icon, currentItem.store, true, count);
   showScreen('cart');
   toast('Added to cart');
 }
 
-function addCart(name, price, icon, store='McDonalds', silent=false){
-  const cleanStore = normalizeStoreName(store);
+let _lastAddCartTime = 0;
+let _lastAddCartSignature = '';
+
+function addCart(name, price, icon, store='McDonalds', silent=false, qtyToAdd=1, event=null){
+  if (event) {
+    if (event.preventDefault && event.cancelable) event.preventDefault();
+    if (event.stopPropagation) event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+  }
+  if (!name) return;
+
+  const cleanStore = normalizeStoreName(store || 'McDonalds');
+  const addQty = Math.max(1, parseInt(qtyToAdd, 10) || 1);
+  const now = Date.now();
+  const signature = `${name}::${cleanStore}`;
+
+  // Debounce rapid duplicate invocations (touch + ghost click or double event listeners) within 350ms
+  if (now - _lastAddCartTime < 350 && _lastAddCartSignature === signature) {
+    return;
+  }
+  _lastAddCartTime = now;
+  _lastAddCartSignature = signature;
+
   let x = cart.find(i => i.name === name && normalizeStoreName(i.store) === cleanStore); 
-  if(x) {
-    x.qty++;
+  if (x) {
+    x.qty = (parseInt(x.qty, 10) || 0) + addQty;
     x.store = cleanStore;
   } else {
-    cart.push({name, price, icon, qty:1, store: cleanStore});
+    // Strictly default initial quantity to 1 (or explicit addQty)
+    cart.push({
+      name: name,
+      price: parseFloat(price) || 0,
+      icon: icon || '🍽️',
+      qty: addQty,
+      store: cleanStore
+    });
   }
   saveCart();
   updateBadge();
-  if(!silent) toast(name + ' added to cart');
+  if (!silent) toast(name + ' added to cart');
 }
 
 function saveCart(){
@@ -4403,9 +4448,10 @@ function setDeliveryCoordinates(lat, lng, source = 'nominatim') {
     });
 
     const isGps = source === 'gps';
+    const isIp = source === 'ip';
     const isMap = source === 'map';
-    const icon = isGps ? 'fa-satellite-dish' : (isMap ? 'fa-map-pin' : 'fa-location-dot');
-    const label = isGps ? 'Exact Live GPS Pin' : (isMap ? 'Map Pin Selected' : 'Geocoded Pin');
+    const icon = isGps ? 'fa-satellite-dish' : (isIp ? 'fa-tower-broadcast' : (isMap ? 'fa-map-pin' : 'fa-location-dot'));
+    const label = isGps ? 'Exact Live GPS Pin' : (isIp ? 'Approximate Location (IP)' : (isMap ? 'Map Pin Selected' : 'Geocoded Pin'));
     const statusText = `<i class="fa-solid ${icon}"></i> ${label}: ${numLat.toFixed(5)}, ${numLng.toFixed(5)}`;
 
     // Sync Leaflet map and marker if map exists and source is not direct map dragging
@@ -4416,7 +4462,7 @@ function setDeliveryCoordinates(lat, lng, source = 'nominatim') {
         activeMarker.setLatLng([numLat, numLng]);
     }
     if (activeMap && source !== 'map') {
-        const targetZoom = source === 'nominatim' ? 17 : Math.max(activeMap.getZoom(), 16);
+        const targetZoom = source === 'nominatim' ? 17 : (source === 'ip' ? 15 : Math.max(activeMap.getZoom(), 16));
         activeMap.setView([numLat, numLng], targetZoom);
     }
 
@@ -4424,7 +4470,7 @@ function setDeliveryCoordinates(lat, lng, source = 'nominatim') {
         const el = document.getElementById(id);
         if (el) {
             el.style.display = 'flex';
-            el.className = 'gps-status-pill success';
+            el.className = 'gps-status-pill ' + (isIp ? 'info' : 'success');
             el.innerHTML = statusText;
         }
     });
@@ -4579,7 +4625,7 @@ async function reverseGeocodeToAddress(lat, lng) {
             if (data && data.display_name) {
                 const formatted = data.display_name;
                 const currentVal = (modalAddr ? modalAddr.value : '').trim();
-                if (!currentVal || currentVal.startsWith('GPS Location') || currentVal.startsWith('Pinned Location')) {
+                if (!currentVal || currentVal.startsWith('GPS Location') || currentVal.startsWith('Pinned Location') || currentVal.startsWith('Approximate') || currentVal.startsWith('Network Location')) {
                     if (modalAddr) modalAddr.value = formatted;
                     if (mainAddr) mainAddr.value = formatted;
                     lastGeocodedAddress = formatted.toLowerCase();
@@ -4720,74 +4766,227 @@ function initCheckoutMap() {
     }, 250);
 }
 
-// "Use My Exact Location" Button Action
-function useMyExactLocation() {
+// Dynamic IP Geolocation Fallback (for HTTP / non-secure LAN IP contexts and GPS denial)
+async function fetchApproximateIpLocation() {
+    // 1. Primary endpoint: ipapi.co (high accuracy, CORS enabled)
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch('https://ipapi.co/json/', {
+            signal: controller.signal,
+            headers: { 'Accept': 'application/json' }
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+            const data = await res.json();
+            const lat = parseFloat(data.latitude);
+            const lng = parseFloat(data.longitude);
+            if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
+                const parts = [];
+                if (data.city) parts.push(data.city);
+                if (data.region) parts.push(data.region);
+                if (data.country_name || data.country) parts.push(data.country_name || data.country);
+                return {
+                    lat: lat,
+                    lng: lng,
+                    city: data.city || '',
+                    region: data.region || '',
+                    postal: data.postal || '',
+                    label: parts.join(', ') || 'Approximate Network Location',
+                    source: 'ipapi.co'
+                };
+            }
+        }
+    } catch (e) {
+        console.warn('ipapi.co IP geolocation failed, attempting secondary provider:', e);
+    }
+
+    // 2. Secondary fallback: geojs.io (open access, CORS enabled)
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch('https://get.geojs.io/v1/ip/geo.json', {
+            signal: controller.signal,
+            headers: { 'Accept': 'application/json' }
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+            const data = await res.json();
+            const lat = parseFloat(data.latitude);
+            const lng = parseFloat(data.longitude);
+            if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
+                const parts = [];
+                if (data.city) parts.push(data.city);
+                if (data.region) parts.push(data.region);
+                if (data.country) parts.push(data.country);
+                return {
+                    lat: lat,
+                    lng: lng,
+                    city: data.city || '',
+                    region: data.region || '',
+                    postal: data.postal_code || '',
+                    label: parts.join(', ') || 'Approximate Network Location',
+                    source: 'geojs.io'
+                };
+            }
+        }
+    } catch (e) {
+        console.warn('geojs.io IP geolocation fallback failed:', e);
+    }
+
+    return null;
+}
+
+// "Use My Exact Location" / "Locate Me" Button Action with seamless dynamic IP fallback
+async function useMyExactLocation() {
     if (window._isLocatingGps) return;
     window._isLocatingGps = true;
-    const btn = document.getElementById('modalBtnLocateMe') || document.getElementById('btnDetectGps');
-    const statusEl = document.getElementById('modalGpsStatus') || document.getElementById('gpsLocationStatus');
 
-    if (!navigator.geolocation) {
-        toast('Geolocation is not supported by your browser');
-        return;
+    const btnModal = document.getElementById('modalBtnLocateMe');
+    const btnDetect = document.getElementById('btnDetectGps');
+    const statusPillIds = ['modalGpsStatus', 'gpsLocationStatus'];
+
+    function setButtonsLoading(isLoading) {
+        if (btnModal) {
+            btnModal.disabled = isLoading;
+            btnModal.innerHTML = isLoading 
+                ? '<i class="fa-solid fa-spinner fa-spin"></i> Locating...' 
+                : '<i class="fa-solid fa-location-crosshairs"></i> Use My Exact Location';
+        }
+        if (btnDetect) {
+            btnDetect.disabled = isLoading;
+            btnDetect.innerHTML = isLoading 
+                ? '<i class="fa-solid fa-spinner fa-spin"></i> Locating...' 
+                : '<i class="fa-solid fa-crosshairs"></i> Locate Me';
+        }
     }
 
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Locating...';
-    }
-    if (statusEl) {
-        statusEl.style.display = 'flex';
-        statusEl.className = 'gps-status-pill loading';
-        statusEl.innerHTML = '<i class="fa-solid fa-satellite-dish fa-spin"></i> Grabbing live device coordinates...';
-    }
-
-    navigator.geolocation.getCurrentPosition(
-        async (position) => {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Use My Exact Location';
+    function setStatusPill(state, html) {
+        statusPillIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.display = 'flex';
+                el.className = 'gps-status-pill ' + state;
+                el.innerHTML = html;
             }
-            window._isLocatingGps = false;
-            const lat = position.coords.latitude || position.coords.lat;
-            const lng = position.coords.longitude || position.coords.lng;
+        });
+    }
 
-            // Move the map view and draggable marker to their device's live coordinates
+    setButtonsLoading(true);
+    setStatusPill('loading', '<i class="fa-solid fa-satellite-dish fa-spin"></i> Detecting location via device GPS...');
+
+    async function handleIpFallback(reasonMsg) {
+        setStatusPill('loading', '<i class="fa-solid fa-tower-broadcast fa-spin"></i> ' + (reasonMsg ? reasonMsg + ' ' : '') + 'Estimating location via network IP...');
+        const ipLocation = await fetchApproximateIpLocation();
+        if (ipLocation) {
+            const lat = ipLocation.lat;
+            const lng = ipLocation.lng;
+
             if (checkoutMap) {
-                checkoutMap.setView([lat, lng], 16);
+                checkoutMap.setView([lat, lng], 15);
             }
             if (checkoutMarker) {
                 checkoutMarker.setLatLng([lat, lng]);
             }
 
-            // Sets id and delivery_lng
-            setDeliveryCoordinates(lat, lng, 'gps');
+            setDeliveryCoordinates(lat, lng, 'ip');
 
-            // Reverse-geocode to address input
+            // Attempt reverse geocoding to street address; fallback to IP label if no street address returned
             await reverseGeocodeToAddress(lat, lng);
+            const mainAddr = document.getElementById('deliveryAddressInput');
+            const modalAddr = document.getElementById('modalDeliveryAddress');
+            const currVal = ((modalAddr ? modalAddr.value : '') || (mainAddr ? mainAddr.value : '')).trim();
+            if (!currVal || currVal.startsWith('GPS Location') || currVal.startsWith('Pinned Location') || currVal.startsWith('Approximate')) {
+                if (ipLocation.label) {
+                    if (modalAddr) modalAddr.value = ipLocation.label;
+                    if (mainAddr) mainAddr.value = ipLocation.label;
+                    localStorage.setItem('foodDashDeliveryAddress', ipLocation.label);
+                }
+            }
 
-            toast('Pinned to your exact device location!');
-        },
-        (error) => {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Use My Exact Location';
-            }
+            toast('Estimated location via network IP' + (ipLocation.city ? ' (' + ipLocation.city + ')' : '') + '! Drag pin on map to refine.', 'info');
+        } else {
+            const finalErr = 'Could not detect location automatically. Please drag or tap on the map to pin your address.';
+            setStatusPill('error', '<i class="fa-solid fa-triangle-exclamation"></i> ' + finalErr);
+            toast(finalErr, 'warning');
+        }
+    }
+
+    // Check if browser supports Geolocation API
+    if (!navigator.geolocation) {
+        await handleIpFallback('Browser Geolocation restricted on local HTTP.');
+        setButtonsLoading(false);
+        window._isLocatingGps = false;
+        return;
+    }
+
+    let gpsResolved = false;
+    // Safety timer in case browser geolocation hangs on non-secure contexts
+    const safetyTimer = setTimeout(async () => {
+        if (!gpsResolved) {
+            gpsResolved = true;
+            console.warn('navigator.geolocation safety timer triggered, falling back to IP geolocation.');
+            await handleIpFallback('GPS timed out.');
+            setButtonsLoading(false);
             window._isLocatingGps = false;
-            let errMsg = 'Location permission denied or unavailable.';
-            if (error.code === error.PERMISSION_DENIED) {
-                errMsg = 'Location permission denied. Please drag the pin on the map.';
-            } else if (error.code === error.TIMEOUT) {
-                errMsg = 'Location request timed out. Please drag the pin on the map.';
-            }
-            if (statusEl) {
-                statusEl.className = 'gps-status-pill error';
-                statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${errMsg}`;
-            }
-            toast(errMsg);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-    );
+        }
+    }, 8500);
+
+    try {
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                if (gpsResolved) return;
+                gpsResolved = true;
+                clearTimeout(safetyTimer);
+
+                const lat = position.coords.latitude || position.coords.lat;
+                const lng = position.coords.longitude || position.coords.lng;
+
+                if (checkoutMap) {
+                    checkoutMap.setView([lat, lng], 16);
+                }
+                if (checkoutMarker) {
+                    checkoutMarker.setLatLng([lat, lng]);
+                }
+
+                setDeliveryCoordinates(lat, lng, 'gps');
+                await reverseGeocodeToAddress(lat, lng);
+
+                toast('Pinned to your exact device location!');
+                setButtonsLoading(false);
+                window._isLocatingGps = false;
+            },
+            async (error) => {
+                if (gpsResolved) return;
+                gpsResolved = true;
+                clearTimeout(safetyTimer);
+
+                let reason = 'GPS unavailable.';
+                if (error.code === error.PERMISSION_DENIED) {
+                    reason = 'GPS permission denied or restricted on HTTP.';
+                } else if (error.code === error.TIMEOUT) {
+                    reason = 'GPS request timed out.';
+                } else if (error.code === error.POSITION_UNAVAILABLE) {
+                    reason = 'GPS satellite signal unavailable.';
+                }
+
+                console.warn('navigator.geolocation error (' + reason + '), seamlessly falling back to IP geolocation...');
+                await handleIpFallback(reason);
+                setButtonsLoading(false);
+                window._isLocatingGps = false;
+            },
+            { enableHighAccuracy: true, timeout: 7000, maximumAge: 30000 }
+        );
+    } catch (e) {
+        if (!gpsResolved) {
+            gpsResolved = true;
+            clearTimeout(safetyTimer);
+            console.warn('Exception during navigator.geolocation:', e);
+            await handleIpFallback('GPS unavailable on this network.');
+            setButtonsLoading(false);
+            window._isLocatingGps = false;
+        }
+    }
 }
 
 // Live GPS detection backward compatibility
@@ -4800,8 +4999,8 @@ function requestLiveGpsIfAllowed() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
         (position) => {
-            const lat = position.coords.lat;
-            const lng = position.coords.lng;
+            const lat = position.coords.latitude || position.coords.lat;
+            const lng = position.coords.longitude || position.coords.lng;
             setDeliveryCoordinates(lat, lng, 'gps');
         },
         (error) => {
@@ -5620,43 +5819,88 @@ function initAddAddressPickerMap(lat, lng) {
   }
 }
 
-function useLocationForNewAddress() {
+async function useLocationForNewAddress() {
+  toast('Detecting location...', 'info');
+
+  async function applyNewAddrPosition(lat, lng, isIp = false, ipInfo = null) {
+    updateNewAddrCoords(lat, lng);
+    if (addAddressPickerMap) {
+      addAddressPickerMap.setView([lat, lng], isIp ? 15 : 16);
+      if (addAddressPickerMarker) addAddressPickerMarker.setLatLng([lat, lng]);
+    }
+    const notice = document.getElementById('newAddrGpsNotice');
+    if (notice) {
+      notice.innerHTML = `<i class="fa-solid fa-circle-check"></i> <span>${isIp ? 'Network Pin' : 'GPS Pin'}: ${lat.toFixed(5)}, ${lng.toFixed(5)}</span>`;
+    }
+    toast(isIp ? 'Estimated location via network IP! Drag pin to refine.' : 'Location detected!', 'success');
+
+    const st = document.getElementById('newAddrStreet');
+    const bg = document.getElementById('newAddrBarangay');
+    const ct = document.getElementById('newAddrCity');
+    const zp = document.getElementById('newAddrZip');
+
+    if (isIp && ipInfo) {
+      if (ct && (!ct.value || ct.value === 'Ormoc City') && ipInfo.city) ct.value = ipInfo.city;
+      if (zp && (!zp.value || zp.value === '6541') && ipInfo.postal) zp.value = ipInfo.postal;
+    }
+
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+      const d = await r.json();
+      if (d && d.address) {
+        const road = d.address.road || d.address.pedestrian || d.address.suburb || '';
+        const brgy = d.address.neighbourhood || d.address.village || d.address.quarter || '';
+        const city = d.address.city || d.address.town || d.address.municipality || '';
+        const post = d.address.postcode || '';
+
+        if (st && road && !st.value.trim()) st.value = road;
+        if (bg && brgy && !bg.value.trim()) bg.value = brgy;
+        if (ct && city && (!ct.value.trim() || ct.value === 'Ormoc City')) ct.value = city;
+        if (zp && post && (!zp.value.trim() || zp.value === '6541')) zp.value = post;
+      }
+    } catch (e) {}
+  }
+
+  async function fallbackToIp() {
+    toast('GPS restricted or unavailable. Estimating via IP...', 'info');
+    const ip = await fetchApproximateIpLocation();
+    if (ip) {
+      await applyNewAddrPosition(ip.lat, ip.lng, true, ip);
+    } else {
+      toast('Could not detect location. Please tap the map to pin manually.', 'error');
+    }
+  }
+
   if (!navigator.geolocation) {
-    toast('Geolocation not supported by this browser.', 'error');
+    await fallbackToIp();
     return;
   }
-  toast('Detecting GPS location...', 'info');
+
+  let resolved = false;
+  const timeoutId = setTimeout(async () => {
+    if (!resolved) {
+      resolved = true;
+      await fallbackToIp();
+    }
+  }, 7500);
+
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      const lat = pos.coords.lat;
-      const lng = pos.coords.lng;
-      updateNewAddrCoords(lat, lng);
-      if (addAddressPickerMap) {
-        addAddressPickerMap.setView([lat, lng], 16);
-        if (addAddressPickerMarker) addAddressPickerMarker.setLatLng([lat, lng]);
-      }
-      toast('Location detected!', 'success');
-      const st = document.getElementById('newAddrStreet');
-      if (st && !st.value.trim()) {
-        fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`)
-          .then(r => r.json())
-          .then(d => {
-            if (d && d.address) {
-              const road = d.address.road || d.address.pedestrian || d.address.suburb || '';
-              const brgy = d.address.neighbourhood || d.address.village || '';
-              if (road && !st.value) st.value = road;
-              const bg = document.getElementById('newAddrBarangay');
-              if (bg && brgy && !bg.value) bg.value = brgy;
-            }
-          })
-          .catch(() => {});
-      }
+    async (pos) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeoutId);
+      const lat = pos.coords.latitude || pos.coords.lat;
+      const lng = pos.coords.longitude || pos.coords.lng;
+      await applyNewAddrPosition(lat, lng, false);
     },
-    (err) => {
-      console.warn('Geolocation error:', err);
-      toast('Could not detect location. Please tap the map to pin manually.', 'error');
+    async (err) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeoutId);
+      console.warn('Geolocation error in new address:', err);
+      await fallbackToIp();
     },
-    { enableHighAccuracy: true, timeout: 8000 }
+    { enableHighAccuracy: true, timeout: 6000 }
   );
 }
 
@@ -7858,6 +8102,8 @@ function handlePayAction(e) {
     if (e.cancelable) {
       e.preventDefault();
     }
+    if (e.stopPropagation) e.stopPropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 
     // Debounce rapid duplicate taps (300ms threshold)
     var now = Date.now();
@@ -7895,6 +8141,7 @@ function handlePayAction(e) {
     if (touchJustHandled && (now - lastActionTimestamp) < 450 && (clickable === lastTriggeredElement || clickable.contains(lastTriggeredElement))) {
       e.preventDefault();
       e.stopPropagation();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
       return;
     }
 
@@ -7907,6 +8154,11 @@ function handlePayAction(e) {
     // 1. Quick-add buttons (+) on food cards or lists
     var addBtn = (el.classList.contains('add') || el.classList.contains('add-to-cart-btn')) ? el : el.closest('.add, .add-to-cart-btn');
     if (addBtn) {
+      if (originalEvent) {
+        if (originalEvent.preventDefault && originalEvent.cancelable) originalEvent.preventDefault();
+        if (originalEvent.stopPropagation) originalEvent.stopPropagation();
+        if (originalEvent.stopImmediatePropagation) originalEvent.stopImmediatePropagation();
+      }
       var dName = addBtn.getAttribute('data-name');
       var dPrice = parseFloat(addBtn.getAttribute('data-price') || '0');
       var dIcon = addBtn.getAttribute('data-icon') || '🍽️';
@@ -8038,25 +8290,9 @@ function handlePayAction(e) {
   function handleDelegatedAction(target, event) {
     if (!target || target.disabled || target.getAttribute('disabled')) return;
 
-    // Avoid double-firing on quantity buttons already handled by primary delegation
-    if (target.matches('.btn-qty-minus, .btn-qty-plus') || target.closest('.qty')) {
+    // Avoid double-firing on quantity and add-to-cart buttons already handled by primary delegation
+    if (target.matches('.btn-qty-minus, .btn-qty-plus, .add, .add-to-cart-btn') || target.closest('.qty, .add, .add-to-cart-btn')) {
       return;
-    }
-
-    // Direct handling for add-to-cart elements
-    var addBtn = target.matches('.add-to-cart-btn, .add') ? target : target.closest('.add-to-cart-btn, .add');
-    if (addBtn) {
-      var name = addBtn.getAttribute('data-name') || (addBtn.dataset && addBtn.dataset.name);
-      var price = parseFloat(addBtn.getAttribute('data-price') || (addBtn.dataset && addBtn.dataset.price) || '0');
-      var icon = addBtn.getAttribute('data-icon') || (addBtn.dataset && addBtn.dataset.icon) || '🍽️';
-      var store = addBtn.getAttribute('data-store') || (addBtn.dataset && addBtn.dataset.store) || 'FoodDash Grill';
-      if (name && typeof window.addCart === 'function') {
-        window.addCart(name, price, icon, store);
-        if (typeof window.toast === 'function') {
-          window.toast('Added to cart');
-        }
-        return;
-      }
     }
 
     // Execute inline or assigned onclick handler
@@ -8137,19 +8373,9 @@ function handlePayAction(e) {
     var target = findDelegatedTarget(e.target);
     if (!target) return;
 
-    var addBtn = target.matches('.add-to-cart-btn, .add') ? target : target.closest('.add-to-cart-btn, .add');
-    if (addBtn) {
-      var name = addBtn.getAttribute('data-name') || (addBtn.dataset && addBtn.dataset.name);
-      var price = parseFloat(addBtn.getAttribute('data-price') || (addBtn.dataset && addBtn.dataset.price) || '0');
-      var icon = addBtn.getAttribute('data-icon') || (addBtn.dataset && addBtn.dataset.icon) || '🍽️';
-      var store = addBtn.getAttribute('data-store') || (addBtn.dataset && addBtn.dataset.store) || 'FoodDash Grill';
-      if (name && typeof window.addCart === 'function') {
-        e.preventDefault();
-        window.addCart(name, price, icon, store);
-        if (typeof window.toast === 'function') {
-          window.toast('Added to cart');
-        }
-      }
+    // Avoid double-firing: add buttons and quantity buttons are handled by primary delegation and native/inline onclick
+    if (target.matches('.btn-qty-minus, .btn-qty-plus, .add, .add-to-cart-btn') || target.closest('.qty, .add, .add-to-cart-btn')) {
+      return;
     }
   }, { capture: true });
 })();

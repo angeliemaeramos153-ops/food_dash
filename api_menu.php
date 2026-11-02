@@ -48,6 +48,8 @@ try {
             'category'    => !empty($item['category']) ? $item['category'] : 'Main',
             'icon'        => !empty($item['icon']) ? $item['icon'] : '🍽️',
             'image_url'   => $item['image_url'] ?? null,
+            'qty'         => 1,
+            'quantity'    => 1,
             'is_recommended' => !empty($item['is_recommended']) ? 1 : 0
         ];
     }, $rawItems);
