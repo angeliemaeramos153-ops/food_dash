@@ -593,12 +593,12 @@ $grand_total = $subtotal + $delivery_fee;
     <!-- Delivery Destination Card -->
     <div class="checkout-card">
       <div class="card-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div>
-      <textarea id="delivery_address" name="delivery_address" class="address-textarea" placeholder="Unit/House No., Street, Barangay, City, Landmark"><?= htmlspecialchars($default_address) ?></textarea>
-      <textarea id="deliveryAddressInput" name="address" style="display:none;"><?= htmlspecialchars($default_address) ?></textarea>
+      <textarea id="delivery_address" name="delivery_address" class="address-textarea" placeholder="Enter complete address (e.g., Purok 3, House No., Street, Barangay, Landmark)" oninput="var s=document.getElementById('deliveryAddressInput'); if(s) s.value=this.value;"></textarea>
+      <textarea id="deliveryAddressInput" name="address" style="display:none;"></textarea>
       
       <div class="coords-badge">
         <i class="fa-solid fa-circle-check"></i>
-        <span>Exact Live GPS Pin: <b id="coordsDisplay"><?= htmlspecialchars($default_lat && $default_lng ? "{$default_lat}, {$default_lng}" : "Not set (Tap on Map)") ?></b></span>
+        <span>Exact Live GPS Pin: <b id="coordsDisplay"><?= htmlspecialchars($default_lat && $default_lng ? "{$default_lat}, {$default_lng}" : "Not set (Optional - Pin on Map)") ?></b></span>
       </div>
     </div>
 
@@ -913,19 +913,15 @@ function syncCartFromLocalStorage() {
             }
         }
         
-        var savedAddr = localStorage.getItem('foodDashDeliveryAddress');
-        if (savedAddr && savedAddr.trim() !== '' && !savedAddr.toLowerCase().includes('western leyte')) {
-            var addrEl = document.getElementById('delivery_address');
-            if (addrEl && !addrEl.value) {
-                addrEl.value = savedAddr;
-            }
-            var addrSec = document.getElementById('deliveryAddressInput');
-            if (addrSec && !addrSec.value) {
-                addrSec.value = savedAddr;
-            }
-        } else if (savedAddr && savedAddr.toLowerCase().includes('western leyte')) {
-            localStorage.removeItem('foodDashDeliveryAddress');
-            localStorage.removeItem('foodDashDeliveryCoords');
+        // Delivery address input starts completely blank on page load per user requirement
+        var addrEl = document.getElementById('delivery_address');
+        var addrSec = document.getElementById('deliveryAddressInput');
+        if (addrEl && addrSec) {
+            addrEl.value = '';
+            addrSec.value = '';
+            addrEl.addEventListener('input', function() {
+                addrSec.value = this.value;
+            });
         }
     } catch(e) {
         console.error('Cart sync error:', e);

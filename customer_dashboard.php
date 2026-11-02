@@ -2995,7 +2995,7 @@ a:active,
           </button>
         </div>
       </div>
-      <textarea id="deliveryAddressInput" class="delivery-textarea" placeholder="Enter complete delivery address (e.g. Unit/House No., Street, Brgy, City, Landmark)" rows="2"></textarea>
+      <textarea id="deliveryAddressInput" class="delivery-textarea" placeholder="Enter complete delivery address (e.g. Purok, Street, Barangay, Landmark)" rows="2"></textarea>
       <div id="gpsLocationStatus" class="gps-status-pill" style="display:none;"></div>
       <input type="hidden" id="delivery_lat" name="delivery_lat" value="">
       <input type="hidden" id="delivery_lng" name="delivery_lng" value="">
@@ -3297,7 +3297,7 @@ a:active,
       </button>
     </div>
 
-    <textarea id="modalDeliveryAddress" class="delivery-textarea" placeholder="Unit/House No., Street, Barangay, City, Landmark..." rows="2"></textarea>
+    <textarea id="modalDeliveryAddress" class="delivery-textarea" placeholder="Enter complete delivery address (e.g. Purok, Street, Barangay, Landmark)" rows="2"></textarea>
     <div id="modalGpsStatus" class="gps-status-pill" style="display:none; margin-top:8px;"></div>
     
     <div style="margin-top:8px; margin-bottom:6px;">
@@ -4416,16 +4416,11 @@ function renderCart(){
   document.getElementById('total').textContent = money(total);
   summaryBox.style.display = 'block';
 
-  // Pre-fill delivery address from localStorage if available
+  // Delivery address input starts completely blank on page load per user requirement
   const addrInput = document.getElementById('deliveryAddressInput');
-  if (addrInput && !addrInput.value) {
-    const saved = localStorage.getItem('foodDashDeliveryAddress');
-    if (saved) {
-      addrInput.value = saved;
-      if (!currentCustomerLat) {
-        geocodeAddressNominatim(saved);
-      }
-    }
+  if (addrInput && !addrInput.dataset.initialized) {
+    addrInput.dataset.initialized = 'true';
+    addrInput.value = '';
   }
 }
 
@@ -4969,11 +4964,36 @@ function selectMapSearchResultByIndex(index) {
     }
 }
 
+// Helper: apply pinned address to inputs while preserving any specific Purok or custom landmark details the user typed
+function applyPinnedAddressToInputs(formattedArea, rawName) {
+    const modalAddr = document.getElementById('modalDeliveryAddress');
+    const mainAddr = document.getElementById('deliveryAddressInput');
+    const currentVal = ((modalAddr ? modalAddr.value : '') || (mainAddr ? mainAddr.value : '')).trim();
+
+    let finalAddress = formattedArea;
+    if (currentVal && !currentVal.startsWith('GPS Location') && !currentVal.startsWith('Pinned Location') && !currentVal.startsWith('Approximate') && !currentVal.startsWith('Network Location')) {
+        // If the user already typed specific local details (e.g. Purok, Sitio, House/Block No., or Landmark),
+        // preserve them and append the pinned area so they don't have to retype
+        const hasPurokOrSpecifics = /\b(purok|prk|sitio|unit|house|lot|blk|block|near|tapad|atbang|gate|corner)\b/i.test(currentVal);
+        const lowerCurr = currentVal.toLowerCase();
+        const lowerArea = formattedArea.toLowerCase();
+
+        if (hasPurokOrSpecifics && !lowerCurr.includes(lowerArea)) {
+            finalAddress = `${currentVal}, ${formattedArea}`;
+        } else if (hasPurokOrSpecifics) {
+            finalAddress = currentVal;
+        }
+    }
+
+    if (modalAddr) modalAddr.value = finalAddress;
+    if (mainAddr) mainAddr.value = finalAddress;
+    lastGeocodedAddress = finalAddress.toLowerCase();
+    localStorage.setItem('foodDashDeliveryAddress', finalAddress);
+}
+
 function selectMapSearchResult(lat, lon, displayName, name, components = null) {
     const input = document.getElementById('modalMapSearchInput');
     const resultsContainer = document.getElementById('mapSearchResults');
-    const mainAddr = document.getElementById('deliveryAddressInput');
-    const modalAddr = document.getElementById('modalDeliveryAddress');
 
     // Retrieve components if not passed directly
     if (!components && currentMapSearchResults && currentMapSearchResults.length) {
@@ -4999,10 +5019,8 @@ function selectMapSearchResult(lat, lon, displayName, name, components = null) {
 
     setDeliveryCoordinates(lat, lon, 'nominatim');
 
-    if (modalAddr) modalAddr.value = formatted;
-    if (mainAddr) mainAddr.value = formatted;
-    lastGeocodedAddress = formatted.toLowerCase();
-    localStorage.setItem('foodDashDeliveryAddress', formatted);
+    // Populate general area while preserving any user-typed Purok/landmark
+    applyPinnedAddressToInputs(formatted, name);
 
     // Sync granular address form fields if present in DOM
     if (components) {
@@ -5021,10 +5039,10 @@ function selectMapSearchResult(lat, lon, displayName, name, components = null) {
         pill.style.display = 'flex';
         pill.className = 'gps-status-pill success';
         const brgyLabel = components && components.barangay ? ` • ${components.barangay}` : '';
-        pill.innerHTML = `<i class="fa-solid fa-circle-check"></i> Searched Location: ${lat.toFixed(5)}, ${lon.toFixed(5)} • ${name}${brgyLabel}`;
+        pill.innerHTML = `<i class="fa-solid fa-circle-check"></i> Pinned Area: ${lat.toFixed(5)}, ${lon.toFixed(5)} • ${name}${brgyLabel} <span style="font-size:10px; opacity:0.85; margin-left:4px;">(Editable below)</span>`;
     }
 
-    toast(`Location pinned to ${name}!`);
+    toast(`Area pinned: ${name}! You can add your Purok/details below.`);
 }
 
 async function executeMapSearch() {
@@ -5071,40 +5089,36 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// Handle typing in delivery address inputs with debounced geocoding
+// Handle typing in delivery address inputs: fully editable, unlocked, and free to type Purok/landmarks
 function handleAddressTyping(value, isModal = false) {
-    const address = (value || '').trim();
-    if (!address) return;
+    const address = value || '';
 
-    // Sync other address field without triggering events
+    // Sync other address field seamlessly without locking or interfering with user's typing
     const otherAddr = document.getElementById(isModal ? 'deliveryAddressInput' : 'modalDeliveryAddress');
-    if (otherAddr && otherAddr.value !== address) otherAddr.value = address;
-    localStorage.setItem('foodDashDeliveryAddress', address);
-
-    // Cancel pending debounce timer
-    clearTimeout(addressGeocodeDebounceTimer);
-
-    // If identical to last geocoded address, don't re-query
-    if (address.toLowerCase() === lastGeocodedAddress.toLowerCase()) {
-        return;
+    if (otherAddr && otherAddr.value !== address) {
+        otherAddr.value = address;
     }
 
-    // Debounce typing by 600ms to allow customer to finish typing without duplicate API calls
-    addressGeocodeDebounceTimer = setTimeout(async () => {
-        await geocodeAddressNominatim(address);
-    }, 600);
+    if (address.trim()) {
+        localStorage.setItem('foodDashDeliveryAddress', address.trim());
+    } else {
+        localStorage.removeItem('foodDashDeliveryAddress');
+    }
+
+    // Cancel debounce timer so background geocoder never interrupts or overwrites user's typing
+    clearTimeout(addressGeocodeDebounceTimer);
 }
 
-// When user finishes typing (blur or change)
+// When user finishes typing (blur or change): fully unlocked, no aggressive API queries overriding user's text
 function handleAddressBlur(value, isModal = false) {
     clearTimeout(addressGeocodeDebounceTimer);
     const address = (value || '').trim();
-    if (address && address.toLowerCase() !== lastGeocodedAddress.toLowerCase()) {
-        geocodeAddressNominatim(address);
+    if (address) {
+        localStorage.setItem('foodDashDeliveryAddress', address);
     }
 }
 
-// Helper: Reverse-geocode coordinates to street address with granular parsing
+// Helper: Reverse-geocode coordinates to street address with granular parsing (optional helper on pin drag)
 async function reverseGeocodeToAddress(lat, lng) {
     const mainAddr = document.getElementById('deliveryAddressInput');
     const modalAddr = document.getElementById('modalDeliveryAddress');
@@ -5117,7 +5131,9 @@ async function reverseGeocodeToAddress(lat, lng) {
             if (data) {
                 const parsed = parseGranularAddressComponents(data);
                 const formatted = (parsed && parsed.formatted) ? parsed.formatted : data.display_name;
-                const currentVal = (modalAddr ? modalAddr.value : '').trim();
+                const currentVal = ((modalAddr ? modalAddr.value : '') || (mainAddr ? mainAddr.value : '')).trim();
+
+                // Only update address text if current value is empty or generic GPS placeholder
                 if (!currentVal || currentVal.startsWith('GPS Location') || currentVal.startsWith('Pinned Location') || currentVal.startsWith('Approximate') || currentVal.startsWith('Network Location')) {
                     if (modalAddr) modalAddr.value = formatted;
                     if (mainAddr) mainAddr.value = formatted;
@@ -5519,7 +5535,7 @@ function openAddressPromptModal() {
     const mainAddr = document.getElementById('deliveryAddressInput');
     const modalAddr = document.getElementById('modalDeliveryAddress');
     if (mainAddr && modalAddr) {
-        modalAddr.value = mainAddr.value.trim() || localStorage.getItem('foodDashDeliveryAddress') || '';
+        modalAddr.value = mainAddr.value.trim();
     }
     const modal = document.getElementById('addressPromptModal');
     if (modal) modal.classList.add('show');
@@ -5532,9 +5548,9 @@ function openAddressPromptModal() {
     const clearBtn = document.getElementById('modalMapSearchClear');
     const resultsContainer = document.getElementById('mapSearchResults');
     if (resultsContainer) resultsContainer.style.display = 'none';
-    if (searchInput && modalAddr && modalAddr.value.trim()) {
-        searchInput.value = modalAddr.value.trim();
-        if (clearBtn) clearBtn.style.display = 'block';
+    if (searchInput) {
+        searchInput.value = '';
+        if (clearBtn) clearBtn.style.display = 'none';
     }
 
     if (modalAddr) modalAddr.focus();
