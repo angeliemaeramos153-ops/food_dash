@@ -4538,7 +4538,84 @@ function setDeliveryCoordinates(lat, lng, source = 'nominatim') {
     });
 }
 
-// OpenStreetMap Nominatim Geocoding for Customer Addresses
+// OpenStreetMap Nominatim Geocoding & Granular Address Component Parser
+function parseGranularAddressComponents(data) {
+    if (!data) return null;
+    const addr = data.address || {};
+
+    // 1. Street / Road / Landmark component
+    let street = '';
+    const houseNumber = addr.house_number || addr.building || addr.house_name || '';
+    const road = addr.road || addr.pedestrian || addr.street || addr.footway || addr.path || addr.highway || '';
+    const landmark = data.name || addr.amenity || addr.shop || addr.tourism || addr.office || addr.leisure || '';
+
+    if (houseNumber && road) {
+        street = `${houseNumber} ${road}`.trim();
+    } else if (road) {
+        street = road.trim();
+    } else if (landmark && landmark !== addr.village && landmark !== addr.suburb && landmark !== addr.city) {
+        street = landmark.trim();
+    } else {
+        street = (addr.residential || addr.suburb || addr.neighbourhood || addr.village || '').trim();
+    }
+
+    // 2. Barangay / Subdivision / District component (OSM Philippines structure)
+    const rawBrgy = (addr.village || addr.neighbourhood || addr.subdivision || addr.residential || addr.suburb || addr.quarter || addr.city_district || addr.hamlet || '').trim();
+    let barangay = rawBrgy;
+
+    const isPrefixed = /^(barangay|brgy\.?|subdivision|subd\.?|purok|sitio|zone|district|village)\b/i.test(barangay);
+    const isSuffixed = /(subdivision|subd\.?|village|homes|heights|valley|hills|park|compound|estate)$/i.test(barangay);
+    const isDirectionalOnly = /^(north|south|east|west|central)$/i.test(barangay);
+
+    if (barangay && !isPrefixed && !isSuffixed && !isDirectionalOnly) {
+        barangay = `Barangay ${barangay}`;
+    }
+
+    // 3. City / Municipality component
+    let city = (addr.city || addr.town || addr.municipality || addr.county || 'Ormoc City').trim();
+    if (!/city$/i.test(city) && city.toLowerCase() === 'ormoc') {
+        city = 'Ormoc City';
+    }
+
+    // 4. Postal Code & Province
+    const postal = (addr.postcode || '6541').trim();
+    const province = (addr.state || addr.province || 'Leyte').trim();
+
+    // 5. Build clean, non-redundant formatted string for delivery riders
+    const parts = [];
+    if (landmark && landmark !== street && landmark !== rawBrgy && landmark !== barangay && landmark !== city) {
+        parts.push(landmark);
+    }
+    if (street) parts.push(street);
+    if (barangay && barangay.toLowerCase() !== street.toLowerCase()) parts.push(barangay);
+    if (city) parts.push(city);
+    if (postal) parts.push(postal);
+
+    const uniqueParts = [];
+    const seen = new Set();
+    parts.forEach(p => {
+        const norm = p.trim().toLowerCase();
+        if (norm && !seen.has(norm)) {
+            seen.add(norm);
+            uniqueParts.push(p.trim());
+        }
+    });
+
+    const formatted = uniqueParts.join(', ') || data.display_name || '';
+
+    return {
+        street: street,
+        barangay: barangay,
+        rawBarangay: rawBrgy,
+        city: city,
+        postal: postal,
+        province: province,
+        landmark: landmark,
+        formatted: formatted,
+        displayName: data.display_name || formatted
+    };
+}
+
 async function geocodeAddressNominatim(query) {
     if (!query || typeof query !== 'string') return null;
     const cleanAddr = query.trim();
@@ -4571,9 +4648,8 @@ async function geocodeAddressNominatim(query) {
     const activeMarker = checkoutMarker || (typeof marker !== 'undefined' ? marker : null);
 
     try {
-        // 1. Primary requested endpoint:
-        // https://nominatim.openstreetmap.org/search?format=json&limit=1&q= + encodeURIComponent(query + ', Ormoc City, Leyte')
-        const primaryUrl = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(cleanAddr + ', Ormoc City, Leyte');
+        // 1. Primary requested endpoint with addressdetails=1 for granular street and barangay components
+        const primaryUrl = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&q=' + encodeURIComponent(cleanAddr + ', Ormoc City, Leyte');
         let res = await fetch(primaryUrl, {
             method: 'GET',
             headers: { 'Accept': 'application/json' },
@@ -4587,17 +4663,33 @@ async function geocodeAddressNominatim(query) {
                 const lon = parseFloat(data[0].lon);
                 lastGeocodedAddress = normKey;
 
-                // Automatically pan and zoom the Leaflet map to the returned lat and lon (map.setView([lat, lon], 17))
+                // Automatically pan and zoom the Leaflet map to the returned lat and lon
                 if (activeMap) {
                     activeMap.setView([lat, lon], 17);
                 }
-                // Move the draggable marker to that position (marker.setLatLng([lat, lon]))
+                // Move the draggable marker to that position
                 if (activeMarker) {
                     activeMarker.setLatLng([lat, lon]);
                 }
                 // Update the hidden inputs id and delivery_lng
                 setDeliveryCoordinates(lat, lon, 'nominatim');
-                return { lat, lon, lng: lon, displayName: data[0].display_name };
+
+                const parsed = parseGranularAddressComponents(data[0]);
+                const formatted = parsed ? parsed.formatted : data[0].display_name;
+
+                // Populate granular address form fields if present in DOM
+                if (parsed) {
+                    const st = document.getElementById('newAddrStreet');
+                    const bg = document.getElementById('newAddrBarangay');
+                    const ct = document.getElementById('newAddrCity');
+                    const zp = document.getElementById('newAddrZip');
+                    if (st && parsed.street) st.value = parsed.street;
+                    if (bg && parsed.barangay) bg.value = parsed.barangay;
+                    if (ct && parsed.city) ct.value = parsed.city;
+                    if (zp && parsed.postal) zp.value = parsed.postal;
+                }
+
+                return { lat, lon, lng: lon, displayName: formatted, components: parsed };
             }
         }
 
@@ -4611,7 +4703,7 @@ async function geocodeAddressNominatim(query) {
 
         for (const alt of altQueries) {
             if (signal.aborted) return null;
-            const altUrl = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(alt);
+            const altUrl = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&q=' + encodeURIComponent(alt);
             res = await fetch(altUrl, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
@@ -4627,7 +4719,22 @@ async function geocodeAddressNominatim(query) {
                     if (activeMap) activeMap.setView([lat, lon], 17);
                     if (activeMarker) activeMarker.setLatLng([lat, lon]);
                     setDeliveryCoordinates(lat, lon, 'nominatim');
-                    return { lat, lon, lng: lon, displayName: data[0].display_name };
+
+                    const parsed = parseGranularAddressComponents(data[0]);
+                    const formatted = parsed ? parsed.formatted : data[0].display_name;
+
+                    if (parsed) {
+                        const st = document.getElementById('newAddrStreet');
+                        const bg = document.getElementById('newAddrBarangay');
+                        const ct = document.getElementById('newAddrCity');
+                        const zp = document.getElementById('newAddrZip');
+                        if (st && parsed.street) st.value = parsed.street;
+                        if (bg && parsed.barangay) bg.value = parsed.barangay;
+                        if (ct && parsed.city) ct.value = parsed.city;
+                        if (zp && parsed.postal) zp.value = parsed.postal;
+                    }
+
+                    return { lat, lon, lng: lon, displayName: formatted, components: parsed };
                 }
             }
         }
@@ -4730,13 +4837,27 @@ async function searchNominatimAddresses(query) {
     const norm = query.toLowerCase();
     const localMatches = ORMOC_LOCAL_LANDMARKS.filter(item => 
         item.name.toLowerCase().includes(norm) || item.desc.toLowerCase().includes(norm)
-    ).map(item => ({
-        lat: item.lat,
-        lon: item.lon,
-        name: item.name,
-        display_name: item.desc,
-        is_local: true
-    }));
+    ).map(item => {
+        const parsed = parseGranularAddressComponents({
+            name: item.name,
+            display_name: item.desc,
+            address: {
+                road: item.name,
+                village: item.name,
+                city: 'Ormoc City',
+                state: 'Leyte',
+                postcode: '6541'
+            }
+        });
+        return {
+            lat: item.lat,
+            lon: item.lon,
+            name: item.name,
+            display_name: parsed ? parsed.formatted : item.desc,
+            components: parsed,
+            is_local: true
+        };
+    });
 
     const cleanQ = query.trim();
     const augmentedQuery = (!norm.includes('ormoc') && !norm.includes('leyte')) ? `${cleanQ}, Ormoc City, Leyte` : cleanQ;
@@ -4753,13 +4874,14 @@ async function searchNominatimAddresses(query) {
             const data = await res.json();
             if (Array.isArray(data)) {
                 osmItems = data.map(d => {
-                    const addr = d.address || {};
-                    const title = d.name || addr.village || addr.suburb || addr.road || addr.neighbourhood || d.display_name.split(',')[0];
+                    const parsed = parseGranularAddressComponents(d);
+                    const title = parsed ? (parsed.street || parsed.landmark || d.name || parsed.barangay) : (d.name || d.display_name.split(',')[0]);
                     return {
                         lat: parseFloat(d.lat),
                         lon: parseFloat(d.lon),
                         name: title,
-                        display_name: d.display_name,
+                        display_name: (parsed && parsed.formatted) ? parsed.formatted : d.display_name,
+                        components: parsed,
                         is_local: false
                     };
                 });
@@ -4789,12 +4911,19 @@ async function searchNominatimAddresses(query) {
         combined.forEach((item, index) => {
             const safeName = item.name.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             const safeDesc = item.display_name.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const brgyBadge = item.components && item.components.barangay 
+                ? `<span style="font-size:10px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 6px; border-radius:4px; margin-left:4px;">${item.components.barangay.replace(/</g, '&lt;')}</span>` 
+                : '';
             html += `
-                <div class="map-suggestion-item" data-index="${index}" onclick="selectMapSearchResult(${item.lat}, ${item.lon}, decodeURIComponent('${encodeURIComponent(item.display_name)}'), decodeURIComponent('${encodeURIComponent(item.name)}'))">
+                <div class="map-suggestion-item" data-index="${index}" onclick="selectMapSearchResultByIndex(${index})">
                     <i class="fa-solid fa-location-dot" style="color:var(--harvest-sun); font-size:13px; margin-top:2px;"></i>
                     <div style="flex:1; overflow:hidden;">
-                        <strong>${safeName} ${item.is_local ? '<span style="font-size:8.5px; font-weight:700; color:#15803d; background:#dcfce7; padding:1px 5px; border-radius:4px; margin-left:4px;">Verified Local</span>' : ''}</strong>
-                        <small style="text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${safeDesc}</small>
+                        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
+                            <strong>${safeName}</strong>
+                            ${item.is_local ? '<span style="font-size:8.5px; font-weight:700; color:#15803d; background:#dcfce7; padding:1px 5px; border-radius:4px;">Verified Local</span>' : ''}
+                            ${brgyBadge}
+                        </div>
+                        <small style="text-overflow:ellipsis; overflow:hidden; white-space:nowrap; display:block;">${safeDesc}</small>
                     </div>
                 </div>
             `;
@@ -4809,11 +4938,18 @@ async function searchNominatimAddresses(query) {
             localMatches.forEach((item, index) => {
                 const safeName = item.name.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                 const safeDesc = item.display_name.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                const brgyBadge = item.components && item.components.barangay 
+                    ? `<span style="font-size:10px; font-weight:600; color:#0369a1; background:#e0f2fe; padding:1px 6px; border-radius:4px; margin-left:4px;">${item.components.barangay.replace(/</g, '&lt;')}</span>` 
+                    : '';
                 html += `
-                    <div class="map-suggestion-item" data-index="${index}" onclick="selectMapSearchResult(${item.lat}, ${item.lon}, decodeURIComponent('${encodeURIComponent(item.display_name)}'), decodeURIComponent('${encodeURIComponent(item.name)}'))">
+                    <div class="map-suggestion-item" data-index="${index}" onclick="selectMapSearchResultByIndex(${index})">
                         <i class="fa-solid fa-location-dot" style="color:var(--harvest-sun); font-size:13px; margin-top:2px;"></i>
                         <div style="flex:1; overflow:hidden;">
-                            <strong>${safeName} <span style="font-size:8.5px; font-weight:700; color:#15803d; background:#dcfce7; padding:1px 5px; border-radius:4px; margin-left:4px;">Verified Local</span></strong>
+                            <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
+                                <strong>${safeName}</strong>
+                                <span style="font-size:8.5px; font-weight:700; color:#15803d; background:#dcfce7; padding:1px 5px; border-radius:4px;">Verified Local</span>
+                                ${brgyBadge}
+                            </div>
                             <small>${safeDesc}</small>
                         </div>
                     </div>
@@ -4826,13 +4962,28 @@ async function searchNominatimAddresses(query) {
     }
 }
 
-function selectMapSearchResult(lat, lon, displayName, name) {
+function selectMapSearchResultByIndex(index) {
+    if (currentMapSearchResults && currentMapSearchResults[index]) {
+        const item = currentMapSearchResults[index];
+        selectMapSearchResult(item.lat, item.lon, item.display_name, item.name, item.components);
+    }
+}
+
+function selectMapSearchResult(lat, lon, displayName, name, components = null) {
     const input = document.getElementById('modalMapSearchInput');
     const resultsContainer = document.getElementById('mapSearchResults');
     const mainAddr = document.getElementById('deliveryAddressInput');
     const modalAddr = document.getElementById('modalDeliveryAddress');
 
-    if (input) input.value = name || displayName;
+    // Retrieve components if not passed directly
+    if (!components && currentMapSearchResults && currentMapSearchResults.length) {
+        const match = currentMapSearchResults.find(it => Math.abs(it.lat - lat) < 0.0001 && Math.abs(it.lon - lon) < 0.0001);
+        if (match && match.components) components = match.components;
+    }
+
+    const formatted = (components && components.formatted) ? components.formatted : (displayName || name);
+
+    if (input) input.value = name || formatted;
     if (resultsContainer) resultsContainer.style.display = 'none';
 
     const activeMap = checkoutMap || (typeof map !== 'undefined' ? map : null);
@@ -4848,17 +4999,29 @@ function selectMapSearchResult(lat, lon, displayName, name) {
 
     setDeliveryCoordinates(lat, lon, 'nominatim');
 
-    const formatted = displayName || name;
     if (modalAddr) modalAddr.value = formatted;
     if (mainAddr) mainAddr.value = formatted;
     lastGeocodedAddress = formatted.toLowerCase();
     localStorage.setItem('foodDashDeliveryAddress', formatted);
 
+    // Sync granular address form fields if present in DOM
+    if (components) {
+        const st = document.getElementById('newAddrStreet');
+        const bg = document.getElementById('newAddrBarangay');
+        const ct = document.getElementById('newAddrCity');
+        const zp = document.getElementById('newAddrZip');
+        if (st && components.street) st.value = components.street;
+        if (bg && components.barangay) bg.value = components.barangay;
+        if (ct && components.city) ct.value = components.city;
+        if (zp && components.postal) zp.value = components.postal;
+    }
+
     const pill = document.getElementById('modalGpsStatus');
     if (pill) {
         pill.style.display = 'flex';
         pill.className = 'gps-status-pill success';
-        pill.innerHTML = `<i class="fa-solid fa-circle-check"></i> Searched Location: ${lat.toFixed(5)}, ${lon.toFixed(5)} • ${name}`;
+        const brgyLabel = components && components.barangay ? ` • ${components.barangay}` : '';
+        pill.innerHTML = `<i class="fa-solid fa-circle-check"></i> Searched Location: ${lat.toFixed(5)}, ${lon.toFixed(5)} • ${name}${brgyLabel}`;
     }
 
     toast(`Location pinned to ${name}!`);
@@ -4941,24 +5104,37 @@ function handleAddressBlur(value, isModal = false) {
     }
 }
 
-// Helper: Reverse-geocode coordinates to street address
+// Helper: Reverse-geocode coordinates to street address with granular parsing
 async function reverseGeocodeToAddress(lat, lng) {
     const mainAddr = document.getElementById('deliveryAddressInput');
     const modalAddr = document.getElementById('modalDeliveryAddress');
     try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=${lat}&lon=${lng}`, {
             headers: { 'Accept': 'application/json' }
         });
         if (res.ok) {
             const data = await res.json();
-            if (data && data.display_name) {
-                const formatted = data.display_name;
+            if (data) {
+                const parsed = parseGranularAddressComponents(data);
+                const formatted = (parsed && parsed.formatted) ? parsed.formatted : data.display_name;
                 const currentVal = (modalAddr ? modalAddr.value : '').trim();
                 if (!currentVal || currentVal.startsWith('GPS Location') || currentVal.startsWith('Pinned Location') || currentVal.startsWith('Approximate') || currentVal.startsWith('Network Location')) {
                     if (modalAddr) modalAddr.value = formatted;
                     if (mainAddr) mainAddr.value = formatted;
                     lastGeocodedAddress = formatted.toLowerCase();
                     localStorage.setItem('foodDashDeliveryAddress', formatted);
+                }
+
+                // Sync granular address form fields if present in DOM
+                if (parsed) {
+                    const st = document.getElementById('newAddrStreet');
+                    const bg = document.getElementById('newAddrBarangay');
+                    const ct = document.getElementById('newAddrCity');
+                    const zp = document.getElementById('newAddrZip');
+                    if (st && parsed.street && !st.value.trim()) st.value = parsed.street;
+                    if (bg && parsed.barangay && !bg.value.trim()) bg.value = parsed.barangay;
+                    if (ct && parsed.city && (!ct.value.trim() || ct.value === 'Ormoc City')) ct.value = parsed.city;
+                    if (zp && parsed.postal && (!zp.value.trim() || zp.value === '6541')) zp.value = parsed.postal;
                 }
             }
         }
@@ -6183,18 +6359,26 @@ async function useLocationForNewAddress() {
     }
 
     try {
-      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=${lat}&lon=${lng}`);
       const d = await r.json();
-      if (d && d.address) {
-        const road = d.address.road || d.address.pedestrian || d.address.suburb || '';
-        const brgy = d.address.neighbourhood || d.address.village || d.address.quarter || '';
-        const city = d.address.city || d.address.town || d.address.municipality || '';
-        const post = d.address.postcode || '';
+      if (d) {
+        const parsed = parseGranularAddressComponents(d);
+        if (parsed) {
+          if (st && parsed.street && !st.value.trim()) st.value = parsed.street;
+          if (bg && parsed.barangay && !bg.value.trim()) bg.value = parsed.barangay;
+          if (ct && parsed.city && (!ct.value.trim() || ct.value === 'Ormoc City')) ct.value = parsed.city;
+          if (zp && parsed.postal && (!zp.value.trim() || zp.value === '6541')) zp.value = parsed.postal;
+        } else if (d.address) {
+          const road = d.address.road || d.address.pedestrian || d.address.suburb || '';
+          const brgy = d.address.neighbourhood || d.address.village || d.address.quarter || '';
+          const city = d.address.city || d.address.town || d.address.municipality || '';
+          const post = d.address.postcode || '';
 
-        if (st && road && !st.value.trim()) st.value = road;
-        if (bg && brgy && !bg.value.trim()) bg.value = brgy;
-        if (ct && city && (!ct.value.trim() || ct.value === 'Ormoc City')) ct.value = city;
-        if (zp && post && (!zp.value.trim() || zp.value === '6541')) zp.value = post;
+          if (st && road && !st.value.trim()) st.value = road;
+          if (bg && brgy && !bg.value.trim()) bg.value = brgy;
+          if (ct && city && (!ct.value.trim() || ct.value === 'Ormoc City')) ct.value = city;
+          if (zp && post && (!zp.value.trim() || zp.value === '6541')) zp.value = post;
+        }
       }
     } catch (e) {}
   }
