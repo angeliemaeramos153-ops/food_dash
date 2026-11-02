@@ -1599,6 +1599,33 @@ a:active,
   border: 1px solid rgba(146, 61, 50, 0.2);
 }
 
+.map-suggestion-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-bottom: 1px solid #f3f4f6;
+  transition: background 0.15s ease;
+}
+.map-suggestion-item:last-child {
+  border-bottom: none;
+}
+.map-suggestion-item:hover {
+  background: #fdf8ee;
+}
+.map-suggestion-item strong {
+  font-size: 11px;
+  color: #1f2937;
+  display: block;
+}
+.map-suggestion-item small {
+  font-size: 9.5px;
+  color: #6b7280;
+  display: block;
+  line-height: 1.3;
+}
+
 .profile{background:white;border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;gap:11px;align-items:center}.profile-pic{width:52px;height:52px;border-radius:50%;background:#eee5c8;display:grid;place-items:center;font-size:22px}.profile strong{font-size:12px}.profile small{font-size:8px;color:var(--muted);display:block}
 .menu{margin-top:10px;border:1px solid var(--line);border-radius:15px;background:#fff;overflow:hidden}.menu a{display:flex;justify-content:space-between;align-items:center;padding:13px;border-bottom:1px solid #f0eadb;text-decoration:none;color:#303429;font-size:9px}.menu a:last-child{border:0}.menu i{color:var(--olive);margin-right:8px}
 
@@ -3220,7 +3247,42 @@ a:active,
       <button class="fd-modal-close" onclick="closeAddressPromptModal()">&times;</button>
     </div>
     <div style="font-size: 9.5px; color: var(--muted); margin-bottom: 8px; line-height: 1.4;">
-      Drag the pin to your exact delivery location or use your live location.
+      Search your street, subdivision, or village, or drag the pin to your exact delivery location.
+    </div>
+
+    <!-- OpenStreetMap Nominatim Search / Autocomplete Geocoder -->
+    <div class="map-search-wrapper" style="position:relative; margin-bottom:10px;">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <div style="position:relative; flex:1;">
+          <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:11px; color:#8c7b64; pointer-events:none;"></i>
+          <input type="text" 
+                 id="modalMapSearchInput" 
+                 class="delivery-textarea" 
+                 placeholder="Search street, subdivision, village (e.g. Alta Vista, Ormoc)..." 
+                 style="height:36px; padding:6px 28px 6px 30px; font-size:11px; border-radius:8px; width:100%; box-sizing:border-box;"
+                 autocomplete="off"
+                 oninput="handleMapSearchInput(this.value)"
+                 onkeydown="handleMapSearchKeydown(event)">
+          <button type="button" 
+                  id="modalMapSearchClear" 
+                  onclick="clearMapSearch()" 
+                  style="display:none; position:absolute; right:8px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:#9ca3af; font-size:13px; cursor:pointer; padding:2px; line-height:1;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <button type="button" 
+                class="btn-fd-primary" 
+                id="modalMapSearchBtn" 
+                onclick="executeMapSearch()" 
+                style="height:36px; padding:0 12px; font-size:11px; border-radius:8px; white-space:nowrap; display:inline-flex; align-items:center; gap:5px; margin:0; flex-shrink:0;">
+          <i class="fa-solid fa-search"></i> Search
+        </button>
+      </div>
+
+      <!-- Live Autocomplete Suggestions Dropdown -->
+      <div id="mapSearchResults" 
+           style="display:none; position:absolute; top:40px; left:0; right:0; background:#ffffff; border:1px solid #d8cbb5; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.16); max-height:210px; overflow-y:auto; z-index:99999;">
+      </div>
     </div>
 
     <!-- Mini Leaflet Map Container -->
@@ -4579,6 +4641,273 @@ async function geocodeAddressNominatim(query) {
     return null;
 }
 
+// Local Ormoc City subdivisions, villages, and landmarks directory for instant zero-latency lookup
+const ORMOC_LOCAL_LANDMARKS = [
+    { name: 'Alta Vista', desc: 'Alta Vista, Ormoc, Leyte', lat: 11.0118026, lon: 124.6203237 },
+    { name: 'Western Leyte College (WLC)', desc: 'A. Bonifacio St, Barangay Cogon, Ormoc City', lat: 11.0076, lon: 124.6089 },
+    { name: 'Don Felipe Subdivision', desc: 'Barangay Don Felipe Larrazabal, Ormoc City', lat: 11.0120, lon: 124.6150 },
+    { name: 'Cogon Combado', desc: 'Combado / Cogon, Ormoc City, Leyte', lat: 11.0185, lon: 124.6062 },
+    { name: 'Barangay Cogon', desc: 'Cogon, Ormoc City, Leyte', lat: 11.0233014, lon: 124.6040868 },
+    { name: 'Batuan', desc: 'Barangay Batuan, Ormoc City, Leyte', lat: 11.0185, lon: 124.6062 },
+    { name: 'Lilia Subdivision', desc: 'Lilia, Cogon, Ormoc City, Leyte', lat: 11.0185, lon: 124.6062 },
+    { name: 'Linao', desc: 'Barangay Linao, Ormoc City, Leyte', lat: 11.0159798, lon: 124.5908042 },
+    { name: 'Punta', desc: 'Barangay Punta, Ormoc City, Leyte', lat: 11.0092018, lon: 124.6003072 },
+    { name: 'San Pedro', desc: 'Barangay San Pedro, Ormoc City, Leyte', lat: 11.0057362, lon: 124.6108008 },
+    { name: 'Valencia', desc: 'Barangay Valencia, Ormoc City, Leyte', lat: 11.1071389, lon: 124.5782215 },
+    { name: 'Camp Downes', desc: 'Camp Downes, Ormoc City, Leyte', lat: 10.9966183, lon: 124.6182589 },
+    { name: 'Bantigue', desc: 'Barangay Bantigue, Ormoc City, Leyte', lat: 10.9895862, lon: 124.6222361 },
+    { name: 'Tambulilid', desc: 'Barangay Tambulilid, Ormoc City, Leyte', lat: 11.0231637, lon: 124.5846183 },
+    { name: 'Can-Adieng', desc: 'Barangay Can-Adieng, Ormoc City, Leyte', lat: 11.0025430, lon: 124.6139237 },
+    { name: 'Ipil', desc: 'Barangay Ipil, Ormoc City, Leyte', lat: 10.9754111, lon: 124.6331304 },
+    { name: 'Alegria', desc: 'Barangay Alegria, Ormoc City, Leyte', lat: 11.0055905, lon: 124.6038316 },
+    { name: 'San Pablo', desc: 'Barangay San Pablo, Ormoc City, Leyte', lat: 11.0150, lon: 124.6050 },
+    { name: 'Naungan', desc: 'Barangay Naungan, Ormoc City, Leyte', lat: 10.9980, lon: 124.5820 },
+    { name: 'Dolores', desc: 'Barangay Dolores, Ormoc City, Leyte', lat: 11.0800, lon: 124.6300 },
+    { name: 'Ormoc City Hall / Plaza', desc: 'Ormoc City Central, Leyte', lat: 11.0090349, lon: 124.6093940 }
+];
+
+let mapSearchDebounceTimer = null;
+let mapSearchAbortController = null;
+let currentMapSearchResults = [];
+
+function handleMapSearchInput(value) {
+    const clearBtn = document.getElementById('modalMapSearchClear');
+    const resultsContainer = document.getElementById('mapSearchResults');
+    const query = (value || '').trim();
+
+    if (clearBtn) {
+        clearBtn.style.display = query ? 'block' : 'none';
+    }
+
+    if (!query || query.length < 2) {
+        if (resultsContainer) resultsContainer.style.display = 'none';
+        currentMapSearchResults = [];
+        return;
+    }
+
+    clearTimeout(mapSearchDebounceTimer);
+    mapSearchDebounceTimer = setTimeout(() => {
+        searchNominatimAddresses(query);
+    }, 280);
+}
+
+function handleMapSearchKeydown(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        executeMapSearch();
+    } else if (event.key === 'Escape') {
+        const resultsContainer = document.getElementById('mapSearchResults');
+        if (resultsContainer) resultsContainer.style.display = 'none';
+    }
+}
+
+function clearMapSearch() {
+    const input = document.getElementById('modalMapSearchInput');
+    const clearBtn = document.getElementById('modalMapSearchClear');
+    const resultsContainer = document.getElementById('mapSearchResults');
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+    if (clearBtn) clearBtn.style.display = 'none';
+    if (resultsContainer) resultsContainer.style.display = 'none';
+    currentMapSearchResults = [];
+}
+
+async function searchNominatimAddresses(query) {
+    const resultsContainer = document.getElementById('mapSearchResults');
+    if (!resultsContainer) return;
+
+    resultsContainer.style.display = 'block';
+    resultsContainer.innerHTML = '<div style="padding:10px 12px; font-size:11px; color:#6b7280; display:flex; align-items:center; gap:8px;"><i class="fa-solid fa-spinner fa-spin" style="color:var(--harvest-sun)"></i> Searching OpenStreetMap...</div>';
+
+    if (mapSearchAbortController) {
+        try { mapSearchAbortController.abort(); } catch(e) {}
+    }
+    mapSearchAbortController = new AbortController();
+    const signal = mapSearchAbortController.signal;
+
+    const norm = query.toLowerCase();
+    const localMatches = ORMOC_LOCAL_LANDMARKS.filter(item => 
+        item.name.toLowerCase().includes(norm) || item.desc.toLowerCase().includes(norm)
+    ).map(item => ({
+        lat: item.lat,
+        lon: item.lon,
+        name: item.name,
+        display_name: item.desc,
+        is_local: true
+    }));
+
+    const cleanQ = query.trim();
+    const augmentedQuery = (!norm.includes('ormoc') && !norm.includes('leyte')) ? `${cleanQ}, Ormoc City, Leyte` : cleanQ;
+
+    try {
+        const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&q=' + encodeURIComponent(augmentedQuery);
+        const res = await fetch(url, {
+            headers: { 'Accept': 'application/json' },
+            signal: signal
+        });
+
+        let osmItems = [];
+        if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                osmItems = data.map(d => {
+                    const addr = d.address || {};
+                    const title = d.name || addr.village || addr.suburb || addr.road || addr.neighbourhood || d.display_name.split(',')[0];
+                    return {
+                        lat: parseFloat(d.lat),
+                        lon: parseFloat(d.lon),
+                        name: title,
+                        display_name: d.display_name,
+                        is_local: false
+                    };
+                });
+            }
+        }
+
+        // Combine local fast matches and OSM items, removing duplicate coordinate locations
+        const combined = [];
+        const seenCoords = new Set();
+
+        [...localMatches, ...osmItems].forEach(item => {
+            const key = item.lat.toFixed(4) + '_' + item.lon.toFixed(4);
+            if (!seenCoords.has(key)) {
+                seenCoords.add(key);
+                combined.push(item);
+            }
+        });
+
+        currentMapSearchResults = combined;
+
+        if (!combined.length) {
+            resultsContainer.innerHTML = '<div style="padding:10px 12px; font-size:10.5px; color:#6b7280; text-align:center;"><i class="fa-regular fa-circle-question" style="color:var(--harvest-sun)"></i> No exact street or subdivision found. You can drag the pin on the map.</div>';
+            return;
+        }
+
+        let html = '';
+        combined.forEach((item, index) => {
+            const safeName = item.name.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const safeDesc = item.display_name.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            html += `
+                <div class="map-suggestion-item" data-index="${index}" onclick="selectMapSearchResult(${item.lat}, ${item.lon}, decodeURIComponent('${encodeURIComponent(item.display_name)}'), decodeURIComponent('${encodeURIComponent(item.name)}'))">
+                    <i class="fa-solid fa-location-dot" style="color:var(--harvest-sun); font-size:13px; margin-top:2px;"></i>
+                    <div style="flex:1; overflow:hidden;">
+                        <strong>${safeName} ${item.is_local ? '<span style="font-size:8.5px; font-weight:700; color:#15803d; background:#dcfce7; padding:1px 5px; border-radius:4px; margin-left:4px;">Verified Local</span>' : ''}</strong>
+                        <small style="text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${safeDesc}</small>
+                    </div>
+                </div>
+            `;
+        });
+        resultsContainer.innerHTML = html;
+    } catch(err) {
+        if (err.name === 'AbortError') return;
+        console.warn('Nominatim geocoder error:', err);
+        if (localMatches.length) {
+            currentMapSearchResults = localMatches;
+            let html = '';
+            localMatches.forEach((item, index) => {
+                const safeName = item.name.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                const safeDesc = item.display_name.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                html += `
+                    <div class="map-suggestion-item" data-index="${index}" onclick="selectMapSearchResult(${item.lat}, ${item.lon}, decodeURIComponent('${encodeURIComponent(item.display_name)}'), decodeURIComponent('${encodeURIComponent(item.name)}'))">
+                        <i class="fa-solid fa-location-dot" style="color:var(--harvest-sun); font-size:13px; margin-top:2px;"></i>
+                        <div style="flex:1; overflow:hidden;">
+                            <strong>${safeName} <span style="font-size:8.5px; font-weight:700; color:#15803d; background:#dcfce7; padding:1px 5px; border-radius:4px; margin-left:4px;">Verified Local</span></strong>
+                            <small>${safeDesc}</small>
+                        </div>
+                    </div>
+                `;
+            });
+            resultsContainer.innerHTML = html;
+        } else {
+            resultsContainer.innerHTML = '<div style="padding:10px 12px; font-size:10.5px; color:#ef4444; text-align:center;"><i class="fa-solid fa-triangle-exclamation"></i> Search network error. Please drag the pin on the map.</div>';
+        }
+    }
+}
+
+function selectMapSearchResult(lat, lon, displayName, name) {
+    const input = document.getElementById('modalMapSearchInput');
+    const resultsContainer = document.getElementById('mapSearchResults');
+    const mainAddr = document.getElementById('deliveryAddressInput');
+    const modalAddr = document.getElementById('modalDeliveryAddress');
+
+    if (input) input.value = name || displayName;
+    if (resultsContainer) resultsContainer.style.display = 'none';
+
+    const activeMap = checkoutMap || (typeof map !== 'undefined' ? map : null);
+    const activeMarker = checkoutMarker || (typeof marker !== 'undefined' ? marker : null);
+
+    if (activeMap) {
+        activeMap.setView([lat, lon], 17);
+        setTimeout(() => { if (activeMap) activeMap.invalidateSize(); }, 150);
+    }
+    if (activeMarker) {
+        activeMarker.setLatLng([lat, lon]);
+    }
+
+    setDeliveryCoordinates(lat, lon, 'nominatim');
+
+    const formatted = displayName || name;
+    if (modalAddr) modalAddr.value = formatted;
+    if (mainAddr) mainAddr.value = formatted;
+    lastGeocodedAddress = formatted.toLowerCase();
+    localStorage.setItem('foodDashDeliveryAddress', formatted);
+
+    const pill = document.getElementById('modalGpsStatus');
+    if (pill) {
+        pill.style.display = 'flex';
+        pill.className = 'gps-status-pill success';
+        pill.innerHTML = `<i class="fa-solid fa-circle-check"></i> Searched Location: ${lat.toFixed(5)}, ${lon.toFixed(5)} • ${name}`;
+    }
+
+    toast(`Location pinned to ${name}!`);
+}
+
+async function executeMapSearch() {
+    const input = document.getElementById('modalMapSearchInput');
+    const query = (input ? input.value : '').trim();
+    if (!query) {
+        toast('Please enter a street, subdivision, or landmark to search');
+        if (input) input.focus();
+        return;
+    }
+
+    if (currentMapSearchResults && currentMapSearchResults.length > 0) {
+        const top = currentMapSearchResults[0];
+        selectMapSearchResult(top.lat, top.lon, top.display_name, top.name);
+        return;
+    }
+
+    const btn = document.getElementById('modalMapSearchBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    }
+
+    try {
+        await searchNominatimAddresses(query);
+        if (currentMapSearchResults && currentMapSearchResults.length > 0) {
+            const top = currentMapSearchResults[0];
+            selectMapSearchResult(top.lat, top.lon, top.display_name, top.name);
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-search"></i> Search';
+        }
+    }
+}
+
+// Close suggestions dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    const wrapper = document.querySelector('.map-search-wrapper');
+    const results = document.getElementById('mapSearchResults');
+    if (results && wrapper && !wrapper.contains(e.target)) {
+        results.style.display = 'none';
+    }
+});
+
 // Handle typing in delivery address inputs with debounced geocoding
 function handleAddressTyping(value, isModal = false) {
     const address = (value || '').trim();
@@ -5022,6 +5351,15 @@ function openAddressPromptModal() {
     // Initialize or refresh the interactive Leaflet map pin picker
     initCheckoutMap();
     setupAddressInputListeners();
+
+    const searchInput = document.getElementById('modalMapSearchInput');
+    const clearBtn = document.getElementById('modalMapSearchClear');
+    const resultsContainer = document.getElementById('mapSearchResults');
+    if (resultsContainer) resultsContainer.style.display = 'none';
+    if (searchInput && modalAddr && modalAddr.value.trim()) {
+        searchInput.value = modalAddr.value.trim();
+        if (clearBtn) clearBtn.style.display = 'block';
+    }
 
     if (modalAddr) modalAddr.focus();
 }
