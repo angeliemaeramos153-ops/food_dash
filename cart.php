@@ -21,13 +21,14 @@ if (!$user_id) {
 
 $customer_name = $_SESSION['full_name'] ?? $_SESSION['username'] ?? '';
 $customer_phone = $_SESSION['phone'] ?? '';
-$default_address = $_SESSION['address'] ?? '';
-$default_lat = isset($_SESSION['id']) ? (float)$_SESSION['id'] : null;
-$default_lng = isset($_SESSION['delivery_lng']) ? (float)$_SESSION['delivery_lng'] : null;
+// Delivery address and coords start completely blank on page load per user requirement
+$default_address = '';
+$default_lat = null;
+$default_lng = null;
 
 if ($user_id) {
     try {
-        $u_stmt = $conn->prepare("SELECT user_id, username, full_name, email, phone, address, default_address, lat, lng FROM users WHERE user_id = :uid LIMIT 1");
+        $u_stmt = $conn->prepare("SELECT user_id, username, full_name, email, phone FROM users WHERE user_id = :uid LIMIT 1");
         $u_stmt->execute([':uid' => $user_id]);
         $user_row = $u_stmt->fetch(PDO::FETCH_ASSOC);
         if ($user_row) {
@@ -37,25 +38,14 @@ if ($user_id) {
             if (empty($customer_phone) && !empty($user_row['phone'])) {
                 $customer_phone = $user_row['phone'];
             }
-            if (empty($default_address)) {
-                $default_address = $user_row['default_address'] ?? $user_row['address'] ?? '';
-            }
-            if ($default_lat === null && !empty($user_row['lat'])) {
-                $default_lat = (float)$user_row['lat'];
-            }
-            if ($default_lng === null && !empty($user_row['lng'])) {
-                $default_lng = (float)$user_row['lng'];
-            }
         }
     } catch (Throwable $e) {}
 }
 
-// Address and coords start completely empty for fresh user accounts
-if (empty($default_address) || stripos($default_address, 'western leyte') !== false) {
-    $default_address = '';
-    $default_lat = null;
-    $default_lng = null;
-}
+// Delivery address input field starts completely blank on page load (zero automatic startup geolocation)
+$default_address = '';
+$default_lat = null;
+$default_lng = null;
 
 // 2. Dynamic Financial Calculations: Compute subtotal, delivery fee, and grand total dynamically from the actual active cart
 $cart_items = [];
@@ -88,6 +78,8 @@ $grand_total = $subtotal + $delivery_fee;
   <title>Checkout - Food Dash</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
     :root {
@@ -538,11 +530,11 @@ $grand_total = $subtotal + $delivery_fee;
     <input type="text" style="display:none;" name="total" id="total" value="<?= htmlspecialchars((string)$grand_total) ?>">
     <input type="text" style="display:none;" name="subtotal" id="subtotal" value="<?= htmlspecialchars((string)$subtotal) ?>">
     <input type="text" style="display:none;" name="delivery_fee" id="delivery_fee" value="<?= htmlspecialchars((string)$delivery_fee) ?>">
-    <input type="text" style="display:none;" name="delivery_lat_lng" id="delivery_lat_lng" value="<?= htmlspecialchars("{$default_lat}, {$default_lng}") ?>">
-    <input type="text" style="display:none;" name="delivery_lat" id="delivery_lat" value="<?= htmlspecialchars((string)$default_lat) ?>">
-    <input type="text" style="display:none;" name="delivery_lng" id="delivery_lng" value="<?= htmlspecialchars((string)$default_lng) ?>">
-    <input type="text" style="display:none;" name="customer_lat" id="customer_lat" value="<?= htmlspecialchars((string)$default_lat) ?>">
-    <input type="text" style="display:none;" name="customer_lng" id="customer_lng" value="<?= htmlspecialchars((string)$default_lng) ?>">
+    <input type="text" style="display:none;" name="delivery_lat_lng" id="delivery_lat_lng" value="<?= htmlspecialchars($default_lat && $default_lng ? "{$default_lat}, {$default_lng}" : '') ?>">
+    <input type="text" style="display:none;" name="delivery_lat" id="delivery_lat" value="<?= htmlspecialchars($default_lat !== null ? (string)$default_lat : '') ?>">
+    <input type="text" style="display:none;" name="delivery_lng" id="delivery_lng" value="<?= htmlspecialchars($default_lng !== null ? (string)$default_lng : '') ?>">
+    <input type="text" style="display:none;" name="customer_lat" id="customer_lat" value="<?= htmlspecialchars($default_lat !== null ? (string)$default_lat : '') ?>">
+    <input type="text" style="display:none;" name="customer_lng" id="customer_lng" value="<?= htmlspecialchars($default_lng !== null ? (string)$default_lng : '') ?>">
     <input type="text" style="display:none;" name="cart" id="cart_json_input" value="<?= htmlspecialchars(json_encode(!empty($cart_items) ? $cart_items : [])) ?>">
     <input type="text" style="display:none;" name="payment_method_val" id="selectedPaymentMethod" value="gcash">
     <input type="text" style="display:none;" name="payment_method" id="formPaymentMethod" value="gcash">
@@ -592,13 +584,18 @@ $grand_total = $subtotal + $delivery_fee;
 
     <!-- Delivery Destination Card -->
     <div class="checkout-card">
-      <div class="card-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div>
-      <textarea id="delivery_address" name="delivery_address" class="address-textarea" placeholder="Enter complete address (e.g., Purok 3, House No., Street, Barangay, Landmark)" oninput="var s=document.getElementById('deliveryAddressInput'); if(s) s.value=this.value;"></textarea>
+      <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span><i class="fa-solid fa-location-dot"></i> Delivery Address</span>
+        <button type="button" class="btn-map-helper" onclick="openCartMapModal()" style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:8px; padding:5px 12px; font-size:11.5px; font-weight:600; color:var(--olive-dark); cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all 0.2s;">
+          <i class="fa-solid fa-map-location-dot" style="color:var(--harvest-sun);"></i> Pin on Map
+        </button>
+      </div>
+      <textarea id="delivery_address" name="delivery_address" class="address-textarea" placeholder="Enter complete address (e.g., Purok 3, House No., Street, Barangay, Landmark)" oninput="handleCartAddressTyping(this.value)"></textarea>
       <textarea id="deliveryAddressInput" name="address" style="display:none;"></textarea>
       
-      <div class="coords-badge">
+      <div class="coords-badge" id="coordsBadge" style="cursor:pointer;" onclick="openCartMapModal()">
         <i class="fa-solid fa-circle-check"></i>
-        <span>Exact Live GPS Pin: <b id="coordsDisplay"><?= htmlspecialchars($default_lat && $default_lng ? "{$default_lat}, {$default_lng}" : "Not set (Optional - Pin on Map)") ?></b></span>
+        <span>Coordinates: <b id="coordsDisplay"><?= htmlspecialchars($default_lat && $default_lng ? "{$default_lat}, {$default_lng}" : "Not set (Optional - Pin on Map)") ?></b></span>
       </div>
     </div>
 
@@ -838,6 +835,57 @@ $grand_total = $subtotal + $delivery_fee;
 </div>
 
 <!-- ============================================== -->
+<!-- 4. OPTIONAL MAP HELPER MODAL (ALTA VISTA, ORMOC CITY) -->
+<!-- ============================================== -->
+<div class="sim-modal" id="cartMapModal" style="display:none;" onclick="if(event.target===this)closeCartMapModal()">
+  <div class="sim-sheet" style="background:#ffffff; max-height:94vh;">
+    <div class="sim-sheet-header" style="background:var(--olive-dark); color:#ffffff; padding:14px 20px;">
+      <div class="sheet-grabber" style="background:rgba(255,255,255,0.4); margin:0 auto 8px auto;"></div>
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:8px; font-size:15px; font-weight:700;">
+          <i class="fa-solid fa-map-location-dot" style="color:var(--harvest-sun);"></i>
+          <span>Pin Location on Map</span>
+        </div>
+        <button type="button" onclick="closeCartMapModal()" style="background:transparent; border:none; color:#ffffff; font-size:22px; line-height:1; cursor:pointer;">&times;</button>
+      </div>
+    </div>
+    <div class="sim-sheet-body" style="background:#ffffff; padding:16px;">
+      <!-- Search bar for Ormoc City landmarks & streets -->
+      <div style="position:relative; margin-bottom:10px;">
+        <div style="display:flex; gap:6px;">
+          <div style="position:relative; flex:1;">
+            <i class="fa-solid fa-search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#9ca3af; font-size:12px;"></i>
+            <input type="text" id="cartMapSearchInput" placeholder="Search street, subdivision, village (e.g. Alta Vista, Ormoc)..." style="width:100%; height:38px; border-radius:10px; border:1.5px solid var(--line); padding:6px 28px 6px 30px; font-size:12px; font-family:inherit; outline:none; box-sizing:border-box;" oninput="handleCartMapSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();executeCartMapSearch();}">
+            <button type="button" id="cartMapSearchClear" onclick="clearCartMapSearch()" style="display:none; position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:none; color:#9ca3af; font-size:14px; cursor:pointer; padding:2px;">&times;</button>
+          </div>
+          <button type="button" onclick="executeCartMapSearch()" id="btnCartMapSearch" style="background:var(--olive); color:#ffffff; border:none; border-radius:10px; padding:0 14px; font-size:12px; font-weight:600; cursor:pointer; flex-shrink:0;">Search</button>
+        </div>
+        <div id="cartMapSearchResults" style="display:none; position:absolute; top:42px; left:0; right:0; background:#ffffff; border:1px solid #d8cbb5; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.16); max-height:180px; overflow-y:auto; z-index:99999;"></div>
+      </div>
+
+      <!-- Mini Leaflet Map (Centered around Alta Vista, Ormoc City) -->
+      <div id="cartMapContainer" style="height:210px; width:100%; border-radius:12px; border:1px solid var(--line); margin-bottom:12px;"></div>
+
+      <!-- Address Input (Populated with general area, allowing user to supplement specific local Purok) -->
+      <div style="margin-bottom:12px;">
+        <label style="display:block; font-size:11px; font-weight:700; color:var(--olive-dark); margin-bottom:4px;">
+          <i class="fa-solid fa-pen" style="color:var(--harvest-sun);"></i> Delivery Address (supplement with your local Purok details):
+        </label>
+        <textarea id="cartModalAddressInput" class="address-textarea" placeholder="Enter complete address (e.g. Purok 3, Near Chapel, Alta Vista, Ormoc City)" style="min-height:60px; font-size:12px;" oninput="window._cartUserHasTypedAddress=true;"></textarea>
+        <div id="cartModalCoordsStatus" class="coords-badge" style="margin-top:6px; display:none;">
+          <i class="fa-solid fa-circle-check"></i>
+          <span id="cartModalCoordsText">Pinned: 11.0134, 124.6199</span>
+        </div>
+      </div>
+
+      <button type="button" class="btn-submit-order checkout-btn" onclick="confirmCartMapLocation()" style="background:var(--olive); color:#ffffff; margin-top:0;">
+        <i class="fa-solid fa-check"></i> Use This Location
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================== -->
 <!-- 100% DYNAMIC JAVASCRIPT CONTROLLER             -->
 <!-- ============================================== -->
 <script>
@@ -916,12 +964,9 @@ function syncCartFromLocalStorage() {
         // Delivery address input starts completely blank on page load per user requirement
         var addrEl = document.getElementById('delivery_address');
         var addrSec = document.getElementById('deliveryAddressInput');
-        if (addrEl && addrSec) {
+        if (addrEl && addrSec && !window._cartUserHasTypedAddress) {
             addrEl.value = '';
             addrSec.value = '';
-            addrEl.addEventListener('input', function() {
-                addrSec.value = this.value;
-            });
         }
     } catch(e) {
         console.error('Cart sync error:', e);
@@ -1284,6 +1329,300 @@ function closeModal(id) {
     if (el) el.style.display = 'none';
 }
 
+// ==============================================
+// OPTIONAL MAP SEARCH & PINNING CONTROLLER (ALTA VISTA, ORMOC CITY)
+// ==============================================
+var CART_ORMOC_LANDMARKS = [
+    { name: 'Alta Vista', desc: 'Alta Vista, Ormoc City, Leyte', lat: 11.0134, lon: 124.6199 },
+    { name: 'Western Leyte College (WLC)', desc: 'A. Bonifacio St, Barangay Cogon, Ormoc City', lat: 11.0076, lon: 124.6089 },
+    { name: 'Don Felipe Subdivision', desc: 'Barangay Don Felipe Larrazabal, Ormoc City', lat: 11.0120, lon: 124.6150 },
+    { name: 'Cogon Combado', desc: 'Combado / Cogon, Ormoc City, Leyte', lat: 11.0185, lon: 124.6062 },
+    { name: 'Barangay Cogon', desc: 'Cogon, Ormoc City, Leyte', lat: 11.0233014, lon: 124.6040868 },
+    { name: 'Batuan', desc: 'Barangay Batuan, Ormoc City, Leyte', lat: 11.0185, lon: 124.6062 },
+    { name: 'Lilia Subdivision', desc: 'Lilia, Cogon, Ormoc City, Leyte', lat: 11.0185, lon: 124.6062 },
+    { name: 'Linao', desc: 'Barangay Linao, Ormoc City, Leyte', lat: 11.0159798, lon: 124.5908042 },
+    { name: 'Punta', desc: 'Barangay Punta, Ormoc City, Leyte', lat: 11.0092018, lon: 124.6003072 },
+    { name: 'San Pedro', desc: 'Barangay San Pedro, Ormoc City, Leyte', lat: 11.0057362, lon: 124.6108008 },
+    { name: 'Valencia', desc: 'Barangay Valencia, Ormoc City, Leyte', lat: 11.1071389, lon: 124.5782215 },
+    { name: 'Camp Downes', desc: 'Camp Downes, Ormoc City, Leyte', lat: 10.9966183, lon: 124.6182589 },
+    { name: 'Bantigue', desc: 'Barangay Bantigue, Ormoc City, Leyte', lat: 10.9895862, lon: 124.6222361 },
+    { name: 'Tambulilid', desc: 'Barangay Tambulilid, Ormoc City, Leyte', lat: 11.0231637, lon: 124.5846183 },
+    { name: 'Can-Adieng', desc: 'Barangay Can-Adieng, Ormoc City, Leyte', lat: 11.0025430, lon: 124.6139237 },
+    { name: 'Ipil', desc: 'Barangay Ipil, Ormoc City, Leyte', lat: 10.9754111, lon: 124.6331304 }
+];
+
+var cartLeafletMap = null;
+var cartLeafletMarker = null;
+var cartPinnedLat = null;
+var cartPinnedLng = null;
+var cartMapDebounceTimer = null;
+var cartMapSearchResults = [];
+window._cartUserHasTypedAddress = false;
+
+function handleCartAddressTyping(value) {
+    window._cartUserHasTypedAddress = true;
+    var val = value || '';
+    var sec = document.getElementById('deliveryAddressInput');
+    if (sec) sec.value = val;
+    var appleDest = document.getElementById('appleModalDest');
+    if (appleDest) appleDest.textContent = val;
+    var walletDest = document.getElementById('walletDest');
+    if (walletDest) walletDest.textContent = val;
+    var codDest = document.getElementById('codDest');
+    if (codDest) codDest.textContent = val;
+}
+
+function openCartMapModal() {
+    var modal = document.getElementById('cartMapModal');
+    if (modal) modal.style.display = 'flex';
+    var mainAddr = document.getElementById('delivery_address');
+    var modalAddr = document.getElementById('cartModalAddressInput');
+    if (mainAddr && modalAddr) {
+        modalAddr.value = mainAddr.value;
+    }
+    initCartMap();
+}
+
+function closeCartMapModal() {
+    var modal = document.getElementById('cartMapModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function initCartMap() {
+    if (typeof L === 'undefined') return;
+    var container = document.getElementById('cartMapContainer');
+    if (!container) return;
+
+    // Centered around Alta Vista, Ormoc City [11.0134, 124.6199]
+    var defaultLat = 11.0134;
+    var defaultLng = 124.6199;
+    var initLat = cartPinnedLat || defaultLat;
+    var initLng = cartPinnedLng || defaultLng;
+
+    if (!cartLeafletMap) {
+        cartLeafletMap = L.map('cartMapContainer').setView([initLat, initLng], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap'
+        }).addTo(cartLeafletMap);
+
+        cartLeafletMarker = L.marker([initLat, initLng], { draggable: true }).addTo(cartLeafletMap);
+        cartLeafletMarker.bindPopup('<b>Delivery Pin</b><br>Drag to your delivery location');
+
+        cartLeafletMarker.on('dragend', function() {
+            var pos = cartLeafletMarker.getLatLng();
+            onCartMapPinMoved(pos.lat, pos.lng);
+        });
+
+        cartLeafletMap.on('click', function(e) {
+            cartLeafletMarker.setLatLng(e.latlng);
+            onCartMapPinMoved(e.latlng.lat, e.latlng.lng);
+        });
+    } else {
+        cartLeafletMap.setView([initLat, initLng], 15);
+        cartLeafletMarker.setLatLng([initLat, initLng]);
+    }
+
+    setTimeout(function() {
+        if (cartLeafletMap) cartLeafletMap.invalidateSize();
+    }, 200);
+}
+
+function onCartMapPinMoved(lat, lng) {
+    cartPinnedLat = lat;
+    cartPinnedLng = lng;
+    var statusEl = document.getElementById('cartModalCoordsStatus');
+    var textEl = document.getElementById('cartModalCoordsText');
+    if (statusEl && textEl) {
+        statusEl.style.display = 'flex';
+        textEl.textContent = 'Pinned: ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
+    }
+    reverseGeocodeCartCoords(lat, lng);
+}
+
+function reverseGeocodeCartCoords(lat, lng) {
+    fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=' + lat + '&lon=' + lng, {
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data) {
+            var area = data.name || (data.address ? (data.address.suburb || data.address.village || data.address.neighbourhood || data.address.road || '') : '') || 'Alta Vista, Ormoc City';
+            if (data.address && data.address.city && !area.includes('Ormoc')) {
+                area += ', ' + data.address.city;
+            }
+            applyCartPinnedArea(area);
+        }
+    })
+    .catch(function() {
+        applyCartPinnedArea('Alta Vista, Ormoc City');
+    });
+}
+
+function applyCartPinnedArea(areaName) {
+    var modalAddr = document.getElementById('cartModalAddressInput');
+    if (!modalAddr) return;
+    var current = modalAddr.value.trim();
+
+    if (!current) {
+        modalAddr.value = areaName;
+        return;
+    }
+
+    // Preserve local Purok details, supplementing with the pinned area
+    var hasPurokOrSpecifics = /\b(purok|prk|sitio|unit|house|lot|blk|block|near|tapad|atbang|gate|corner)\b/i.test(current);
+    if (hasPurokOrSpecifics) {
+        if (!current.toLowerCase().includes(areaName.toLowerCase())) {
+            modalAddr.value = current + ', ' + areaName;
+        }
+    } else if (!current.toLowerCase().includes(areaName.toLowerCase())) {
+        modalAddr.value = current + ', ' + areaName;
+    }
+}
+
+function handleCartMapSearchInput(value) {
+    var query = (value || '').trim();
+    var clearBtn = document.getElementById('cartMapSearchClear');
+    var resultsBox = document.getElementById('cartMapSearchResults');
+    if (clearBtn) clearBtn.style.display = query ? 'block' : 'none';
+
+    if (!query || query.length < 2) {
+        if (resultsBox) resultsBox.style.display = 'none';
+        cartMapSearchResults = [];
+        return;
+    }
+
+    clearTimeout(cartMapDebounceTimer);
+    cartMapDebounceTimer = setTimeout(function() {
+        executeCartMapSearch();
+    }, 280);
+}
+
+function clearCartMapSearch() {
+    var inEl = document.getElementById('cartMapSearchInput');
+    if (inEl) { inEl.value = ''; inEl.focus(); }
+    var clearBtn = document.getElementById('cartMapSearchClear');
+    if (clearBtn) clearBtn.style.display = 'none';
+    var resultsBox = document.getElementById('cartMapSearchResults');
+    if (resultsBox) resultsBox.style.display = 'none';
+    cartMapSearchResults = [];
+}
+
+function executeCartMapSearch() {
+    var inEl = document.getElementById('cartMapSearchInput');
+    var query = (inEl ? inEl.value : '').trim();
+    if (!query) return;
+
+    var resultsBox = document.getElementById('cartMapSearchResults');
+    if (!resultsBox) return;
+
+    var norm = query.toLowerCase();
+    var localMatches = CART_ORMOC_LANDMARKS.filter(function(it) {
+        return it.name.toLowerCase().indexOf(norm) !== -1 || it.desc.toLowerCase().indexOf(norm) !== -1;
+    });
+
+    var html = '';
+    cartMapSearchResults = [];
+
+    localMatches.forEach(function(item) {
+        cartMapSearchResults.push(item);
+        var idx = cartMapSearchResults.length - 1;
+        html += '<div onclick="selectCartSearchResult(' + idx + ')" style="padding:8px 12px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:12px;">' +
+            '<strong style="color:var(--olive-dark); display:block;">' + item.name + '</strong>' +
+            '<small style="color:#6b7280;">' + item.desc + '</small>' +
+            '</div>';
+    });
+
+    if (html) {
+        resultsBox.innerHTML = html;
+        resultsBox.style.display = 'block';
+    }
+
+    var osmQ = (!norm.includes('ormoc') && !norm.includes('leyte')) ? (query + ', Ormoc City, Leyte') : query;
+    fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=4&q=' + encodeURIComponent(osmQ), {
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (Array.isArray(data) && data.length) {
+            data.forEach(function(d) {
+                var lat = parseFloat(d.lat);
+                var lon = parseFloat(d.lon);
+                var item = { name: d.name || d.display_name.split(',')[0], desc: d.display_name, lat: lat, lon: lon };
+                cartMapSearchResults.push(item);
+                var idx = cartMapSearchResults.length - 1;
+                html += '<div onclick="selectCartSearchResult(' + idx + ')" style="padding:8px 12px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:12px;">' +
+                    '<strong style="color:var(--olive-dark); display:block;">' + item.name + '</strong>' +
+                    '<small style="color:#6b7280;">' + item.desc + '</small>' +
+                    '</div>';
+            });
+            resultsBox.innerHTML = html;
+            resultsBox.style.display = 'block';
+        }
+    })
+    .catch(function() {});
+}
+
+function selectCartSearchResult(index) {
+    if (cartMapSearchResults && cartMapSearchResults[index]) {
+        var item = cartMapSearchResults[index];
+        cartPinnedLat = item.lat;
+        cartPinnedLng = item.lon;
+
+        if (cartLeafletMap) {
+            cartLeafletMap.setView([item.lat, item.lon], 16);
+            if (cartLeafletMarker) cartLeafletMarker.setLatLng([item.lat, item.lon]);
+        }
+        var resultsBox = document.getElementById('cartMapSearchResults');
+        if (resultsBox) resultsBox.style.display = 'none';
+
+        var statusEl = document.getElementById('cartModalCoordsStatus');
+        var textEl = document.getElementById('cartModalCoordsText');
+        if (statusEl && textEl) {
+            statusEl.style.display = 'flex';
+            textEl.textContent = 'Pinned: ' + item.lat.toFixed(5) + ', ' + item.lon.toFixed(5);
+        }
+        applyCartPinnedArea(item.name || item.desc);
+    }
+}
+
+function confirmCartMapLocation() {
+    var modalAddr = document.getElementById('cartModalAddressInput');
+    var finalAddress = modalAddr ? modalAddr.value.trim() : '';
+
+    if (!cartPinnedLat || !cartPinnedLng) {
+        cartPinnedLat = 11.0134;
+        cartPinnedLng = 124.6199;
+    }
+    if (!finalAddress) {
+        finalAddress = 'Alta Vista, Ormoc City';
+    }
+
+    var mainAddr = document.getElementById('delivery_address');
+    if (mainAddr) {
+        mainAddr.value = finalAddress;
+        handleCartAddressTyping(finalAddress);
+    }
+
+    var latLngInput = document.getElementById('delivery_lat_lng');
+    if (latLngInput) latLngInput.value = cartPinnedLat + ', ' + cartPinnedLng;
+    var latIn = document.getElementById('delivery_lat');
+    if (latIn) latIn.value = cartPinnedLat;
+    var lngIn = document.getElementById('delivery_lng');
+    if (lngIn) lngIn.value = cartPinnedLng;
+    var cLatIn = document.getElementById('customer_lat');
+    if (cLatIn) cLatIn.value = cartPinnedLat;
+    var cLngIn = document.getElementById('customer_lng');
+    if (cLngIn) cLngIn.value = cartPinnedLng;
+
+    var coordsDisp = document.getElementById('coordsDisplay');
+    if (coordsDisp) {
+        coordsDisp.textContent = cartPinnedLat.toFixed(5) + ', ' + cartPinnedLng.toFixed(5);
+    }
+
+    closeCartMapModal();
+}
+
 // Aliases
 var updatePaymentTheme = selectMethod;
 var setPayment = selectMethod;
@@ -1303,8 +1642,21 @@ window.handleCheckoutClick = openPaymentPopup;
 window.triggerCheckout = openPaymentPopup;
 window.finalizeOrder = finalizeOrder;
 window.dispatchOrderPlacement = finalizeOrder;
+window.openCartMapModal = openCartMapModal;
+window.closeCartMapModal = closeCartMapModal;
+window.handleCartAddressTyping = handleCartAddressTyping;
+window.executeCartMapSearch = executeCartMapSearch;
+window.handleCartMapSearchInput = handleCartMapSearchInput;
+window.clearCartMapSearch = clearCartMapSearch;
+window.selectCartSearchResult = selectCartSearchResult;
+window.confirmCartMapLocation = confirmCartMapLocation;
 
 document.addEventListener('DOMContentLoaded', function() {
+    window._cartUserHasTypedAddress = false;
+    var addrEl = document.getElementById('delivery_address');
+    var addrSec = document.getElementById('deliveryAddressInput');
+    if (addrEl) addrEl.value = '';
+    if (addrSec) addrSec.value = '';
     syncCartFromLocalStorage();
     selectMethod('gcash');
 });

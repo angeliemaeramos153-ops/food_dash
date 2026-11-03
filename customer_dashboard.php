@@ -4418,8 +4418,7 @@ function renderCart(){
 
   // Delivery address input starts completely blank on page load per user requirement
   const addrInput = document.getElementById('deliveryAddressInput');
-  if (addrInput && !addrInput.dataset.initialized) {
-    addrInput.dataset.initialized = 'true';
+  if (addrInput && !addrInput.dataset.userHasTyped) {
     addrInput.value = '';
   }
 }
@@ -5092,6 +5091,10 @@ document.addEventListener('click', function(e) {
 // Handle typing in delivery address inputs: fully editable, unlocked, and free to type Purok/landmarks
 function handleAddressTyping(value, isModal = false) {
     const address = value || '';
+    const mainAddr = document.getElementById('deliveryAddressInput');
+    const modalAddr = document.getElementById('modalDeliveryAddress');
+    if (mainAddr) mainAddr.dataset.userHasTyped = 'true';
+    if (modalAddr) modalAddr.dataset.userHasTyped = 'true';
 
     // Sync other address field seamlessly without locking or interfering with user's typing
     const otherAddr = document.getElementById(isModal ? 'deliveryAddressInput' : 'modalDeliveryAddress');
@@ -5120,8 +5123,6 @@ function handleAddressBlur(value, isModal = false) {
 
 // Helper: Reverse-geocode coordinates to street address with granular parsing (optional helper on pin drag)
 async function reverseGeocodeToAddress(lat, lng) {
-    const mainAddr = document.getElementById('deliveryAddressInput');
-    const modalAddr = document.getElementById('modalDeliveryAddress');
     try {
         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=${lat}&lon=${lng}`, {
             headers: { 'Accept': 'application/json' }
@@ -5131,15 +5132,7 @@ async function reverseGeocodeToAddress(lat, lng) {
             if (data) {
                 const parsed = parseGranularAddressComponents(data);
                 const formatted = (parsed && parsed.formatted) ? parsed.formatted : data.display_name;
-                const currentVal = ((modalAddr ? modalAddr.value : '') || (mainAddr ? mainAddr.value : '')).trim();
-
-                // Only update address text if current value is empty or generic GPS placeholder
-                if (!currentVal || currentVal.startsWith('GPS Location') || currentVal.startsWith('Pinned Location') || currentVal.startsWith('Approximate') || currentVal.startsWith('Network Location')) {
-                    if (modalAddr) modalAddr.value = formatted;
-                    if (mainAddr) mainAddr.value = formatted;
-                    lastGeocodedAddress = formatted.toLowerCase();
-                    localStorage.setItem('foodDashDeliveryAddress', formatted);
-                }
+                applyPinnedAddressToInputs(formatted, data.name || '');
 
                 // Sync granular address form fields if present in DOM
                 if (parsed) {
@@ -5515,20 +5508,10 @@ function detectCustomerGps(isModal = false) {
     useMyExactLocation();
 }
 
-// Automatic check on dashboard load: if user allows geolocation, grab live GPS pin
+// Geolocation only triggers on-demand when user explicitly clicks 'Locate Me' or 'Pin on Map'.
+// Automatic IP/GPS geolocation on startup is strictly disabled per requirement.
 function requestLiveGpsIfAllowed() {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            const lat = position.coords.latitude || position.coords.lat;
-            const lng = position.coords.longitude || position.coords.lng;
-            setDeliveryCoordinates(lat, lng, 'gps');
-        },
-        (error) => {
-            console.log('Live GPS auto-check:', error.message);
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
-    );
+    // Disabled on startup. Geolocation runs solely on user interaction.
 }
 
 function openAddressPromptModal() {
@@ -6672,10 +6655,39 @@ setInterval(loadNotifications, 6000);
 // Auto-request live location if allowed by browser
 // Geolocation only runs on-demand when user clicks 'Locate Me' or 'Pin on Map'
 
+// Ensure delivery address input starts completely blank on page load and remove any automatic startup geolocation
+function resetDeliveryAddressOnLoad() {
+    const mainAddr = document.getElementById('deliveryAddressInput');
+    const modalAddr = document.getElementById('modalDeliveryAddress');
+    if (mainAddr) {
+        mainAddr.value = '';
+        delete mainAddr.dataset.userHasTyped;
+    }
+    if (modalAddr) {
+        modalAddr.value = '';
+        delete modalAddr.dataset.userHasTyped;
+    }
+
+    const latFieldIds = ['id', 'delivery_lat', 'delivery_lng', 'deliveryLatInput', 'deliveryLngInput', 'modal_delivery_lat', 'modal_delivery_lng', 'modalDeliveryLat', 'modalDeliveryLng'];
+    latFieldIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+
+    const gpsPill = document.getElementById('gpsLocationStatus');
+    if (gpsPill) gpsPill.style.display = 'none';
+    const modalPill = document.getElementById('modalGpsStatus');
+    if (modalPill) modalPill.style.display = 'none';
+}
+
 // Wire up typing and blur/change geocoding events for delivery address inputs (no duplicate attachments)
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupAddressInputListeners);
+    document.addEventListener('DOMContentLoaded', () => {
+        resetDeliveryAddressOnLoad();
+        setupAddressInputListeners();
+    });
 } else {
+    resetDeliveryAddressOnLoad();
     setupAddressInputListeners();
 }
 
