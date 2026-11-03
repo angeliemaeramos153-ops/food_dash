@@ -5280,78 +5280,20 @@ function initCheckoutMap() {
     }, 250);
 }
 
-// Dynamic IP Geolocation Fallback (for HTTP / non-secure LAN IP contexts and GPS denial)
+// Default location fallback strictly centered on Alta Vista, Ormoc City (no network IP lookup that resolves to Tanjay)
 async function fetchApproximateIpLocation() {
-    // 1. Primary endpoint: ipapi.co (high accuracy, CORS enabled)
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
-        const res = await fetch('https://ipapi.co/json/', {
-            signal: controller.signal,
-            headers: { 'Accept': 'application/json' }
-        });
-        clearTimeout(timeoutId);
-        if (res.ok) {
-            const data = await res.json();
-            const lat = parseFloat(data.latitude);
-            const lng = parseFloat(data.longitude);
-            if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
-                const parts = [];
-                if (data.city) parts.push(data.city);
-                if (data.region) parts.push(data.region);
-                if (data.country_name || data.country) parts.push(data.country_name || data.country);
-                return {
-                    lat: lat,
-                    lng: lng,
-                    city: data.city || '',
-                    region: data.region || '',
-                    postal: data.postal || '',
-                    label: parts.join(', ') || 'Approximate Network Location',
-                    source: 'ipapi.co'
-                };
-            }
-        }
-    } catch (e) {
-        console.warn('ipapi.co IP geolocation failed, attempting secondary provider:', e);
-    }
-
-    // 2. Secondary fallback: geojs.io (open access, CORS enabled)
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
-        const res = await fetch('https://get.geojs.io/v1/ip/geo.json', {
-            signal: controller.signal,
-            headers: { 'Accept': 'application/json' }
-        });
-        clearTimeout(timeoutId);
-        if (res.ok) {
-            const data = await res.json();
-            const lat = parseFloat(data.latitude);
-            const lng = parseFloat(data.longitude);
-            if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
-                const parts = [];
-                if (data.city) parts.push(data.city);
-                if (data.region) parts.push(data.region);
-                if (data.country) parts.push(data.country);
-                return {
-                    lat: lat,
-                    lng: lng,
-                    city: data.city || '',
-                    region: data.region || '',
-                    postal: data.postal_code || '',
-                    label: parts.join(', ') || 'Approximate Network Location',
-                    source: 'geojs.io'
-                };
-            }
-        }
-    } catch (e) {
-        console.warn('geojs.io IP geolocation fallback failed:', e);
-    }
-
-    return null;
+    return {
+        lat: 11.0134,
+        lng: 124.6199,
+        city: 'Ormoc City',
+        region: 'Leyte',
+        postal: '6541',
+        label: 'Alta Vista, Ormoc City',
+        source: 'ormoc_alta_vista'
+    };
 }
 
-// "Use My Exact Location" / "Locate Me" Button Action with seamless dynamic IP fallback
+// "Use My Exact Location" / "Locate Me" Button Action
 async function useMyExactLocation() {
     if (window._isLocatingGps) return;
     window._isLocatingGps = true;
@@ -5390,40 +5332,21 @@ async function useMyExactLocation() {
     setStatusPill('loading', '<i class="fa-solid fa-satellite-dish fa-spin"></i> Detecting location via device GPS...');
 
     async function handleIpFallback(reasonMsg) {
-        setStatusPill('loading', '<i class="fa-solid fa-tower-broadcast fa-spin"></i> ' + (reasonMsg ? reasonMsg + ' ' : '') + 'Estimating location via network IP...');
-        const ipLocation = await fetchApproximateIpLocation();
-        if (ipLocation) {
-            const lat = ipLocation.lat;
-            const lng = ipLocation.lng;
+        const lat = 11.0134;
+        const lng = 124.6199;
 
-            if (checkoutMap) {
-                checkoutMap.setView([lat, lng], 15);
-            }
-            if (checkoutMarker) {
-                checkoutMarker.setLatLng([lat, lng]);
-            }
-
-            setDeliveryCoordinates(lat, lng, 'ip');
-
-            // Attempt reverse geocoding to street address; fallback to IP label if no street address returned
-            await reverseGeocodeToAddress(lat, lng);
-            const mainAddr = document.getElementById('deliveryAddressInput');
-            const modalAddr = document.getElementById('modalDeliveryAddress');
-            const currVal = ((modalAddr ? modalAddr.value : '') || (mainAddr ? mainAddr.value : '')).trim();
-            if (!currVal || currVal.startsWith('GPS Location') || currVal.startsWith('Pinned Location') || currVal.startsWith('Approximate')) {
-                if (ipLocation.label) {
-                    if (modalAddr) modalAddr.value = ipLocation.label;
-                    if (mainAddr) mainAddr.value = ipLocation.label;
-                    localStorage.setItem('foodDashDeliveryAddress', ipLocation.label);
-                }
-            }
-
-            toast('Estimated location via network IP' + (ipLocation.city ? ' (' + ipLocation.city + ')' : '') + '! Drag pin on map to refine.', 'info');
-        } else {
-            const finalErr = 'Could not detect location automatically. Please drag or tap on the map to pin your address.';
-            setStatusPill('error', '<i class="fa-solid fa-triangle-exclamation"></i> ' + finalErr);
-            toast(finalErr, 'warning');
+        if (checkoutMap) {
+            checkoutMap.setView([lat, lng], 15);
         }
+        if (checkoutMarker) {
+            checkoutMarker.setLatLng([lat, lng]);
+        }
+
+        setDeliveryCoordinates(lat, lng, 'manual');
+        await reverseGeocodeToAddress(lat, lng);
+
+        setStatusPill('info', '<i class="fa-solid fa-map-pin"></i> Alta Vista, Ormoc City');
+        toast((reasonMsg ? reasonMsg + ' ' : '') + 'Centered strictly on Alta Vista, Ormoc City. Drag pin to adjust.', 'info');
     }
 
     // Check if browser supports Geolocation API
@@ -6383,13 +6306,8 @@ async function useLocationForNewAddress() {
   }
 
   async function fallbackToIp() {
-    toast('GPS restricted or unavailable. Estimating via IP...', 'info');
-    const ip = await fetchApproximateIpLocation();
-    if (ip) {
-      await applyNewAddrPosition(ip.lat, ip.lng, true, ip);
-    } else {
-      toast('Could not detect location. Please tap the map to pin manually.', 'error');
-    }
+    toast('GPS unavailable. Centered strictly on Alta Vista, Ormoc City.', 'info');
+    await applyNewAddrPosition(11.0134, 124.6199, false);
   }
 
   if (!navigator.geolocation) {

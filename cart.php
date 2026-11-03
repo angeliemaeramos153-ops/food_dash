@@ -231,6 +231,91 @@ $grand_total = $subtotal + $delivery_fee;
       border-color: var(--olive);
       background: #ffffff;
     }
+    .btn-locate-me {
+      background: rgba(216, 143, 42, 0.12);
+      border: 1px solid rgba(216, 143, 42, 0.35);
+      border-radius: 8px;
+      padding: 5px 12px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--harvest-sun);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      touch-action: manipulation;
+    }
+    .btn-locate-me:hover {
+      background: rgba(216, 143, 42, 0.22);
+      border-color: var(--harvest-sun);
+    }
+    .btn-locate-me:active {
+      transform: scale(0.96);
+    }
+    .btn-exact-location {
+      background: rgba(216, 143, 42, 0.12);
+      border: 1.5px solid rgba(216, 143, 42, 0.35);
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--harvest-sun);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      touch-action: manipulation;
+    }
+    .btn-exact-location:hover {
+      background: rgba(216, 143, 42, 0.22);
+      border-color: var(--harvest-sun);
+    }
+    .btn-exact-location:active {
+      transform: scale(0.96);
+    }
+    .btn-map-helper {
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 5px 12px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--olive-dark);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      touch-action: manipulation;
+    }
+    .btn-map-helper:hover {
+      background: #e5e7eb;
+      border-color: #9ca3af;
+    }
+    .btn-map-helper:active {
+      transform: scale(0.96);
+    }
+    .toast-cart-box {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2937;
+      color: #ffffff;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 12.5px;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+      z-index: 100000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      pointer-events: none;
+    }
     .coords-badge {
       display: flex;
       align-items: center;
@@ -584,11 +669,16 @@ $grand_total = $subtotal + $delivery_fee;
 
     <!-- Delivery Destination Card -->
     <div class="checkout-card">
-      <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
         <span><i class="fa-solid fa-location-dot"></i> Delivery Address</span>
-        <button type="button" class="btn-map-helper" onclick="openCartMapModal()" style="background:#f3f4f6; border:1px solid #d1d5db; border-radius:8px; padding:5px 12px; font-size:11.5px; font-weight:600; color:var(--olive-dark); cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all 0.2s;">
-          <i class="fa-solid fa-map-location-dot" style="color:var(--harvest-sun);"></i> Pin on Map
-        </button>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button type="button" class="btn-locate-me" id="cartBtnLocateMe" onclick="locateCartCurrentGps(false)">
+            <i class="fa-solid fa-crosshairs"></i> Locate Me
+          </button>
+          <button type="button" class="btn-map-helper" onclick="openCartMapModal()">
+            <i class="fa-solid fa-map-location-dot" style="color:var(--harvest-sun);"></i> Pin on Map
+          </button>
+        </div>
       </div>
       <textarea id="delivery_address" name="delivery_address" class="address-textarea" placeholder="Enter complete address (e.g., Purok 3, House No., Street, Barangay, Landmark)" oninput="handleCartAddressTyping(this.value)"></textarea>
       <textarea id="deliveryAddressInput" name="address" style="display:none;"></textarea>
@@ -835,7 +925,7 @@ $grand_total = $subtotal + $delivery_fee;
 </div>
 
 <!-- ============================================== -->
-<!-- 4. OPTIONAL MAP HELPER MODAL (ALTA VISTA, ORMOC CITY) -->
+<!-- 4. OPTIONAL MAP HELPER MODAL -->
 <!-- ============================================== -->
 <div class="sim-modal" id="cartMapModal" style="display:none;" onclick="if(event.target===this)closeCartMapModal()">
   <div class="sim-sheet" style="background:#ffffff; max-height:94vh;">
@@ -855,7 +945,7 @@ $grand_total = $subtotal + $delivery_fee;
         <div style="display:flex; gap:6px;">
           <div style="position:relative; flex:1;">
             <i class="fa-solid fa-search" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#9ca3af; font-size:12px;"></i>
-            <input type="text" id="cartMapSearchInput" placeholder="Search street, subdivision, village (e.g. Alta Vista, Ormoc)..." style="width:100%; height:38px; border-radius:10px; border:1.5px solid var(--line); padding:6px 28px 6px 30px; font-size:12px; font-family:inherit; outline:none; box-sizing:border-box;" oninput="handleCartMapSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();executeCartMapSearch();}">
+            <input type="text" id="cartMapSearchInput" placeholder="Search street, subdivision, village, landmark..." style="width:100%; height:38px; border-radius:10px; border:1.5px solid var(--line); padding:6px 28px 6px 30px; font-size:12px; font-family:inherit; outline:none; box-sizing:border-box;" oninput="handleCartMapSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();executeCartMapSearch();}">
             <button type="button" id="cartMapSearchClear" onclick="clearCartMapSearch()" style="display:none; position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:none; color:#9ca3af; font-size:14px; cursor:pointer; padding:2px;">&times;</button>
           </div>
           <button type="button" onclick="executeCartMapSearch()" id="btnCartMapSearch" style="background:var(--olive); color:#ffffff; border:none; border-radius:10px; padding:0 14px; font-size:12px; font-weight:600; cursor:pointer; flex-shrink:0;">Search</button>
@@ -863,18 +953,28 @@ $grand_total = $subtotal + $delivery_fee;
         <div id="cartMapSearchResults" style="display:none; position:absolute; top:42px; left:0; right:0; background:#ffffff; border:1px solid #d8cbb5; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.16); max-height:180px; overflow-y:auto; z-index:99999;"></div>
       </div>
 
-      <!-- Mini Leaflet Map (Centered around Alta Vista, Ormoc City) -->
+      <!-- Action Row: Use My Exact Location & GPS Status Indicator -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="btn-exact-location" id="cartModalBtnLocateMe" onclick="locateCartCurrentGps(true)">
+          <i class="fa-solid fa-location-crosshairs"></i> Use My Exact Location
+        </button>
+        <span id="cartModalGpsStatus" style="font-size:11.5px; color:#6b7280; font-weight:500;">
+          <i class="fa-solid fa-crosshairs"></i> Tap Locate Me or map
+        </span>
+      </div>
+
+      <!-- Mini Leaflet Map -->
       <div id="cartMapContainer" style="height:210px; width:100%; border-radius:12px; border:1px solid var(--line); margin-bottom:12px;"></div>
 
-      <!-- Address Input (Populated with general area, allowing user to supplement specific local Purok) -->
+      <!-- Address Input (Populated with live location, allowing user to supplement specific local Purok) -->
       <div style="margin-bottom:12px;">
         <label style="display:block; font-size:11px; font-weight:700; color:var(--olive-dark); margin-bottom:4px;">
           <i class="fa-solid fa-pen" style="color:var(--harvest-sun);"></i> Delivery Address (supplement with your local Purok details):
         </label>
-        <textarea id="cartModalAddressInput" class="address-textarea" placeholder="Enter complete address (e.g. Purok 3, Near Chapel, Alta Vista, Ormoc City)" style="min-height:60px; font-size:12px;" oninput="window._cartUserHasTypedAddress=true;"></textarea>
+        <textarea id="cartModalAddressInput" class="address-textarea" placeholder="Enter complete address (e.g. Purok 3, House No., Street, Barangay, Landmark)" style="min-height:60px; font-size:12px;" oninput="window._cartUserHasTypedAddress=true;"></textarea>
         <div id="cartModalCoordsStatus" class="coords-badge" style="margin-top:6px; display:none;">
           <i class="fa-solid fa-circle-check"></i>
-          <span id="cartModalCoordsText">Pinned: 11.0134, 124.6199</span>
+          <span id="cartModalCoordsText">Pinned Location</span>
         </div>
       </div>
 
@@ -1330,7 +1430,7 @@ function closeModal(id) {
 }
 
 // ==============================================
-// OPTIONAL MAP SEARCH & PINNING CONTROLLER (ALTA VISTA, ORMOC CITY)
+// OPTIONAL MAP SEARCH & PINNING CONTROLLER
 // ==============================================
 var CART_ORMOC_LANDMARKS = [
     { name: 'Alta Vista', desc: 'Alta Vista, Ormoc City, Leyte', lat: 11.0134, lon: 124.6199 },
@@ -1358,6 +1458,210 @@ var cartPinnedLng = null;
 var cartMapDebounceTimer = null;
 var cartMapSearchResults = [];
 window._cartUserHasTypedAddress = false;
+window._isCartLocatingGps = false;
+window._lastCartGeocodedArea = '';
+
+function showCartToast(msg, type) {
+    var existing = document.getElementById('cartToastNotification');
+    if (existing) existing.remove();
+
+    var toast = document.createElement('div');
+    toast.id = 'cartToastNotification';
+    toast.className = 'toast-cart-box';
+    
+    var icon = 'fa-circle-info';
+    var bg = '#1f2937';
+    if (type === 'success') {
+        icon = 'fa-circle-check';
+        bg = '#143820';
+    } else if (type === 'warning' || type === 'info') {
+        icon = 'fa-location-dot';
+        bg = '#2a261a';
+    } else if (type === 'error') {
+        icon = 'fa-triangle-exclamation';
+        bg = '#3f1a1a';
+    }
+    toast.style.background = bg;
+    toast.innerHTML = '<i class="fa-solid ' + icon + '" style="color:var(--harvest-sun);"></i> <span>' + msg + '</span>';
+    document.body.appendChild(toast);
+
+    setTimeout(function() {
+        if (toast && toast.parentNode) {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translate(-50%, 10px)';
+            setTimeout(function() { if (toast && toast.parentNode) toast.remove(); }, 350);
+        }
+    }, 3200);
+}
+
+function setCartGpsButtonsLoading(isLoading) {
+    var btnLocate = document.getElementById('cartBtnLocateMe');
+    var btnModalLocate = document.getElementById('cartModalBtnLocateMe');
+    var statusText = document.getElementById('cartModalGpsStatus');
+
+    if (btnLocate) {
+        btnLocate.disabled = isLoading;
+        btnLocate.innerHTML = isLoading 
+            ? '<i class="fa-solid fa-spinner fa-spin"></i> Locating...' 
+            : '<i class="fa-solid fa-crosshairs"></i> Locate Me';
+    }
+    if (btnModalLocate) {
+        btnModalLocate.disabled = isLoading;
+        btnModalLocate.innerHTML = isLoading 
+            ? '<i class="fa-solid fa-spinner fa-spin"></i> Locating...' 
+            : '<i class="fa-solid fa-location-crosshairs"></i> Use My Exact Location';
+    }
+    if (statusText) {
+        if (isLoading) {
+            statusText.innerHTML = '<i class="fa-solid fa-satellite-dish fa-spin" style="color:var(--harvest-sun);"></i> Fetching Live GPS...';
+        } else if (cartPinnedLat && cartPinnedLng) {
+            statusText.innerHTML = '<i class="fa-solid fa-check" style="color:#05B851;"></i> Live GPS Acquired';
+        } else {
+            statusText.innerHTML = '<i class="fa-solid fa-location-dot"></i> Live GPS / Tap to Pin';
+        }
+    }
+}
+
+// 1. Dynamic Live Browser GPS Geolocation Controller
+// Calls navigator.geolocation.getCurrentPosition(successCallback, errorCallback, { enableHighAccuracy: true }) dynamically
+// Immediately updates Leaflet map view and marker to exact live coordinates, and runs reverse-geocoding fetch
+// If geolocation fails, is denied, or times out: gracefully allows manual map pin drop or typing without hardcoded fallbacks
+function locateCartCurrentGps(isModal) {
+    if (window._isCartLocatingGps) return;
+    window._isCartLocatingGps = true;
+    setCartGpsButtonsLoading(true);
+
+    function errorCallback(error) {
+        setCartGpsButtonsLoading(false);
+        window._isCartLocatingGps = false;
+
+        var reason = 'Could not acquire live GPS.';
+        if (error && error.code === error.PERMISSION_DENIED) {
+            reason = 'Location permission was denied. Tap the map to drop a pin or type your address manually.';
+        } else if (error && error.code === error.TIMEOUT) {
+            reason = 'Live GPS request timed out. Tap the map to drop a pin or type your address manually.';
+        } else if (error && error.code === error.POSITION_UNAVAILABLE) {
+            reason = 'Live GPS signal is unavailable. Tap the map to drop a pin or type your address manually.';
+        } else if (typeof error === 'string') {
+            reason = error;
+        }
+
+        var statusText = document.getElementById('cartModalGpsStatus');
+        if (statusText) {
+            statusText.innerHTML = '<span style="color:#d97706;"><i class="fa-solid fa-hand-pointer"></i> Tap map to drop pin or type address</span>';
+        }
+
+        // Strictly NO hardcoded city or network IP fallback
+        showCartToast(reason, 'info');
+    }
+
+    if (!navigator.geolocation) {
+        errorCallback('Geolocation is not supported by your browser. Please tap the map or type your address manually.');
+        return;
+    }
+
+    var gpsResolved = false;
+    var safetyTimeout = setTimeout(function() {
+        if (!gpsResolved) {
+            gpsResolved = true;
+            console.warn('Live GPS request timed out.');
+            errorCallback('Live GPS timed out. Tap the map to drop a pin or type your address manually.');
+        }
+    }, 12000);
+
+    try {
+        navigator.geolocation.getCurrentPosition(
+            function successCallback(position) {
+                if (gpsResolved) return;
+                gpsResolved = true;
+                clearTimeout(safetyTimeout);
+
+                // 2. Extract live device coordinates
+                var lat = position.coords.latitude;
+                var lng = position.coords.longitude;
+
+                cartPinnedLat = lat;
+                cartPinnedLng = lng;
+
+                // Immediately update Leaflet map view and marker position to exact live values
+                if (!cartLeafletMap) {
+                    initCartMap();
+                }
+                if (cartLeafletMap) {
+                    cartLeafletMap.setView([lat, lng], 17);
+                    if (!cartLeafletMarker) {
+                        cartLeafletMarker = L.marker([lat, lng], { draggable: true }).addTo(cartLeafletMap);
+                        cartLeafletMarker.bindPopup('<b>Live GPS Location</b><br>Drag to fine-tune your delivery location');
+                        cartLeafletMarker.on('dragend', function() {
+                            var pos = cartLeafletMarker.getLatLng();
+                            onCartMapPinMoved(pos.lat, pos.lng);
+                        });
+                    } else {
+                        cartLeafletMarker.setLatLng([lat, lng]);
+                    }
+                    if (cartLeafletMarker) {
+                        cartLeafletMarker.bindPopup('<b>Live GPS Location</b><br>Drag to fine-tune your delivery location').openPopup();
+                    }
+                }
+
+                // Update modal coords badge
+                var statusEl = document.getElementById('cartModalCoordsStatus');
+                var textEl = document.getElementById('cartModalCoordsText');
+                if (statusEl && textEl) {
+                    statusEl.style.display = 'flex';
+                    textEl.textContent = 'Live GPS: ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
+                }
+
+                // Sync hidden inputs
+                var latLngInput = document.getElementById('delivery_lat_lng');
+                if (latLngInput) latLngInput.value = lat + ', ' + lng;
+                var latIn = document.getElementById('delivery_lat');
+                if (latIn) latIn.value = lat;
+                var lngIn = document.getElementById('delivery_lng');
+                if (lngIn) lngIn.value = lng;
+                var cLatIn = document.getElementById('customer_lat');
+                if (cLatIn) cLatIn.value = lat;
+                var cLngIn = document.getElementById('customer_lng');
+                if (cLngIn) cLngIn.value = lng;
+
+                var coordsDisp = document.getElementById('coordsDisplay');
+                if (coordsDisp) {
+                    coordsDisp.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+                }
+
+                var statusText = document.getElementById('cartModalGpsStatus');
+                if (statusText) {
+                    statusText.innerHTML = '<i class="fa-solid fa-check" style="color:#05B851;"></i> Live GPS Acquired';
+                }
+
+                // Immediately run reverse-geocoding fetch with live GPS coordinates
+                reverseGeocodeCartCoords(lat, lng, !isModal);
+
+                setCartGpsButtonsLoading(false);
+                window._isCartLocatingGps = false;
+                showCartToast('Pinned to your live device location!', 'success');
+            },
+            function onGpsError(err) {
+                if (gpsResolved) return;
+                gpsResolved = true;
+                clearTimeout(safetyTimeout);
+                errorCallback(err);
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            }
+        );
+    } catch(e) {
+        if (!gpsResolved) {
+            gpsResolved = true;
+            clearTimeout(safetyTimeout);
+            console.warn('Geolocation exception:', e);
+            errorCallback('Unable to access live GPS. Please tap the map or enter your address manually.');
+        }
+    }
+}
 
 function handleCartAddressTyping(value) {
     window._cartUserHasTypedAddress = true;
@@ -1393,34 +1697,56 @@ function initCartMap() {
     var container = document.getElementById('cartMapContainer');
     if (!container) return;
 
-    // Centered around Alta Vista, Ormoc City [11.0134, 124.6199]
-    var defaultLat = 11.0134;
-    var defaultLng = 124.6199;
-    var initLat = cartPinnedLat || defaultLat;
-    var initLng = cartPinnedLng || defaultLng;
+    var hasCoords = cartPinnedLat && cartPinnedLng;
+    var initLat = hasCoords ? cartPinnedLat : 11.0050;
+    var initLng = hasCoords ? cartPinnedLng : 124.6075;
+    var initZoom = hasCoords ? 17 : 14;
 
     if (!cartLeafletMap) {
-        cartLeafletMap = L.map('cartMapContainer').setView([initLat, initLng], 15);
+        cartLeafletMap = L.map('cartMapContainer').setView([initLat, initLng], initZoom);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '&copy; OpenStreetMap'
         }).addTo(cartLeafletMap);
 
-        cartLeafletMarker = L.marker([initLat, initLng], { draggable: true }).addTo(cartLeafletMap);
-        cartLeafletMarker.bindPopup('<b>Delivery Pin</b><br>Drag to your delivery location');
-
-        cartLeafletMarker.on('dragend', function() {
-            var pos = cartLeafletMarker.getLatLng();
-            onCartMapPinMoved(pos.lat, pos.lng);
-        });
+        if (hasCoords) {
+            cartLeafletMarker = L.marker([initLat, initLng], { draggable: true }).addTo(cartLeafletMap);
+            cartLeafletMarker.bindPopup('<b>Delivery Pin</b><br>Drag to fine-tune your delivery location');
+            cartLeafletMarker.on('dragend', function() {
+                var pos = cartLeafletMarker.getLatLng();
+                onCartMapPinMoved(pos.lat, pos.lng);
+            });
+        }
 
         cartLeafletMap.on('click', function(e) {
-            cartLeafletMarker.setLatLng(e.latlng);
+            if (!cartLeafletMarker) {
+                cartLeafletMarker = L.marker(e.latlng, { draggable: true }).addTo(cartLeafletMap);
+                cartLeafletMarker.bindPopup('<b>Delivery Pin</b><br>Drag to fine-tune your delivery location');
+                cartLeafletMarker.on('dragend', function() {
+                    var pos = cartLeafletMarker.getLatLng();
+                    onCartMapPinMoved(pos.lat, pos.lng);
+                });
+            } else {
+                cartLeafletMarker.setLatLng(e.latlng);
+            }
             onCartMapPinMoved(e.latlng.lat, e.latlng.lng);
         });
     } else {
-        cartLeafletMap.setView([initLat, initLng], 15);
-        cartLeafletMarker.setLatLng([initLat, initLng]);
+        if (hasCoords) {
+            cartLeafletMap.setView([initLat, initLng], 17);
+            if (!cartLeafletMarker) {
+                cartLeafletMarker = L.marker([initLat, initLng], { draggable: true }).addTo(cartLeafletMap);
+                cartLeafletMarker.bindPopup('<b>Delivery Pin</b><br>Drag to fine-tune your delivery location');
+                cartLeafletMarker.on('dragend', function() {
+                    var pos = cartLeafletMarker.getLatLng();
+                    onCartMapPinMoved(pos.lat, pos.lng);
+                });
+            } else {
+                cartLeafletMarker.setLatLng([initLat, initLng]);
+            }
+        } else {
+            cartLeafletMap.setView([initLat, initLng], initZoom);
+        }
     }
 
     setTimeout(function() {
@@ -1437,46 +1763,80 @@ function onCartMapPinMoved(lat, lng) {
         statusEl.style.display = 'flex';
         textEl.textContent = 'Pinned: ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
     }
-    reverseGeocodeCartCoords(lat, lng);
+    var statusText = document.getElementById('cartModalGpsStatus');
+    if (statusText) {
+        statusText.innerHTML = '<i class="fa-solid fa-map-pin" style="color:var(--harvest-sun);"></i> Pinned on Map';
+    }
+    reverseGeocodeCartCoords(lat, lng, false);
 }
 
-function reverseGeocodeCartCoords(lat, lng) {
+function reverseGeocodeCartCoords(lat, lng, syncMainAddress) {
     fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&lat=' + lat + '&lon=' + lng, {
         headers: { 'Accept': 'application/json' }
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        if (data) {
-            var area = data.name || (data.address ? (data.address.suburb || data.address.village || data.address.neighbourhood || data.address.road || '') : '') || 'Alta Vista, Ormoc City';
-            if (data.address && data.address.city && !area.includes('Ormoc')) {
-                area += ', ' + data.address.city;
+        if (data && data.address) {
+            var addr = data.address;
+            var road = addr.road || addr.pedestrian || addr.street || '';
+            var brgy = addr.village || addr.suburb || addr.neighbourhood || addr.residential || addr.quarter || '';
+            var city = addr.city || addr.town || addr.municipality || '';
+
+            var parts = [];
+            if (road) parts.push(road);
+            if (brgy && brgy !== road) parts.push(brgy);
+            if (city && !parts.join(', ').includes(city)) parts.push(city);
+
+            var area = parts.join(', ') || data.name || (data.display_name ? data.display_name.split(',')[0] : '');
+            if (area) {
+                applyCartPinnedArea(area, syncMainAddress);
             }
-            applyCartPinnedArea(area);
         }
     })
-    .catch(function() {
-        applyCartPinnedArea('Alta Vista, Ormoc City');
+    .catch(function(err) {
+        console.warn('Reverse geocoding fetch failed:', err);
     });
 }
 
-function applyCartPinnedArea(areaName) {
+function applyCartPinnedArea(areaName, syncMain) {
+    if (!areaName) return;
     var modalAddr = document.getElementById('cartModalAddressInput');
-    if (!modalAddr) return;
-    var current = modalAddr.value.trim();
+    var mainAddr = document.getElementById('delivery_address');
+    
+    // Choose active base value: modal input if available, else main delivery input
+    var current = (modalAddr ? modalAddr.value : (mainAddr ? mainAddr.value : '')).trim();
+    var lastArea = window._lastCartGeocodedArea || '';
+    var newAddress = '';
 
     if (!current) {
-        modalAddr.value = areaName;
-        return;
+        newAddress = areaName;
+    } else if (lastArea && current.includes(lastArea)) {
+        // Smoothly replace previous geocoded area suffix, preserving user's typed local Purok prefix
+        newAddress = current.replace(lastArea, areaName);
+    } else {
+        // Check if user has entered specific local Purok or street details
+        var hasPurokOrSpecifics = /\b(purok|prk|sitio|unit|house|lot|blk|block|near|tapad|atbang|gate|corner)\b/i.test(current);
+        if (hasPurokOrSpecifics) {
+            if (!current.toLowerCase().includes(areaName.toLowerCase())) {
+                newAddress = current + ', ' + areaName;
+            } else {
+                newAddress = current;
+            }
+        } else if (!current.toLowerCase().includes(areaName.toLowerCase())) {
+            newAddress = current + ', ' + areaName;
+        } else {
+            newAddress = current;
+        }
     }
 
-    // Preserve local Purok details, supplementing with the pinned area
-    var hasPurokOrSpecifics = /\b(purok|prk|sitio|unit|house|lot|blk|block|near|tapad|atbang|gate|corner)\b/i.test(current);
-    if (hasPurokOrSpecifics) {
-        if (!current.toLowerCase().includes(areaName.toLowerCase())) {
-            modalAddr.value = current + ', ' + areaName;
-        }
-    } else if (!current.toLowerCase().includes(areaName.toLowerCase())) {
-        modalAddr.value = current + ', ' + areaName;
+    window._lastCartGeocodedArea = areaName;
+
+    if (modalAddr) {
+        modalAddr.value = newAddress;
+    }
+    if (syncMain && mainAddr) {
+        mainAddr.value = newAddress;
+        handleCartAddressTyping(newAddress);
     }
 }
 
@@ -1590,34 +1950,28 @@ function confirmCartMapLocation() {
     var modalAddr = document.getElementById('cartModalAddressInput');
     var finalAddress = modalAddr ? modalAddr.value.trim() : '';
 
-    if (!cartPinnedLat || !cartPinnedLng) {
-        cartPinnedLat = 11.0134;
-        cartPinnedLng = 124.6199;
-    }
-    if (!finalAddress) {
-        finalAddress = 'Alta Vista, Ormoc City';
-    }
-
     var mainAddr = document.getElementById('delivery_address');
     if (mainAddr) {
         mainAddr.value = finalAddress;
         handleCartAddressTyping(finalAddress);
     }
 
-    var latLngInput = document.getElementById('delivery_lat_lng');
-    if (latLngInput) latLngInput.value = cartPinnedLat + ', ' + cartPinnedLng;
-    var latIn = document.getElementById('delivery_lat');
-    if (latIn) latIn.value = cartPinnedLat;
-    var lngIn = document.getElementById('delivery_lng');
-    if (lngIn) lngIn.value = cartPinnedLng;
-    var cLatIn = document.getElementById('customer_lat');
-    if (cLatIn) cLatIn.value = cartPinnedLat;
-    var cLngIn = document.getElementById('customer_lng');
-    if (cLngIn) cLngIn.value = cartPinnedLng;
+    if (cartPinnedLat && cartPinnedLng) {
+        var latLngInput = document.getElementById('delivery_lat_lng');
+        if (latLngInput) latLngInput.value = cartPinnedLat + ', ' + cartPinnedLng;
+        var latIn = document.getElementById('delivery_lat');
+        if (latIn) latIn.value = cartPinnedLat;
+        var lngIn = document.getElementById('delivery_lng');
+        if (lngIn) lngIn.value = cartPinnedLng;
+        var cLatIn = document.getElementById('customer_lat');
+        if (cLatIn) cLatIn.value = cartPinnedLat;
+        var cLngIn = document.getElementById('customer_lng');
+        if (cLngIn) cLngIn.value = cartPinnedLng;
 
-    var coordsDisp = document.getElementById('coordsDisplay');
-    if (coordsDisp) {
-        coordsDisp.textContent = cartPinnedLat.toFixed(5) + ', ' + cartPinnedLng.toFixed(5);
+        var coordsDisp = document.getElementById('coordsDisplay');
+        if (coordsDisp) {
+            coordsDisp.textContent = cartPinnedLat.toFixed(5) + ', ' + cartPinnedLng.toFixed(5);
+        }
     }
 
     closeCartMapModal();
@@ -1650,13 +2004,21 @@ window.handleCartMapSearchInput = handleCartMapSearchInput;
 window.clearCartMapSearch = clearCartMapSearch;
 window.selectCartSearchResult = selectCartSearchResult;
 window.confirmCartMapLocation = confirmCartMapLocation;
+window.locateCartCurrentGps = locateCartCurrentGps;
+window.useMyExactLocation = locateCartCurrentGps;
+window.detectCustomerGps = locateCartCurrentGps;
+window.showCartToast = showCartToast;
 
 document.addEventListener('DOMContentLoaded', function() {
     window._cartUserHasTypedAddress = false;
     var addrEl = document.getElementById('delivery_address');
     var addrSec = document.getElementById('deliveryAddressInput');
+    var modalAddr = document.getElementById('cartModalAddressInput');
     if (addrEl) addrEl.value = '';
     if (addrSec) addrSec.value = '';
+    if (modalAddr) modalAddr.value = '';
+    cartPinnedLat = null;
+    cartPinnedLng = null;
     syncCartFromLocalStorage();
     selectMethod('gcash');
 });
