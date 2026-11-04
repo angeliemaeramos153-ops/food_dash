@@ -13,7 +13,7 @@
   let ringtoneAudio = null;
   let arrivalAudio = null;
   let synthLoopInterval = null;
-  let activeOscillators = [];
+  let activeSynthNodes = [];
   let isMuted = false;
   let localMediaStream = null;
 
@@ -207,11 +207,11 @@
         }
         const now = audioCtx.currentTime;
         // Clean, soft ascending doorbell chime: E5 (659.25Hz), G#5 (830.61Hz), B5 (987.77Hz)
-        // Using pure sine waves with smooth attack/decay to eliminate clicks, pops, and static
+        // Note durations extended to 0.75s - 0.82s so each beat rings out fully with its natural decay
         const notes = [
-          { freq: 659.25, time: 0.00, dur: 0.38, vol: 0.16 },
-          { freq: 830.61, time: 0.18, dur: 0.38, vol: 0.16 },
-          { freq: 987.77, time: 0.36, dur: 0.50, vol: 0.14 }
+          { freq: 659.25, time: 0.00, dur: 0.75, vol: 0.15 },
+          { freq: 830.61, time: 0.18, dur: 0.80, vol: 0.15 },
+          { freq: 987.77, time: 0.36, dur: 0.82, vol: 0.14 }
         ];
 
         notes.forEach(n => {
@@ -220,7 +220,7 @@
           osc.type = 'sine'; // Pure sine wave to prevent harmonic distortion & static
           osc.frequency.setValueAtTime(n.freq, now + n.time);
 
-          // Gentle linear attack ramp (30ms), then exponential decay to silence
+          // Gentle linear attack ramp (30ms), then natural exponential decay to silence
           gain.gain.setValueAtTime(0.0001, now + n.time);
           gain.gain.linearRampToValueAtTime(n.vol, now + n.time + 0.03);
           gain.gain.exponentialRampToValueAtTime(0.0001, now + n.time + n.dur);
@@ -228,13 +228,18 @@
           osc.connect(gain);
           gain.connect(audioCtx.destination);
           osc.start(now + n.time);
-          osc.stop(now + n.time + n.dur + 0.02);
+          // Let each chime beat ring out completely (stop at currentTime + 0.8s or longer)
+          osc.stop(now + n.time + n.dur + 0.05);
 
-          activeOscillators.push(osc);
+          const nodeItem = { osc, gain };
+          activeSynthNodes.push(nodeItem);
           osc.onended = () => {
-            const idx = activeOscillators.indexOf(osc);
-            if (idx > -1) activeOscillators.splice(idx, 1);
-            try { osc.disconnect(); } catch (e) {}
+            const idx = activeSynthNodes.indexOf(nodeItem);
+            if (idx > -1) activeSynthNodes.splice(idx, 1);
+            try {
+              osc.disconnect();
+              gain.disconnect();
+            } catch (e) {}
           };
         });
       } catch (e) {
@@ -243,7 +248,8 @@
     }
 
     playAlarmChime();
-    synthLoopInterval = setInterval(playAlarmChime, 2400); // 2.4s spacing prevents overlapping noise
+    // 1500ms repeating interval ensures notes finish ringing out with a calm pause before next trigger
+    synthLoopInterval = setInterval(playAlarmChime, 1500);
   }
 
   function stopSynthLoop() {
@@ -251,14 +257,30 @@
       clearInterval(synthLoopInterval);
       synthLoopInterval = null;
     }
-    if (activeOscillators && activeOscillators.length > 0) {
-      activeOscillators.forEach(osc => {
+    if (activeSynthNodes && activeSynthNodes.length > 0) {
+      const now = audioCtx ? audioCtx.currentTime : 0;
+      activeSynthNodes.forEach(item => {
         try {
-          osc.stop();
-          osc.disconnect();
-        } catch (e) {}
+          // Smoothly ramp gain down to 0 to prevent audio pops/clicks/static upon clearing
+          if (item.gain && audioCtx) {
+            item.gain.gain.cancelScheduledValues(now);
+            item.gain.gain.setValueAtTime(item.gain.gain.value, now);
+            item.gain.gain.linearRampToValueAtTime(0.0001, now + 0.015);
+          }
+          if (item.osc) {
+            item.osc.stop(now + 0.02);
+            setTimeout(() => {
+              try {
+                item.osc.disconnect();
+                if (item.gain) item.gain.disconnect();
+              } catch (e) {}
+            }, 30);
+          }
+        } catch (e) {
+          try { item.osc.stop(); item.osc.disconnect(); } catch (e2) {}
+        }
       });
-      activeOscillators = [];
+      activeSynthNodes = [];
     }
   }
 

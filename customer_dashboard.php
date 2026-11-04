@@ -7826,11 +7826,11 @@ function playSynthArrivalAlarm() {
           customerSynthAudioCtx.resume().catch(() => {});
         }
         const now = customerSynthAudioCtx.currentTime;
-        // Clean, soft ascending chime: E5, G#5, B5 using pure sine waves
+        // Clean, soft ascending chime: E5, G#5, B5 with extended natural decay
         const notes = [
-          { freq: 659.25, time: 0.00, dur: 0.38, vol: 0.16 },
-          { freq: 830.61, time: 0.18, dur: 0.38, vol: 0.16 },
-          { freq: 987.77, time: 0.36, dur: 0.50, vol: 0.14 }
+          { freq: 659.25, time: 0.00, dur: 0.75, vol: 0.15 },
+          { freq: 830.61, time: 0.18, dur: 0.80, vol: 0.15 },
+          { freq: 987.77, time: 0.36, dur: 0.82, vol: 0.14 }
         ];
         notes.forEach(n => {
           const osc = customerSynthAudioCtx.createOscillator();
@@ -7845,7 +7845,7 @@ function playSynthArrivalAlarm() {
           osc.connect(gain);
           gain.connect(customerSynthAudioCtx.destination);
           osc.start(now + n.time);
-          osc.stop(now + n.time + n.dur + 0.02);
+          osc.stop(now + n.time + n.dur + 0.05);
 
           customerActiveOscillators.push(osc);
           osc.onended = () => {
@@ -7858,7 +7858,7 @@ function playSynthArrivalAlarm() {
     }
 
     chimeTick();
-    customerSynthLoopInterval = setInterval(chimeTick, 2400); // 2.4s spacing prevents overlapping noise
+    customerSynthLoopInterval = setInterval(chimeTick, 1500); // 1500ms spacing allows notes to ring out with calm pause
   } catch (e) {
     console.warn('Customer synth chime error:', e);
   }
