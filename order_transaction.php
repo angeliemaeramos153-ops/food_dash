@@ -229,7 +229,7 @@ if ($method === 'POST') {
                 ':total'      => $total_amount,
                 ':pm'         => $payment_method,
                 ':addr'       => !empty($delivery_address) ? $delivery_address : null,
-                ':dlat'       => $id,
+                ':dlat'       => $delivery_lat,
                 ':dlng'       => $delivery_lng,
                 ':lat'        => $customer_lat,
                 ':lng'        => $customer_lng,
@@ -448,6 +448,7 @@ if ($method === 'POST') {
                 ':dst' => $new_delivery_status,
                 ':cid' => $chef_id_val,
                 ':rid' => $rider_id_val,
+                ':oid' => $order_id,
             ]);
 
             // Dispatch automated chat message if order status transitioned to on_delivery

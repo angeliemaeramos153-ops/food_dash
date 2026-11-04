@@ -221,7 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
             // 1. Update order status to 'delivered' and mark rider_cleared = 1, cleared_at = NOW()
             if ($order_id > 0) {
                 try {
-                    $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', rider_cleared = 1, cleared_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND (rider_id = :rid OR :rid = 0)")->execute([':oid' => $order_id, ':rid' => $rid]);
+                    $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', rider_cleared = 1, cleared_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND (rider_id = :rid OR :rid_check = 0)")->execute([':oid' => $order_id, ':rid' => $rid, ':rid_check' => $rid]);
                     $conn->prepare("UPDATE orders SET status = 'delivered', rider_cleared = 1, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
                     record_order_audit_log($conn, $order_id, 'DELIVERED', 'DELIVERED', $user_id, 'rider', 'Delivery finished & cleared by rider ' . $user_name);
                 } catch (Throwable $e) {}
@@ -475,7 +475,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     // Explicit Finish & Clear action by rider
                     if ($order_id > 0) {
                         try {
-                            $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', rider_cleared = 1, cleared_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND (rider_id = :rid OR :rid = 0)")->execute([':oid' => $order_id, ':rid' => $rid]);
+                            $conn->prepare("UPDATE food_orders SET delivery_status = 'delivered', status = 'DELIVERED', rider_cleared = 1, cleared_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND (rider_id = :rid OR :rid_check = 0)")->execute([':oid' => $order_id, ':rid' => $rid, ':rid_check' => $rid]);
                             $conn->prepare("UPDATE orders SET status = 'delivered', rider_cleared = 1, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
                             require_once __DIR__ . '/supabase_lib.php';
                             sync_order_to_supabase($order_id, $conn);

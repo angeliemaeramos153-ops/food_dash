@@ -107,8 +107,8 @@ if ($action === 'cancel_order' || $action === 'cancel') {
         $rider_id_val = !empty($order['rider_id']) ? (int)$order['rider_id'] : 0;
         if ($rider_id_val > 0) {
             try {
-                $u_rider = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid OR user_id = :rid");
-                $u_rider->execute([':rid' => $rider_id_val]);
+                $u_rider = $conn->prepare("UPDATE riders SET status = 'waiting', current_order = 'None' WHERE rider_id = :rid OR user_id = :uid");
+                $u_rider->execute([':rid' => $rider_id_val, ':uid' => $rider_id_val]);
 
                 create_notification(
                     $conn, 
@@ -403,9 +403,9 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
             LEFT JOIN riders r ON (ord.rider_id = r.rider_id OR ord.rider_id = r.user_id)
             LEFT JOIN users ru ON (r.user_id = ru.user_id OR ord.rider_id = ru.user_id)
             LEFT JOIN users cu ON ord.user_id = cu.user_id
-            WHERE (ord.id = :oid OR ord.order_id = :oid)
+            WHERE (ord.id = :oid OR ord.order_id = :oid2)
             LIMIT 1");
-            $o_stmt->execute([':oid' => $order_id]);
+            $o_stmt->execute([':oid' => $order_id, ':oid2' => $order_id]);
             $o = $o_stmt->fetch(PDO::FETCH_ASSOC);
         } catch (Throwable $e) {}
     }
@@ -470,8 +470,8 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
     // Latest message on this order
     $latest_message = null;
     try {
-        $m_stmt = $conn->prepare("SELECT message_id, order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at FROM order_messages WHERE order_id = :oid AND (sender_id = :uid OR receiver_id = :uid) ORDER BY message_id DESC LIMIT 1");
-        $m_stmt->execute([':oid' => $order_id, ':uid' => $user_id]);
+        $m_stmt = $conn->prepare("SELECT message_id, order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at FROM order_messages WHERE order_id = :oid AND (sender_id = :uid1 OR receiver_id = :uid2) ORDER BY message_id DESC LIMIT 1");
+        $m_stmt->execute([':oid' => $order_id, ':uid1' => $user_id, ':uid2' => $user_id]);
         $latest_message = $m_stmt->fetch(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {}
 

@@ -32,8 +32,8 @@ if (is_numeric($raw_oid)) {
 if ($order_id <= 0) {
     // Resolve dynamically from the active delivering order
     $rid = (int)($_SESSION['user_id'] ?? 0);
-    $q_act = $conn->prepare("SELECT order_id FROM food_orders WHERE (rider_id = :rid OR :rid = 0) AND LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived') ORDER BY order_id DESC LIMIT 1");
-    $q_act->execute([':rid' => $rid]);
+    $q_act = $conn->prepare("SELECT order_id FROM food_orders WHERE (rider_id = :rid OR :rid_check = 0) AND LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived') ORDER BY order_id DESC LIMIT 1");
+    $q_act->execute([':rid' => $rid, ':rid_check' => $rid]);
     $order_id = (int)($q_act->fetchColumn() ?: 0);
 }
 

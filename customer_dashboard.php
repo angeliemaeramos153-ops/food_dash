@@ -380,19 +380,22 @@ $new_order_id = (int)$conn->lastInsertId();
                 }
 
                 // 2. NOW insert into order_items compatibility table with explicit unit 'price' and valid order_id reference
-                $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, price, unit_price, quantity, line_total, store_name) VALUES (:oid, :name, :price, :price, :qty, :line, :store)");
-                foreach ($clean_items as $ci) {
-                    $unit_price = isset($ci['price']) && is_numeric($ci['price']) ? (float)$ci['price'] : 0.00;
-                    $line_total = isset($ci['line']) && is_numeric($ci['line']) ? (float)$ci['line'] : round($unit_price * (int)$ci['qty'], 2);
-                    $co_stmt->execute([
-                        ':oid'   => $new_order_id,
-                        ':name'  => $ci['name'],
-                        ':price' => $unit_price,
-                        ':qty'   => $ci['qty'],
-                        ':line'  => $line_total,
-                        ':store' => $ci['store']
-                    ]);
-                }
+                try {
+                    $co_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, price, unit_price, quantity, line_total, store_name) VALUES (:oid, :name, :price, :uprice, :qty, :line, :store)");
+                    foreach ($clean_items as $ci) {
+                        $unit_price = isset($ci['price']) && is_numeric($ci['price']) ? (float)$ci['price'] : 0.00;
+                        $line_total = isset($ci['line']) && is_numeric($ci['line']) ? (float)$ci['line'] : round($unit_price * (int)$ci['qty'], 2);
+                        $co_stmt->execute([
+                            ':oid'    => $new_order_id,
+                            ':name'   => $ci['name'],
+                            ':price'  => $unit_price,
+                            ':uprice' => $unit_price,
+                            ':qty'    => $ci['qty'],
+                            ':line'   => $line_total,
+                            ':store'  => $ci['store']
+                        ]);
+                    }
+                } catch (Throwable $e) {}
 
                 // Record audit log for PENDING
                 record_order_audit_log($conn, $new_order_id, null, 'PENDING', $user_id, 'customer', 'Order submitted by customer');

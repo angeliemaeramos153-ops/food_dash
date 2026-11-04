@@ -235,7 +235,20 @@ if (!function_exists('smart_geocode_ormoc')) {
 }
 
 if (!function_exists('resolve_ormoc_store_coords')) {
-    function resolve_ormoc_store_coords(?string $store_name = null, ?string $store_address = '', $raw_lat = null, $raw_lng = null, ?PDO $conn = null, ?int $store_id = null): array {
+    function resolve_ormoc_store_coords($store_name = null, $store_address = '', $raw_lat = null, $raw_lng = null, ?PDO $conn = null, ?int $store_id = null): array {
+        // Polymorphic overload support: resolve_ormoc_store_coords($conn, $shop_id, $store_name)
+        if ($store_name instanceof PDO) {
+            $conn_in = $store_name;
+            $store_id_in = is_numeric($store_address) ? (int)$store_address : null;
+            $store_name_in = is_string($raw_lat) ? $raw_lat : (is_string($raw_lng) ? $raw_lng : null);
+            $store_name = $store_name_in;
+            $store_address = '';
+            $raw_lat = null;
+            $raw_lng = null;
+            $conn = $conn_in;
+            $store_id = $store_id_in;
+        }
+
         if (!$conn) {
             global $conn, $pdo;
             if (!$conn && isset($pdo)) $conn = $pdo;

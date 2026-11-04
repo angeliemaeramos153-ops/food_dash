@@ -217,7 +217,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
     $delivery_lng = (float)$dest_c['lng'];
 
     // Resolve store coordinates (SM Ormoc default: 11.0062, 124.6068)
-    $store_c = resolve_ormoc_store_coords($conn, $shop_id, $store_name);
+    $store_c = resolve_ormoc_store_coords($store_name, '', null, null, $conn, $shop_id);
     $store_lat = (float)$store_c['lat'];
     $store_lng = (float)$store_c['lng'];
 
@@ -319,17 +319,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
 
         // 2. NOW insert into order_items compatibility table with explicit unit 'price' for Supabase
         try {
-            $compat_item_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, price, unit_price, quantity, line_total, store_name) VALUES (:oid, :name, :price, :price, :qty, :line, :store)");
+            $compat_item_stmt = $conn->prepare("INSERT INTO order_items (order_id, item_name, price, unit_price, quantity, line_total, store_name) VALUES (:oid, :name, :price, :uprice, :qty, :line, :store)");
             foreach ($clean_items as $item) {
                 $unit_price = isset($item['unit_price']) && is_numeric($item['unit_price']) ? (float)$item['unit_price'] : 0.00;
                 $line_total = isset($item['line_total']) && is_numeric($item['line_total']) ? (float)$item['line_total'] : round($unit_price * (int)$item['quantity'], 2);
                 $compat_item_stmt->execute([
-                    ':oid'   => $order_id,
-                    ':name'  => $item['name'],
-                    ':price' => $unit_price,
-                    ':qty'   => $item['quantity'],
-                    ':line'  => $line_total,
-                    ':store' => $store_name
+                    ':oid'    => $order_id,
+                    ':name'   => $item['name'],
+                    ':price'  => $unit_price,
+                    ':uprice' => $unit_price,
+                    ':qty'    => $item['quantity'],
+                    ':line'   => $line_total,
+                    ':store'  => $store_name
                 ]);
             }
         } catch (Throwable $e) {}
