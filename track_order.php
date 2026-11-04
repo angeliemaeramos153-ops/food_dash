@@ -1210,14 +1210,22 @@ async function pollRiderLocation() {
     let data = null;
     try {
       const resStatus = await fetch(`get_order_status.php?order_id=${orderId}&_t=${Date.now()}`, {
-        cache: 'no-store'
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
       });
       if (resStatus.ok) data = await resStatus.json();
     } catch (e) {}
 
     if (!data || !data.success) {
       const res = await fetch(`tracking_api.php?action=get_location&order_id=${orderId}&_t=${Date.now()}`, {
-        cache: 'no-store'
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
       });
       data = await res.json();
     }
@@ -1762,6 +1770,9 @@ function closeRiderArrivedModal() {
 
 function respondToRiderArrival(responseOption) {
   stopArrivalAlertSound();
+  if (orderId) {
+    sessionStorage.setItem('fd_arrival_ack_' + orderId, '1');
+  }
   if (window.FoodDashCall) {
     FoodDashCall.acknowledgeArrival(orderId, responseOption);
   }
@@ -1874,36 +1885,43 @@ function playArrivalAlertSound() {
 window.playArrivalAlertSound = playArrivalAlertSound;
 
 function handleRiderArrivedEvent(data) {
-  if (hasShownArrivedAlert && window._trackOrderPrevStatus && ['ARRIVED', 'ARRIVED_DESTINATION', 'arrived', 'arrived_destination'].includes(window._trackOrderPrevStatus)) return;
-  hasShownArrivedAlert = true;
-
-  const rName = data.rider_name || 'Alex';
-
-  // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
-  const banner = document.getElementById('liveRiderMessageBanner');
-  if (banner) {
-    banner.style.display = 'none';
-    banner.classList.remove('slide-down', 'show');
-  }
-  if (msgBannerTimeout) {
-    clearTimeout(msgBannerTimeout);
-    msgBannerTimeout = null;
+  const isAck = Boolean(data.arrival_acknowledged) || (sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
+  if (isAck) {
+    if (window.FoodDashCall) FoodDashCall.stopAllTones();
+    stopArrivalAlertSound();
+    return;
   }
 
-  // Trigger persistent looping arrival alarm / arrival modal
   const modal = document.getElementById('riderArrivedModal');
-  if (modal) {
-    modal.classList.add('show', 'active');
-    modal.style.display = 'flex';
-    modal.style.visibility = 'visible';
-    modal.style.pointerEvents = 'auto';
-  }
-  if (window.FoodDashCall) {
-    FoodDashCall.triggerArrivalAlarm(orderId, rName);
-  }
+  const isModalOpen = modal && (modal.style.display === 'flex' || modal.classList.contains('show'));
 
-  // Programmatically play persistent looping arrival audio alert sound immediately
-  playArrivalAlertSound();
+  // Instant Modal Pop-up on Arrival: immediately display modal if not currently open
+  if (!isModalOpen) {
+    if (modal) {
+      modal.classList.add('show', 'active');
+      modal.style.display = 'flex';
+      modal.style.visibility = 'visible';
+      modal.style.pointerEvents = 'auto';
+    }
+    const rName = data.rider_name || 'Alex';
+    if (window.FoodDashCall) {
+      FoodDashCall.triggerArrivalAlarm(orderId, rName);
+    }
+
+    // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
+    const banner = document.getElementById('liveRiderMessageBanner');
+    if (banner) {
+      banner.style.display = 'none';
+      banner.classList.remove('slide-down', 'show');
+    }
+    if (msgBannerTimeout) {
+      clearTimeout(msgBannerTimeout);
+      msgBannerTimeout = null;
+    }
+
+    // Programmatically play persistent looping arrival audio alert sound immediately
+    playArrivalAlertSound();
+  }
 
   // Update status badge on page to Arrived
   const statusPills = document.querySelectorAll('.status-pill');
@@ -1924,12 +1942,16 @@ function handleRiderArrivedEvent(data) {
   }
 }
 
-// 800ms background polling loop checking order_communication_api.php
+// 500ms background polling loop checking order_communication_api.php
 async function pollOrderCommunication() {
   if (!orderId) return;
   try {
     const res = await fetch(`order_communication_api.php?action=get_updates&customer_id=<?= (int)$user_id ?>&order_id=${orderId}&after_message_id=${lastSeenRiderMsgId}&_t=${Date.now()}`, {
-      cache: 'no-store'
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
     });
     const data = await res.json();
     if (!data.success) return;
@@ -1962,12 +1984,12 @@ async function pollOrderCommunication() {
     const sNorm = String(data.status || '').toUpperCase();
     const dNorm = String(data.delivery_status || '').toLowerCase();
     const isArrivedNow = Boolean(data.is_arrived) || ['arrived', 'arrived_destination'].includes(dNorm) || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(sNorm);
-    const wasArrivedBefore = window._trackOrderPrevStatus && ['ARRIVED', 'ARRIVED_DESTINATION', 'arrived', 'arrived_destination'].includes(window._trackOrderPrevStatus);
 
     if (isArrivedNow) {
       if (data.arrival_acknowledged) {
         if (window.FoodDashCall) FoodDashCall.stopAllTones();
-      } else if (!wasArrivedBefore || !hasShownArrivedAlert) {
+        stopArrivalAlertSound();
+      } else {
         handleRiderArrivedEvent(data);
       }
     }
@@ -1979,11 +2001,11 @@ document.addEventListener('DOMContentLoaded', () => {
   initMap();
   pollRiderLocation();
   pollOrderCommunication();
-  // Continuous 800ms ultra-responsive polling loop
+  // Continuous 500ms ultra-responsive polling loop
   pollTimer = setInterval(() => {
     pollRiderLocation();
     pollOrderCommunication();
-  }, 800);
+  }, 500);
 });
 </script>
 </body>

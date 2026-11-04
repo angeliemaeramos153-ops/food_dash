@@ -322,6 +322,14 @@
       arrivalAudio.loop = true;
       arrivalAudio.volume = 0.95;
       arrivalAudio.currentTime = 0;
+      arrivalAudio.onended = function () {
+        if (arrivalAlarmActive && !arrivalAcknowledged) {
+          arrivalAudio.currentTime = 0;
+          arrivalAudio.play().catch(() => {
+            playSynthArrivalAlarm();
+          });
+        }
+      };
       window.arrivalAlertAudio = arrivalAudio;
 
       const p = arrivalAudio.play();
@@ -1138,12 +1146,16 @@
 
   async function acknowledgeArrival(orderId, responseText) {
     // 1. Immediately stop, pause and reset the looping arrival audio
+    if (orderId) {
+      sessionStorage.setItem('fd_arrival_ack_' + orderId, '1');
+    }
     stopArrivalAlarmAudio();
     stopAllTones();
     if (typeof window.stopArrivalAlertSound === 'function') {
       window.stopArrivalAlertSound();
     }
     arrivalAcknowledged = true;
+    arrivalAlarmActive = false;
 
     // 2. Hide modal
     const modal = document.getElementById('riderArrivedModal');

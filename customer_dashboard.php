@@ -6008,7 +6008,13 @@ async function pollCustomerOrdersLive() {
   _isCustomerPollingRunning = true;
 
   try {
-    const res = await fetch(`order_api.php?action=get_orders&_t=${Date.now()}`, { cache: 'no-store' });
+    const res = await fetch(`order_api.php?action=get_orders&_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if (!data.success || !Array.isArray(data.orders)) return;
@@ -6036,28 +6042,20 @@ async function pollCustomerOrdersLive() {
                   || ['arrived', 'arrived_destination'].includes(status_lower);
 
       const arrivedKey = 'fd_arrived_alert_seen_' + oId;
-      const alreadyArrivedAlerted = (sessionStorage.getItem(arrivedKey) === '1');
-      const wasArrived = prevStatus && ['ARRIVED', 'ARRIVED_DESTINATION'].includes(prevStatus);
+      const modal = document.getElementById('riderArrivedModal');
+      const isModalOpen = modal && (modal.style.display === 'flex' || modal.classList.contains('show'));
+      const isArrivalAck = (sessionStorage.getItem('fd_arrival_ack_' + oId) === '1');
 
-      // Client-side state-transition checking: detect exact transitions to 'arrived'
-      const isTransitionToArrived = isArrived && !wasArrived;
-
-      // Trigger arrival notification top banner & audio alert immediately upon arrival transition
-      if (isTransitionToArrived || (isArrived && !alreadyArrivedAlerted)) {
+      // Instant Modal Pop-up on Arrival: if status is arrived and not acknowledged, display immediately
+      if (isArrived && !isArrivalAck) {
         sessionStorage.setItem(arrivedKey, '1');
         window.displayedNotificationIds.add('arrived_' + oId);
 
         // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
         dismissLiveRiderBanner();
 
-        // Programmatically play persistent looping arrival audio alert sound immediately
-        if (typeof playArrivalAlertSound === 'function') {
-          playArrivalAlertSound();
-        }
-
-        // Prominently trigger arrival popup modal
-        const modal = document.getElementById('riderArrivedModal');
-        if (modal) {
+        // Prominently trigger arrival popup modal immediately
+        if (modal && !isModalOpen) {
           modal.classList.add('show', 'active');
           modal.style.display = 'flex';
           modal.style.visibility = 'visible';
@@ -6065,6 +6063,11 @@ async function pollCustomerOrdersLive() {
         }
         if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
           FoodDashCall.triggerArrivalAlarm(oId, ord.rider_name || 'Rider');
+        }
+
+        // Programmatically play persistent looping arrival audio alert sound immediately
+        if (typeof playArrivalAlertSound === 'function') {
+          playArrivalAlertSound();
         }
 
         // Update UI badges and cards to Arrived
@@ -6123,8 +6126,8 @@ async function pollCustomerOrdersLive() {
 }
 window.pollCustomerOrdersLive = pollCustomerOrdersLive;
 
-// Continuous 800ms ultra-responsive polling loop for instant telemetry sync
-setInterval(pollCustomerOrdersLive, 800);
+// Continuous 500ms ultra-responsive polling loop for instant telemetry sync
+setInterval(pollCustomerOrdersLive, 500);
 
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(pollCustomerOrdersLive, 500);
@@ -6967,7 +6970,7 @@ function openCustomerTrackingModal(orderId, meta) {
     if (activeCustomerTrackingOrderId) {
       fetchCustomerLiveTracking(activeCustomerTrackingOrderId, false);
     }
-  }, 800); // 800ms ultra-responsive real-time tracking loop
+  }, 500); // 500ms ultra-responsive real-time tracking loop
 }
 
 function closeCustomerTrackingModal() {
@@ -7247,14 +7250,22 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     let data = null;
     try {
       const res = await fetch(`get_order_status.php?order_id=${orderId}&_t=${Date.now()}`, {
-        cache: 'no-store'
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
       });
       if (res.ok) data = await res.json();
     } catch (e) {}
 
     if (!data || !data.success) {
       const res = await fetch(`order_api.php?action=get_rider_location&order_id=${orderId}&_t=${Date.now()}`, {
-        cache: 'no-store'
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
       });
       data = await res.json();
     }
@@ -7329,17 +7340,20 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
 
     const isTrackTransitionToArrived = isLiveArrived && !wasTrackArrived;
     const arrivedAlertKey = 'fd_arrived_alert_seen_' + orderId;
+    const isAck = (sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
+    const modal = document.getElementById('riderArrivedModal');
+    const isModalOpen = modal && (modal.style.display === 'flex' || modal.classList.contains('show'));
 
-    if (isTrackTransitionToArrived || (isLiveArrived && sessionStorage.getItem(arrivedAlertKey) !== '1')) {
+    // Instant Modal Pop-up on Arrival: if status is arrived and not acknowledged, display immediately
+    if (isLiveArrived && !isAck) {
       sessionStorage.setItem(arrivedAlertKey, '1');
       window.displayedNotificationIds.add('arrived_' + orderId);
 
       // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
       dismissLiveRiderBanner();
 
-      // Prominently trigger arrival popup modal
-      const modal = document.getElementById('riderArrivedModal');
-      if (modal) {
+      // Prominently trigger arrival popup modal immediately
+      if (modal && !isModalOpen) {
         modal.classList.add('show', 'active');
         modal.style.display = 'flex';
         modal.style.visibility = 'visible';
@@ -8412,6 +8426,9 @@ function closeRiderArrivedModal() {
 function respondToRiderArrival(responseOption) {
   stopArrivalAlertSound();
   const oId = activeCustomerTrackingOrderId || 0;
+  if (oId) {
+    sessionStorage.setItem('fd_arrival_ack_' + oId, '1');
+  }
   if (window.FoodDashCall) {
     FoodDashCall.acknowledgeArrival(oId, responseOption);
   }
@@ -8498,49 +8515,54 @@ function updateOrderStatusToArrived(orderId) {
 
 function handleRiderArrivedEvent(data) {
   const oId = data.order_id || activeCustomerTrackingOrderId || 0;
-  const arrivedKey = 'arrived_' + oId;
-  const arrivedAlertKey = 'fd_arrived_alert_seen_' + oId;
-
-  if (!window._customerArrivedHandledOrders) window._customerArrivedHandledOrders = new Set();
-  if (window._customerArrivedHandledOrders.has(oId) && sessionStorage.getItem(arrivedAlertKey) === '1') {
+  const isAck = Boolean(data.arrival_acknowledged) || (sessionStorage.getItem('fd_arrival_ack_' + oId) === '1');
+  if (isAck) {
+    if (window.FoodDashCall) FoodDashCall.stopAllTones();
+    stopArrivalAlertSound();
     return;
   }
-  window._customerArrivedHandledOrders.add(oId);
-  window.displayedNotificationIds.add(arrivedKey);
-  sessionStorage.setItem(arrivedAlertKey, '1');
 
-  const rName = (data.rider_name || currentTrackingRiderName || 'Waiting for Rider Assignment');
-
-  // Trigger persistent looping arrival alarm / arrival modal
   const modal = document.getElementById('riderArrivedModal');
-  if (modal) {
-    modal.classList.add('show', 'active');
-    modal.style.display = 'flex';
-    modal.style.visibility = 'visible';
-    modal.style.pointerEvents = 'auto';
-  }
-  if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
-    FoodDashCall.triggerArrivalAlarm(oId, rName);
-  }
+  const isModalOpen = modal && (modal.style.display === 'flex' || modal.classList.contains('show'));
 
-  // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
-  dismissLiveRiderBanner();
+  // Instant Modal Pop-up on Arrival: immediately display modal if not currently open
+  if (!isModalOpen) {
+    if (modal) {
+      modal.classList.add('show', 'active');
+      modal.style.display = 'flex';
+      modal.style.visibility = 'visible';
+      modal.style.pointerEvents = 'auto';
+    }
+    const rName = (data.rider_name || currentTrackingRiderName || 'Waiting for Rider Assignment');
+    if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
+      FoodDashCall.triggerArrivalAlarm(oId, rName);
+    }
 
-  // Programmatically play persistent looping arrival alert sound immediately
-  if (typeof playArrivalAlertSound === 'function') {
-    playArrivalAlertSound();
+    // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
+    dismissLiveRiderBanner();
+
+    // Programmatically play persistent looping arrival alert sound immediately
+    if (typeof playArrivalAlertSound === 'function') {
+      playArrivalAlertSound();
+    }
   }
 
   updateOrderStatusToArrived(oId);
 }
 
-// Global background poll every 2.5 seconds running continuously on ALL customer screens
+// Global background poll running continuously on ALL customer screens for real-time telemetry
 async function pollCustomerCommunicationUpdates() {
   if (!currentCustomerId) return;
   try {
     const targetOrderId = activeCustomerTrackingOrderId || 0;
     const url = `order_communication_api.php?action=get_updates&customer_id=${currentCustomerId}&order_id=${targetOrderId}&after_message_id=${lastSeenRiderMsgId}&_t=${Date.now()}`;
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetch(url, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    });
     if (!res.ok) return;
     const data = await res.json();
     if (!data.success) return;
@@ -8732,9 +8754,9 @@ async function pollCustomerCommunicationUpdates() {
   }
 }
 
-// Continuously execute every 800ms on ALL screens for real-time telemetry sync
+// Continuously execute every 500ms on ALL screens for instant real-time telemetry sync
 pollCustomerCommunicationUpdates();
-setInterval(pollCustomerCommunicationUpdates, 800);
+setInterval(pollCustomerCommunicationUpdates, 500);
 
 // Check if navigating to a specific screen via hash (e.g. #orders, #cart)
 if (window.location.hash) {
