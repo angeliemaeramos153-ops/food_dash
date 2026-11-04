@@ -541,8 +541,8 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
     // Active call on this order
     $active_call = null;
     try {
-        $c_stmt = $conn->prepare("SELECT call_id, order_id, caller_role, COALESCE(caller, caller_role) AS caller, caller_id, caller_name, caller_phone, receiver_role, receiver_id, status, call_status, created_at, TIMESTAMPDIFF(SECOND, updated_at, NOW()) AS seconds_since_update FROM order_calls WHERE order_id = :oid AND (status IN ('ringing', 'calling', 'accepted', 'connected') OR call_status IN ('calling', 'ringing', 'connected', 'accepted')) ORDER BY call_id DESC LIMIT 1");
-        $c_stmt->execute([':oid' => $order_id]);
+        $c_stmt = $conn->prepare("SELECT call_id, order_id, caller_role, COALESCE(caller, caller_role) AS caller, caller_id, caller_name, caller_phone, receiver_role, receiver_id, status, call_status, created_at, TIMESTAMPDIFF(SECOND, updated_at, NOW()) AS seconds_since_update FROM order_calls WHERE (order_id = :oid OR (receiver_id = :cid AND receiver_role = 'customer')) AND (status IN ('ringing', 'calling', 'accepted', 'connected') OR call_status IN ('calling', 'ringing', 'connected', 'accepted')) ORDER BY call_id DESC LIMIT 1");
+        $c_stmt->execute([':oid' => $order_id, ':cid' => $user_id]);
         $call_row = $c_stmt->fetch(PDO::FETCH_ASSOC);
         if ($call_row && (int)$call_row['seconds_since_update'] <= 45) {
             $active_call = $call_row;

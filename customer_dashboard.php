@@ -1726,7 +1726,8 @@ a:active,
 
 .nav{border:0;background:transparent;color:#72776a;font-size:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;position:relative}.nav i{font-size:15px}.nav.active{color:var(--olive-dark);font-weight:700}.badge{position:absolute;background:#e7352d;color:white;font-size:7px;border-radius:10px;padding:2px 5px;top:4px;right:20px}
 
-.toast{position:fixed;left:50%;bottom:82px;transform:translateX(-50%) translateY(20px);background:var(--olive-dark);color:white;padding:12px 22px;border-radius:24px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:999999;white-space:normal;text-align:center;max-width:min(92vw, 520px);box-shadow:0 8px 24px rgba(0,0,0,.35);line-height:1.4}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* Obsolete bottom toasts hidden in favor of standardized top banner */
+.toast, .cust-toast { position: fixed !important; display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; z-index: -9999 !important; }
 
 .logout{width:100%;background:#fff;cursor:pointer;font-family:inherit;margin-top:12px;border:1px solid #e55b52;color:#d33b32;border-radius:11px;padding:10px;font-size:9px;font-weight:600}
 .logout-modal{display:none;visibility:hidden;pointer-events:none;position:fixed;inset:0;background:rgba(28,32,6,.38);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:18px;z-index:1000}.logout-modal.show,.logout-modal.active,.logout-modal[style*="display: flex"],.logout-modal[style*="display:flex"]{display:flex !important;visibility:visible !important;pointer-events:auto !important;}.logout-box{width:min(360px,100%);background:#fffdf7;border:1px solid var(--line);border-radius:22px;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(55,65,22,.22)}.logout-box .logout-logo{width:58px;height:58px;border-radius:50%;object-fit:cover;border:1px solid #d7c98d;margin-bottom:9px}.logout-box h3{font-size:16px;color:var(--olive-dark);margin:0 0 5px}.logout-box p{font-size:9px;color:var(--muted);line-height:1.5;margin-bottom:17px}.logout-actions{display:flex;gap:8px}.logout-actions button,.logout-actions a{flex:1;padding:10px;border-radius:11px;font-size:9px;font-weight:700;text-decoration:none;border:0;font-family:inherit}.logout-cancel{background:#eee9d7;color:var(--olive)}.logout-confirm{background:var(--olive);color:white;display:grid;place-items:center}
@@ -2188,7 +2189,10 @@ a:active,
 .incoming-call-modal[style*="display: flex"],
 .incoming-call-modal[style*="display:flex"] {
   display: flex !important;
+  visibility: visible !important;
   pointer-events: auto !important;
+  opacity: 1 !important;
+  z-index: 999999 !important;
 }
 .incoming-call-card {
   position: relative;
@@ -3936,7 +3940,7 @@ a:active,
   <button class="nav" data-screen="account" onclick="showScreen('account')"><i class="fa-regular fa-user"></i><span>Account</span></button>
 </nav>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" style="display:none !important;" aria-hidden="true"></div>
 </div>
 
 <script src="assets/js/order_call_engine.js"></script>
@@ -4027,14 +4031,24 @@ function showScreen(id){
   if(id==='orders' && typeof loadCustomerOrdersLive === 'function') loadCustomerOrdersLive();
 }
 
-function toast(msg){
-  const t = document.getElementById('toast');
-  if (t) {
-    t.textContent = msg;
-    t.classList.add('show');
-    clearTimeout(window._toast);
-    window._toast = setTimeout(()=>t.classList.remove('show'), 4000);
+function toast(msg, type = null){
+  if (!msg) return;
+  let title = 'NOTIFICATION';
+  const str = String(msg).toLowerCase();
+  if (typeof type === 'string' && type) {
+    title = type.toUpperCase();
+  } else if (str.includes('cart')) {
+    title = 'SHOPPING CART';
+  } else if (str.includes('order')) {
+    title = 'ORDER UPDATE';
+  } else if (str.includes('address') || str.includes('location') || str.includes('gps') || str.includes('pinned')) {
+    title = 'LOCATION UPDATE';
+  } else if (str.includes('arrived')) {
+    title = 'RIDER ARRIVED';
+  } else if (str.includes('fail') || str.includes('error')) {
+    title = 'NOTICE';
   }
+  showCustomerFloatingBanner(title, msg);
 }
 
 let _custConfirmCallback = null;
@@ -6905,7 +6919,7 @@ function openCustomerTrackingModal(orderId, meta) {
     if (activeCustomerTrackingOrderId) {
       fetchCustomerLiveTracking(activeCustomerTrackingOrderId, false);
     }
-  }, 2000); // 2-second real-time polling loop
+  }, 1000); // 1-second ultra-responsive real-time tracking loop
 }
 
 function closeCustomerTrackingModal() {
@@ -6944,7 +6958,7 @@ function generateFallbackStreetCorridor(startLat, startLng, destLat, destLng) {
 // Smooth marker interpolation along OSRM road geometry
 let currentCustOsrmPath = [];
 
-function animateMarkerAlongRoad(marker, newLat, newLng, durationMs = 1500) {
+function animateMarkerAlongRoad(marker, newLat, newLng, durationMs = 850) {
   if (!marker) return;
   const startLatLng = marker.getLatLng();
   const startLat = startLatLng.lat;
@@ -7336,8 +7350,7 @@ function renderCustomerMap(opts) {
       custRiderMarker = L.marker([opts.riderLat, opts.riderLng], { icon: riderIcon, zIndexOffset: 1000 }).addTo(custTrackingMap);
       custRiderMarker.bindPopup(`<b>${escapeCustHtml(opts.riderName || 'Rider')}</b><br><small>Live Motorcycle GPS</small>`);
     } else {
-      custRiderMarker.setLatLng([opts.riderLat, opts.riderLng]);
-      animateMarkerAlongRoad(custRiderMarker, opts.riderLat, opts.riderLng, 1400);
+      animateMarkerAlongRoad(custRiderMarker, opts.riderLat, opts.riderLng, 850);
     }
   }
 
@@ -7393,7 +7406,13 @@ async function syncCustomerChatUnreadBadge(orderId) {
 }
 
 function openCustomerChat(explicitOrderId = null) {
-  const orderId = explicitOrderId || activeCustomerTrackingOrderId || <?php echo !empty($active_tracking_order['order_id']) ? (int)$active_tracking_order['order_id'] : '0'; ?>;
+  let orderId = explicitOrderId || activeCustomerTrackingOrderId || <?php echo !empty($active_tracking_order['order_id']) ? (int)$active_tracking_order['order_id'] : '0'; ?>;
+  if (!orderId && window._customerLastOrderStates) {
+    const keys = Object.keys(window._customerLastOrderStates);
+    if (keys.length > 0) {
+      orderId = parseInt(keys[keys.length - 1], 10);
+    }
+  }
   if (!orderId) {
     showScreen('orders');
     return;
@@ -7413,7 +7432,12 @@ function openCustomerChat(explicitOrderId = null) {
   updateCustChatSmsLink('');
 
   const modal = document.getElementById('customerChatModal');
-  if (modal) modal.classList.add('show');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.style.visibility = 'visible';
+    modal.style.pointerEvents = 'auto';
+    modal.classList.add('show');
+  }
 
   const container = document.getElementById('custChatMessagesList');
   if (container) {
@@ -7427,12 +7451,17 @@ function openCustomerChat(explicitOrderId = null) {
     if (activeCustChatOrderId) {
       fetchCustomerMessages(activeCustChatOrderId, false);
     }
-  }, 2000);
+  }, 1500);
 }
 
 function closeCustomerChat() {
   const modal = document.getElementById('customerChatModal');
-  if (modal) modal.classList.remove('show');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.style.visibility = 'hidden';
+    modal.style.pointerEvents = 'none';
+    modal.classList.remove('show');
+  }
   if (custChatPollTimer) {
     clearInterval(custChatPollTimer);
     custChatPollTimer = null;
@@ -7613,6 +7642,7 @@ window.playMessageChime = playCustomerChime;
 window.playCustomerChime = playCustomerChime;
 
 let msgBannerTimeout = null;
+const _customerRecentBanners = new Map();
 
 function dismissLiveRiderBanner() {
   const banner = document.getElementById('liveRiderMessageBanner');
@@ -7627,34 +7657,75 @@ function dismissLiveRiderBanner() {
 }
 
 function showCustomerFloatingBanner(title, text, onClick = null) {
+  if (!text) return;
   const banner = document.getElementById('liveRiderMessageBanner');
   const titleEl = document.getElementById('liveMsgBannerTitle');
   const textEl = document.getElementById('liveMsgBannerText');
   const iconEl = banner ? banner.querySelector('.rct-icon i') : null;
-  if (banner && textEl) {
-    const bannerTitle = title || 'MESSAGE FROM RIDER';
-    if (titleEl) titleEl.textContent = bannerTitle;
-    textEl.textContent = text;
-    if (iconEl) {
-      if (bannerTitle.includes('PICKED UP') || bannerTitle.includes('DELIVERY')) {
-        iconEl.className = 'fa-solid fa-motorcycle';
-      } else {
-        iconEl.className = 'fa-solid fa-comment-dots';
-      }
-    }
-    banner.onclick = (e) => {
-      if (e.target.closest('.rct-close')) return;
-      if (typeof onClick === 'function') onClick();
-      else openChatFromBanner();
-    };
-    banner.classList.add('show');
-    banner.style.display = 'flex';
+  if (!banner || !textEl) return;
 
-    if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
-    msgBannerTimeout = setTimeout(() => {
-      dismissLiveRiderBanner();
-    }, 6000);
+  const bannerTitle = (title || 'FOOD DASH NOTIFICATION').toUpperCase();
+  const bannerText = String(text).trim();
+  const dedupeKey = `${bannerTitle}:::${bannerText}`;
+  const now = Date.now();
+
+  // Deduplication guard: ignore identical notification within 3.5 seconds
+  const lastTime = _customerRecentBanners.get(dedupeKey) || 0;
+  if (now - lastTime < 3500) {
+    return;
   }
+  _customerRecentBanners.set(dedupeKey, now);
+
+  // Clean old entries in map
+  if (_customerRecentBanners.size > 40) {
+    for (const [k, t] of _customerRecentBanners.entries()) {
+      if (now - t > 10000) _customerRecentBanners.delete(k);
+    }
+  }
+
+  // Remove any obsolete floating toast DOM elements
+  document.querySelectorAll('.live-toast-banner, .cust-toast').forEach(el => el.remove());
+
+  if (titleEl) titleEl.textContent = bannerTitle;
+  textEl.textContent = bannerText;
+
+  if (iconEl) {
+    if (bannerTitle.includes('PICKED UP') || bannerTitle.includes('DELIVERY') || bannerTitle.includes('WAY')) {
+      iconEl.className = 'fa-solid fa-motorcycle';
+    } else if (bannerTitle.includes('ARRIVED') || bannerTitle.includes('OUTSIDE') || bannerTitle.includes('LOCATION') || bannerTitle.includes('PINNED')) {
+      iconEl.className = 'fa-solid fa-location-dot';
+    } else if (bannerTitle.includes('MESSAGE') || bannerTitle.includes('CHAT') || bannerTitle.includes('RIDER')) {
+      iconEl.className = 'fa-solid fa-comment-dots';
+    } else if (bannerTitle.includes('CART') || bannerTitle.includes('ORDER')) {
+      iconEl.className = 'fa-solid fa-bag-shopping';
+    } else if (bannerTitle.includes('ERROR') || bannerTitle.includes('FAIL')) {
+      iconEl.className = 'fa-solid fa-circle-exclamation';
+    } else {
+      iconEl.className = 'fa-solid fa-bell';
+    }
+  }
+
+  banner.onclick = (e) => {
+    if (e.target.closest('.rct-close')) {
+      dismissLiveRiderBanner();
+      return;
+    }
+    if (typeof onClick === 'function') onClick();
+    else if (bannerTitle.includes('MESSAGE') || bannerTitle.includes('CHAT')) openChatFromBanner();
+    else if (bannerTitle.includes('ORDER') || bannerTitle.includes('DELIVERY') || bannerTitle.includes('ARRIVED')) {
+      if (activeCustomerTrackingOrderId) openCustomerTrackingModal(activeCustomerTrackingOrderId);
+      else showScreen('orders');
+    }
+  };
+
+  banner.classList.add('show');
+  banner.style.display = 'flex';
+
+  if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
+  msgBannerTimeout = setTimeout(() => {
+    dismissLiveRiderBanner();
+  }, 5500);
+
   playCustomerChime();
 }
 
@@ -7672,22 +7743,24 @@ function showToastCustomer(msg, uniqueId = null, title = null) {
     setTimeout(() => window.displayedNotificationIds.delete(uniqueId), 15000);
   }
 
-  // Strictly reserve the top floating banner for actual incoming rider messages
-  if (title === 'MESSAGE FROM RIDER') {
-    showCustomerFloatingBanner('MESSAGE FROM RIDER', msg, () => {
+  const bannerTitle = title || 'NOTIFICATION';
+  let onClick = null;
+  if (bannerTitle === 'MESSAGE FROM RIDER' || bannerTitle.includes('MESSAGE')) {
+    onClick = openChatFromBanner;
+  } else if (bannerTitle.includes('DELIVERY') || bannerTitle.includes('PICKED UP') || bannerTitle.includes('ARRIVED')) {
+    onClick = () => {
       if (activeCustomerTrackingOrderId) openCustomerTrackingModal(activeCustomerTrackingOrderId);
       else showScreen('orders');
-    });
-    return;
+    };
   }
 
-  // All other system/action notifications go to the clean bottom toast snackbar
-  toast(msg);
+  // Standardized alerting exclusively to top notification banner
+  showCustomerFloatingBanner(bannerTitle, msg, onClick);
 }
 
-// Redirect all window.alert calls to the FoodDash in-app toast
+// Redirect all window.alert calls to the FoodDash top notification banner
 window.alert = function(msg) {
-  toast(String(msg || ''));
+  showCustomerFloatingBanner('NOTIFICATION', String(msg || ''));
 };
 
 function escapeCustHtml(str) {
@@ -7788,13 +7861,22 @@ function handleIncomingCallAlert(call) {
   if (connectedEl) connectedEl.style.display = 'none';
 
   modal.style.display = 'flex';
+  modal.style.visibility = 'visible';
+  modal.style.pointerEvents = 'auto';
+  modal.style.opacity = '1';
+  modal.classList.add('show');
   startRingtone();
 }
 
 function dismissIncomingCallIfRinging() {
   if (currentIncomingCall && !currentIncomingCall.connected) {
     const modal = document.getElementById('incomingCallModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+      modal.style.display = 'none';
+      modal.style.visibility = 'hidden';
+      modal.style.pointerEvents = 'none';
+      modal.classList.remove('show');
+    }
     stopRingtone();
     currentIncomingCall = null;
   }
@@ -7855,7 +7937,12 @@ async function declineIncomingCall() {
     } catch (e) {}
   }
   const modal = document.getElementById('incomingCallModal');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.style.display = 'none';
+    modal.style.visibility = 'hidden';
+    modal.style.pointerEvents = 'none';
+    modal.classList.remove('show');
+  }
   currentIncomingCall = null;
 }
 
@@ -7875,7 +7962,12 @@ async function endConnectedCall() {
     } catch (e) {}
   }
   const modal = document.getElementById('incomingCallModal');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.style.display = 'none';
+    modal.style.visibility = 'hidden';
+    modal.style.pointerEvents = 'none';
+    modal.classList.remove('show');
+  }
   currentIncomingCall = null;
 }
 
@@ -8263,9 +8355,9 @@ async function pollCustomerCommunicationUpdates() {
   }
 }
 
-// Continuously execute every 2.5 seconds on ALL screens
+// Continuously execute every 1.5 seconds on ALL screens for real-time sync
 pollCustomerCommunicationUpdates();
-setInterval(pollCustomerCommunicationUpdates, 2500);
+setInterval(pollCustomerCommunicationUpdates, 1500);
 
 // Check if navigating to a specific screen via hash (e.g. #orders, #cart)
 if (window.location.hash) {

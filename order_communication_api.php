@@ -330,6 +330,22 @@ if ($action === 'get_updates' || $method === 'GET') {
     $after_id = (int)($_GET['after_message_id'] ?? $_GET['after_id'] ?? $payload['after_message_id'] ?? 0);
     $customer_id = (int)($_GET['customer_id'] ?? $payload['customer_id'] ?? ($role === 'customer' ? $user_id : 0));
 
+    // Priority: If there is an active ringing/calling call targeting this customer, resolve its order_id
+    if ($customer_id > 0) {
+        try {
+            $active_call_check = $conn->prepare("SELECT order_id FROM order_calls 
+                WHERE (receiver_id = :cid OR (receiver_role = 'customer' AND (order_id = :oid OR :oid = 0))) 
+                  AND call_status IN ('calling', 'ringing', 'connected', 'accepted') 
+                  AND TIMESTAMPDIFF(SECOND, updated_at, NOW()) <= 45 
+                ORDER BY call_id DESC LIMIT 1");
+            $active_call_check->execute([':cid' => $customer_id, ':oid' => $order_id]);
+            $ac_row = $active_call_check->fetch(PDO::FETCH_ASSOC);
+            if ($ac_row && !empty($ac_row['order_id'])) {
+                $order_id = (int)$ac_row['order_id'];
+            }
+        } catch (Throwable $e) {}
+    }
+
     // If no order_id provided, automatically resolve the customer's latest active order
     if ($order_id <= 0 && $customer_id > 0) {
         $ostmt = $conn->prepare("SELECT order_id FROM food_orders 
@@ -342,6 +358,20 @@ if ($action === 'get_updates' || $method === 'GET') {
         $orow = $ostmt->fetch(PDO::FETCH_ASSOC);
         if ($orow) {
             $order_id = (int)$orow['order_id'];
+        } else {
+            try {
+                $o2stmt = $conn->prepare("SELECT COALESCE(id, order_id) AS order_id FROM orders 
+                    WHERE user_id = :uid 
+                    ORDER BY CASE 
+                        WHEN LOWER(TRIM(status)) IN ('out_for_delivery', 'on_the_way', 'on_delivery', 'near_customer', 'arrived') THEN 1 
+                        WHEN LOWER(TRIM(status)) IN ('preparing', 'cooking', 'in_kitchen', 'ready_for_pickup', 'ready', 'accepted', 'claimed', 'pending') THEN 2 
+                        ELSE 3 END ASC, id DESC LIMIT 1");
+                $o2stmt->execute([':uid' => $customer_id]);
+                $o2row = $o2stmt->fetch(PDO::FETCH_ASSOC);
+                if ($o2row) {
+                    $order_id = (int)$o2row['order_id'];
+                }
+            } catch (Throwable $e) {}
         }
     }
 
@@ -407,9 +437,9 @@ if ($action === 'get_updates' || $method === 'GET') {
         TIMESTAMPDIFF(SECOND, created_at, NOW()) AS elapsed_seconds,
         TIMESTAMPDIFF(SECOND, updated_at, NOW()) AS seconds_since_update
     FROM order_calls 
-    WHERE order_id = :oid 
+    WHERE (order_id = :oid OR (receiver_id = :cid AND receiver_role = 'customer')) 
     ORDER BY call_id DESC LIMIT 1");
-    $call_stmt->execute([':oid' => $order_id]);
+    $call_stmt->execute([':oid' => $order_id, ':cid' => $customer_id]);
     $call_row = $call_stmt->fetch(PDO::FETCH_ASSOC);
 
     $active_call = null;
