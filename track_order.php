@@ -1678,7 +1678,7 @@ async function pollOrderCommunication() {
     // Automated "Rider Arrived" Live Notification
     const sNorm = String(data.status || '').toUpperCase();
     const dNorm = String(data.delivery_status || '').toLowerCase();
-    if (data.is_arrived || dNorm === 'arrived' || sNorm === 'ARRIVED') {
+    if (data.is_arrived || ['arrived', 'arrived_destination'].includes(dNorm) || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(sNorm)) {
       if (data.arrival_acknowledged) {
         if (window.FoodDashCall) FoodDashCall.stopAllTones();
       } else {
@@ -1692,11 +1692,11 @@ document.addEventListener('DOMContentLoaded', () => {
   initMap();
   pollRiderLocation();
   pollOrderCommunication();
-  // Continuous 2.5-second polling loop
+  // Continuous 1-second ultra-responsive polling loop
   pollTimer = setInterval(() => {
     pollRiderLocation();
     pollOrderCommunication();
-  }, 2500);
+  }, 1000);
 });
 </script>
 </body>

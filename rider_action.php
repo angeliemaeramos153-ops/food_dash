@@ -353,7 +353,7 @@ if ($action === 'near' || $action === 'near_customer') {
     ]);
 }
 
-if ($action === 'arrived') {
+if ($action === 'arrived' || $action === 'arrived_destination') {
     $conn->prepare("UPDATE food_orders SET delivery_status = 'arrived', status = 'ARRIVED', arrived_notified_at = NOW(), updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
     try {
         $conn->prepare("UPDATE orders SET status = 'arrived', arrived_notified_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':oid' => $order_id, ':oid2' => $order_id]);

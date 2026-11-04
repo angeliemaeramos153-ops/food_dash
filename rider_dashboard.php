@@ -419,7 +419,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'message' => 'Customer notified that you are near.']);
                     exit();
-                } elseif ($action === 'arrived') {
+                } elseif ($action === 'arrived' || $action === 'arrived_destination') {
                     if ((int)($order['rider_id'] ?? 0) !== $rid) throw new Exception('You are not assigned to this order.');
                     $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'arrived', status = 'ARRIVED', arrived_notified_at = NOW(), updated_at = NOW() WHERE order_id = :oid AND rider_id = :rid");
                     $stmt->execute([':oid' => $order_id, ':rid' => $rid]);
@@ -638,7 +638,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Rider near customer');
                     create_notification($conn, $customer_id, 'rider_near', 'Rider near', 'Your rider is near.', $order_id);
                     $msg = 'Customer notified that you are near.';
-                } elseif ($action === 'arrived' && (int)($order['rider_id'] ?? 0) === $rid) {
+                } elseif (($action === 'arrived' || $action === 'arrived_destination') && (int)($order['rider_id'] ?? 0) === $rid) {
                     $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'arrived', status = 'ARRIVED', arrived_notified_at = NOW(), updated_at = NOW() WHERE order_id = :oid");
                     $stmt->execute([':oid' => $order_id]);
 

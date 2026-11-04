@@ -351,7 +351,7 @@ if ($action === 'get_updates' || $method === 'GET') {
         $ostmt = $conn->prepare("SELECT order_id FROM food_orders 
             WHERE (customer_id = :cid OR user_id = :uid) AND COALESCE(rider_cleared, 0) = 0
             ORDER BY CASE 
-                WHEN LOWER(TRIM(status)) IN ('out_for_delivery', 'on_the_way', 'on_delivery', 'near_customer', 'arrived') THEN 1 
+                WHEN LOWER(TRIM(status)) IN ('out_for_delivery', 'on_the_way', 'on_delivery', 'near_customer', 'arrived', 'arrived_destination') THEN 1 
                 WHEN LOWER(TRIM(status)) IN ('preparing', 'cooking', 'in_kitchen', 'ready_for_pickup', 'ready', 'accepted', 'claimed', 'pending') THEN 2 
                 ELSE 3 END ASC, order_id DESC LIMIT 1");
         $ostmt->execute([':cid' => $customer_id, ':uid' => $customer_id]);
@@ -363,7 +363,7 @@ if ($action === 'get_updates' || $method === 'GET') {
                 $o2stmt = $conn->prepare("SELECT COALESCE(id, order_id) AS order_id FROM orders 
                     WHERE user_id = :uid 
                     ORDER BY CASE 
-                        WHEN LOWER(TRIM(status)) IN ('out_for_delivery', 'on_the_way', 'on_delivery', 'near_customer', 'arrived') THEN 1 
+                        WHEN LOWER(TRIM(status)) IN ('out_for_delivery', 'on_the_way', 'on_delivery', 'near_customer', 'arrived', 'arrived_destination') THEN 1 
                         WHEN LOWER(TRIM(status)) IN ('preparing', 'cooking', 'in_kitchen', 'ready_for_pickup', 'ready', 'accepted', 'claimed', 'pending') THEN 2 
                         ELSE 3 END ASC, id DESC LIMIT 1");
                 $o2stmt->execute([':uid' => $customer_id]);
@@ -519,7 +519,9 @@ if ($action === 'get_updates' || $method === 'GET') {
         }
     }
 
-    $is_arrived = (strtolower(trim((string)($order['delivery_status'] ?? ''))) === 'arrived' || strtolower(trim((string)($order['status'] ?? ''))) === 'arrived');
+    $ord_st = strtolower(trim((string)($order['status'] ?? '')));
+    $ord_del_st = strtolower(trim((string)($order['delivery_status'] ?? '')));
+    $is_arrived = in_array($ord_del_st, ['arrived', 'arrived_destination'], true) || in_array($ord_st, ['arrived', 'arrived_destination'], true);
     $arrival_acknowledged = !empty($order['arrival_acknowledged_at']);
     $acknowledged_seen = !empty($order['acknowledged_seen']);
     $arrival_ack_response = $order['arrival_ack_response'] ?? null;

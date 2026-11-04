@@ -552,8 +552,8 @@ unset($ord_ref_item);
 foreach ($db_orders as $row) {
     $st = strtoupper(trim(str_replace([' ', '-'], '_', $row['status'] ?? '')));
     $del_st = strtoupper(trim(str_replace([' ', '-'], '_', $row['delivery_status'] ?? '')));
-    if (in_array($st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED']) ||
-        in_array($del_st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'])) {
+    if (in_array($st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED', 'ARRIVED_DESTINATION']) ||
+        in_array($del_st, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED', 'ARRIVED_DESTINATION'])) {
         $ontheway_count++;
         if (!$active_tracking_order) {
             $active_tracking_order = $row;
@@ -3152,7 +3152,7 @@ a:active,
       $del_status = strtolower(trim((string)($ord['delivery_status'] ?? '')));
       $status_lower = strtolower(trim((string)($ord['status'] ?? '')));
       
-      $is_arrived = ($raw_status === 'ARRIVED' || $del_status === 'arrived' || $status_lower === 'arrived');
+      $is_arrived = (in_array($raw_status, ['ARRIVED', 'ARRIVED_DESTINATION']) || in_array($del_status, ['arrived', 'arrived_destination']) || in_array($status_lower, ['arrived', 'arrived_destination']));
       $is_near = ($raw_status === 'NEAR_CUSTOMER' || $del_status === 'near_customer' || $status_lower === 'near_customer');
       $is_ontheway = in_array($raw_status, ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'])
                   || in_array($del_status, ['on_the_way', 'on_delivery', 'picked_up'])
@@ -5805,8 +5805,8 @@ async function loadCustomerOrdersLive() {
     orders.forEach(ord => {
       const st = String(ord.status || '').toUpperCase().replace(/[ -]/g, '_');
       const delSt = String(ord.delivery_status || '').toUpperCase().replace(/[ -]/g, '_');
-      if (['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'].includes(st) ||
-          ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED'].includes(delSt)) {
+      if (['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED', 'ARRIVED_DESTINATION'].includes(st) ||
+          ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY', 'NEAR_CUSTOMER', 'ARRIVED', 'ARRIVED_DESTINATION'].includes(delSt)) {
         onTheWayCount++;
         if (!activeDeliveryOrder) activeDeliveryOrder = ord;
       }
@@ -5844,7 +5844,7 @@ async function loadCustomerOrdersLive() {
       const del_status = String(ord.delivery_status || '').toLowerCase().trim();
       const status_lower = String(ord.status || '').toLowerCase().trim();
 
-      const is_arrived = (raw_status === 'ARRIVED' || del_status === 'arrived' || status_lower === 'arrived');
+      const is_arrived = (['ARRIVED', 'ARRIVED_DESTINATION'].includes(raw_status) || ['arrived', 'arrived_destination'].includes(del_status) || ['arrived', 'arrived_destination'].includes(status_lower));
       const is_near = (raw_status === 'NEAR_CUSTOMER' || del_status === 'near_customer' || status_lower === 'near_customer');
       const is_ontheway = ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'].includes(raw_status)
                   || ['on_the_way', 'on_delivery', 'picked_up'].includes(del_status)
@@ -6024,8 +6024,44 @@ async function pollCustomerOrdersLive() {
       const prevStatus = _customerLastOrderStates[oId];
       const wasDelivering = prevStatus && ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'].includes(prevStatus);
 
-      // Trigger pickup notification structured banner if newly transitioning to on_delivery OR if freshly loaded and not yet alerted
-      if (isDelivering && (!alreadyAlerted || (prevStatus && !wasDelivering))) {
+      const isArrived = ['ARRIVED', 'ARRIVED_DESTINATION'].includes(raw_status)
+                  || ['arrived', 'arrived_destination'].includes(del_status)
+                  || ['arrived', 'arrived_destination'].includes(status_lower);
+
+      const arrivedKey = 'fd_arrived_alert_seen_' + oId;
+      const alreadyArrivedAlerted = (sessionStorage.getItem(arrivedKey) === '1');
+      const wasArrived = prevStatus && ['ARRIVED', 'ARRIVED_DESTINATION'].includes(prevStatus);
+
+      // Trigger arrival notification top banner & audio alert
+      if (isArrived && (!alreadyArrivedAlerted || (prevStatus && !wasArrived))) {
+        sessionStorage.setItem(arrivedKey, '1');
+        window.displayedNotificationIds.add('arrived_' + oId);
+
+        // Top notification banner ("Rider is outside now! / Arrived at your door!")
+        showCustomerFloatingBanner('RIDER ARRIVED', 'Rider is outside now! / Arrived at your door!', () => {
+          if (typeof openCustomerTrackingModal === 'function') {
+            openCustomerTrackingModal(oId);
+          } else if (typeof openTrackingModal === 'function') {
+            openTrackingModal(oId);
+          } else if (typeof showScreen === 'function') {
+            showScreen('orders');
+          }
+        });
+
+        // Programmatically play arrival audio alert sound (HTML5 Audio / base64 beep)
+        if (typeof playArrivalAlertSound === 'function') {
+          playArrivalAlertSound();
+        } else if (typeof playCustomerChime === 'function') {
+          playCustomerChime();
+        }
+
+        // Update UI badges and cards to Arrived
+        if (typeof updateOrderStatusToArrived === 'function') {
+          updateOrderStatusToArrived(oId);
+        }
+
+        if (typeof loadNotifications === 'function') loadNotifications();
+      } else if (isDelivering && (!alreadyAlerted || (prevStatus && !wasDelivering))) {
         sessionStorage.setItem(pickupKey, '1');
         const cleanRef = '#' + String(ord.order_ref || ('FD-' + oId)).replace(/^#+/, '');
         const totalNum = parseFloat(ord.total_amount || ord.total_price || 0).toFixed(2);
@@ -6043,7 +6079,7 @@ async function pollCustomerOrdersLive() {
 
         // Dynamically update notification badge on header
         if (typeof loadNotifications === 'function') loadNotifications();
-      } else if (prevStatus && prevStatus !== raw_status && !isDelivering) {
+      } else if (prevStatus && prevStatus !== raw_status && !isDelivering && !isArrived) {
         // Status updated (e.g. Preparing, Ready for Pickup):
         // Clean interface: old floating green toast removed entirely.
         // Dynamically update notification badge on customer dashboard header.
@@ -6075,8 +6111,8 @@ async function pollCustomerOrdersLive() {
 }
 window.pollCustomerOrdersLive = pollCustomerOrdersLive;
 
-// Continuous 5-second polling loop as specified in architecture requirements
-setInterval(pollCustomerOrdersLive, 5000);
+// Continuous 1000ms ultra-responsive polling loop for instant telemetry sync
+setInterval(pollCustomerOrdersLive, 1000);
 
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(pollCustomerOrdersLive, 500);
@@ -7221,6 +7257,34 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
       statusBadgeEl.textContent = rawSt;
     }
 
+    // Detect arrived status in live tracking modal
+    const ordRawSt = String(ord.status || '').toUpperCase().trim();
+    const dataRawSt = String(data.status || '').toUpperCase().trim();
+    const ordDelSt = String(ord.delivery_status || '').toLowerCase().trim();
+    const dataDelSt = String(data.delivery_status || '').toLowerCase().trim();
+    const isLiveArrived = Boolean(data.is_arrived)
+                       || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(ordRawSt)
+                       || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(dataRawSt)
+                       || ['arrived', 'arrived_destination'].includes(ordDelSt)
+                       || ['arrived', 'arrived_destination'].includes(dataDelSt);
+
+    if (isLiveArrived) {
+      const arrivedAlertKey = 'fd_arrived_alert_seen_' + orderId;
+      if (sessionStorage.getItem(arrivedAlertKey) !== '1') {
+        sessionStorage.setItem(arrivedAlertKey, '1');
+        window.displayedNotificationIds.add('arrived_' + orderId);
+        showCustomerFloatingBanner('RIDER ARRIVED', 'Rider is outside now! / Arrived at your door!', () => {
+          if (typeof openCustomerTrackingModal === 'function') openCustomerTrackingModal(orderId);
+        });
+        if (typeof playArrivalAlertSound === 'function') {
+          playArrivalAlertSound();
+        } else if (typeof playCustomerChime === 'function') {
+          playCustomerChime();
+        }
+      }
+      updateOrderStatusToArrived(orderId);
+    }
+
     const destAddrEl = document.getElementById('custTrackDestAddress');
     if (destAddrEl) {
       destAddrEl.textContent = ord.delivery_address || data.delivery_address || 'Delivery Destination';
@@ -7640,6 +7704,62 @@ function playCustomerChime() {
 }
 window.playMessageChime = playCustomerChime;
 window.playCustomerChime = playCustomerChime;
+
+function playArrivalAlertSound() {
+  // 1. Programmatically play arrival alert sound via HTML5 Audio object (audio file with fallback to base64 data URI)
+  let played = false;
+  try {
+    const audio = new Audio('assets/arrival_alarm.wav');
+    audio.volume = 1.0;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.then(() => {
+        played = true;
+      }).catch(() => {
+        playCustomerChime();
+      });
+    }
+  } catch (e) {
+    playCustomerChime();
+  }
+
+  // 2. Play base64 audio and Web Audio synthesizer alert
+  try {
+    playCustomerChime();
+  } catch (e) {}
+
+  // 3. Web Audio API synthesized urgent attention chime (880Hz -> 1175Hz alert tone)
+  try {
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtxClass) {
+      const ctx = new AudioCtxClass();
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(880, now);
+      gain1.gain.setValueAtTime(0.3, now);
+      gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.16);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.16);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1174.66, now + 0.18);
+      gain2.gain.setValueAtTime(0.35, now + 0.18);
+      gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.18);
+      osc2.stop(now + 0.45);
+    }
+  } catch (e) {}
+}
+window.playArrivalAlertSound = playArrivalAlertSound;
 
 let msgBannerTimeout = null;
 const _customerRecentBanners = new Map();
@@ -8143,8 +8263,11 @@ function updateOrderStatusToArrived(orderId) {
 function handleRiderArrivedEvent(data) {
   const oId = data.order_id || activeCustomerTrackingOrderId || 0;
   const arrivedKey = 'arrived_' + oId;
-  if (window.displayedNotificationIds.has(arrivedKey)) return;
+  const arrivedAlertKey = 'fd_arrived_alert_seen_' + oId;
+  const alreadyAlerted = (window.displayedNotificationIds.has(arrivedKey) && sessionStorage.getItem(arrivedAlertKey) === '1');
+  if (alreadyAlerted) return;
   window.displayedNotificationIds.add(arrivedKey);
+  sessionStorage.setItem(arrivedAlertKey, '1');
 
   const rName = (data.rider_name || currentTrackingRiderName || 'Waiting for Rider Assignment');
 
@@ -8156,7 +8279,20 @@ function handleRiderArrivedEvent(data) {
     if (modal) modal.style.display = 'flex';
   }
 
-  toast(`📍 Your rider has arrived! Please choose a response.`);
+  // Top notification banner ("Rider is outside now! / Arrived at your door!")
+  showCustomerFloatingBanner('RIDER ARRIVED', 'Rider is outside now! / Arrived at your door!', () => {
+    if (typeof openCustomerTrackingModal === 'function') openCustomerTrackingModal(oId);
+    else if (typeof openTrackingModal === 'function') openTrackingModal(oId);
+    else if (typeof showScreen === 'function') showScreen('orders');
+  });
+
+  // Programmatically play audio alert sound
+  if (typeof playArrivalAlertSound === 'function') {
+    playArrivalAlertSound();
+  } else if (typeof playCustomerChime === 'function') {
+    playCustomerChime();
+  }
+
   updateOrderStatusToArrived(oId);
 }
 
@@ -8211,7 +8347,10 @@ async function pollCustomerCommunicationUpdates() {
     }
 
     // Automated "Rider Arrived" Live Notification
-    if (data.is_arrived || dNorm === 'arrived' || sNorm === 'ARRIVED') {
+    const isArrivedEvent = Boolean(data.is_arrived) 
+                        || ['arrived', 'arrived_destination'].includes(dNorm) 
+                        || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(sNorm);
+    if (isArrivedEvent) {
       if (data.arrival_acknowledged) {
         if (window.FoodDashCall) FoodDashCall.stopAllTones();
       } else {
@@ -8275,7 +8414,7 @@ async function pollCustomerCommunicationUpdates() {
       }
       const tag = document.getElementById(`status-tag-${oId}`);
       if (tag) {
-        if (data.is_arrived || dNorm === 'arrived' || sNorm === 'ARRIVED') {
+        if (data.is_arrived || ['arrived', 'arrived_destination'].includes(dNorm) || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(sNorm)) {
           tag.className = 'status-badge status-arrived';
           tag.innerHTML = '<i class="fa-solid fa-bell fa-shake"></i> Arrived';
         } else if (dNorm === 'near_customer' || sNorm === 'NEAR_CUSTOMER') {
@@ -8289,7 +8428,7 @@ async function pollCustomerCommunicationUpdates() {
 
       const card = document.getElementById(`order-card-${oId}`);
       if (card) {
-        card.setAttribute('data-status', (dNorm === 'arrived' || sNorm === 'ARRIVED') ? 'arrived' : ((dNorm === 'near_customer' || sNorm === 'NEAR_CUSTOMER') ? 'near_customer' : 'out_for_delivery'));
+        card.setAttribute('data-status', (['arrived', 'arrived_destination'].includes(dNorm) || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(sNorm) || data.is_arrived) ? 'arrived' : ((dNorm === 'near_customer' || sNorm === 'NEAR_CUSTOMER') ? 'near_customer' : 'out_for_delivery'));
         card.classList.add('on-the-way-card');
         card.style.cursor = 'pointer';
         card.onclick = () => openTrackingModal(oId);
@@ -8355,9 +8494,9 @@ async function pollCustomerCommunicationUpdates() {
   }
 }
 
-// Continuously execute every 1.5 seconds on ALL screens for real-time sync
+// Continuously execute every 1.0 second on ALL screens for real-time telemetry sync
 pollCustomerCommunicationUpdates();
-setInterval(pollCustomerCommunicationUpdates, 1500);
+setInterval(pollCustomerCommunicationUpdates, 1000);
 
 // Check if navigating to a specific screen via hash (e.g. #orders, #cart)
 if (window.location.hash) {

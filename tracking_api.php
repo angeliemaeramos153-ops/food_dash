@@ -166,8 +166,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // 1. Automated "Rider Arrived" Live Notification (<= 50 meters)
             $curr_st = strtolower(trim((string)($fresh['status'] ?? '')));
             $curr_del = strtolower(trim((string)($fresh['delivery_status'] ?? '')));
-            $is_delivering = in_array($curr_del, ['on_the_way', 'near_customer', 'arrived'], true)
-                          || in_array($curr_st, ['out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived'], true);
+            $is_delivering = in_array($curr_del, ['on_the_way', 'near_customer', 'arrived', 'arrived_destination'], true)
+                          || in_array($curr_st, ['out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived', 'arrived_destination'], true);
             if ($arrived && empty($fresh['arrived_notified_at']) && $is_delivering) {
                 $conn->beginTransaction();
                 try {
