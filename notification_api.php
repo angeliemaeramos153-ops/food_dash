@@ -14,8 +14,8 @@ $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'GET') {
     $action = $_GET['action'] ?? '';
     
-    // Quick unread count check (PostgreSQL boolean: is_read = FALSE)
-    $stmt2 = $conn->prepare("SELECT COUNT(*) AS c FROM notifications WHERE user_id = :uid AND is_read = FALSE");
+    // Quick unread count check
+    $stmt2 = $conn->prepare("SELECT COUNT(*) AS c FROM notifications WHERE user_id = :uid AND (is_read = FALSE OR is_read = 0)");
     $stmt2->execute([':uid' => $user_id]);
     $unread = (int)($stmt2->fetchColumn() ?: 0);
     
@@ -25,7 +25,12 @@ if ($method === 'GET') {
     }
 
     $limit = min(50, max(1, (int)($_GET['limit'] ?? 30)));
-    $stmt = $conn->prepare("SELECT notification_id, order_id, notification_type, title, message, is_read, TO_CHAR(created_at, 'Mon DD, YYYY • HH12:MI AM') AS created_at FROM notifications WHERE user_id = :uid ORDER BY notification_id DESC LIMIT :lim");
+    $driver = $conn->getAttribute(PDO::ATTR_DRIVER_NAME);
+    $dateSql = ($driver === 'pgsql')
+        ? "TO_CHAR(created_at, 'Mon DD, YYYY • HH12:MI AM') AS created_at"
+        : "DATE_FORMAT(created_at, '%b %d, %Y • %h:%i %p') AS created_at";
+
+    $stmt = $conn->prepare("SELECT notification_id, order_id, notification_type, title, message, is_read, {$dateSql} FROM notifications WHERE user_id = :uid ORDER BY notification_id DESC LIMIT :lim");
     $stmt->bindValue(':uid', $user_id, PDO::PARAM_INT);
     $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
     $stmt->execute();
@@ -56,7 +61,7 @@ if ($action === 'mark_read') {
     exit;
 }
 if ($action === 'mark_all_read') {
-    $stmt = $conn->prepare("UPDATE notifications SET is_read = TRUE WHERE user_id = :uid AND is_read = FALSE");
+    $stmt = $conn->prepare("UPDATE notifications SET is_read = TRUE WHERE user_id = :uid AND (is_read = FALSE OR is_read = 0)");
     $ok = $stmt->execute([':uid' => $user_id]);
     echo json_encode(['success' => (bool)$ok]);
     exit;
