@@ -6047,38 +6047,12 @@ async function pollCustomerOrdersLive() {
         sessionStorage.setItem(arrivedKey, '1');
         window.displayedNotificationIds.add('arrived_' + oId);
 
-        // Force the arrival banner to display and slide down reliably
-        const banner = document.getElementById('liveRiderMessageBanner');
-        if (banner) {
-          const titleEl = document.getElementById('liveMsgBannerTitle');
-          const textEl = document.getElementById('liveMsgBannerText');
-          if (titleEl) titleEl.textContent = 'RIDER ARRIVED';
-          if (textEl) textEl.textContent = 'Your rider has arrived outside with your order! 🛵';
-          banner.style.display = 'block';
-          banner.classList.add('slide-down');
-          banner.classList.add('show');
-          if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
-          msgBannerTimeout = setTimeout(() => {
-            dismissLiveRiderBanner();
-          }, 7000);
-        } else {
-          showCustomerFloatingBanner('RIDER ARRIVED', 'Rider is outside now! / Arrived at your door!', () => {
-            if (typeof openCustomerTrackingModal === 'function') {
-              openCustomerTrackingModal(oId);
-            } else if (typeof openTrackingModal === 'function') {
-              openTrackingModal(oId);
-            } else if (typeof showScreen === 'function') {
-              showScreen('orders');
-            }
-          });
-        }
+        // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
+        dismissLiveRiderBanner();
 
-        // Programmatically play arrival audio alert sound & chime immediately
+        // Programmatically play persistent looping arrival audio alert sound immediately
         if (typeof playArrivalAlertSound === 'function') {
           playArrivalAlertSound();
-        }
-        if (typeof playCustomerChime === 'function') {
-          playCustomerChime();
         }
 
         // Prominently trigger arrival popup modal
@@ -7360,25 +7334,8 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
       sessionStorage.setItem(arrivedAlertKey, '1');
       window.displayedNotificationIds.add('arrived_' + orderId);
 
-      // Force the arrival banner to display and slide down reliably
-      const banner = document.getElementById('liveRiderMessageBanner');
-      if (banner) {
-        const titleEl = document.getElementById('liveMsgBannerTitle');
-        const textEl = document.getElementById('liveMsgBannerText');
-        if (titleEl) titleEl.textContent = 'RIDER ARRIVED';
-        if (textEl) textEl.textContent = 'Your rider has arrived outside with your order! 🛵';
-        banner.style.display = 'block';
-        banner.classList.add('slide-down');
-        banner.classList.add('show');
-        if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
-        msgBannerTimeout = setTimeout(() => {
-          dismissLiveRiderBanner();
-        }, 7000);
-      } else {
-        showCustomerFloatingBanner('RIDER ARRIVED', 'Rider is outside now! / Arrived at your door!', () => {
-          if (typeof openCustomerTrackingModal === 'function') openCustomerTrackingModal(orderId);
-        });
-      }
+      // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
+      dismissLiveRiderBanner();
 
       // Prominently trigger arrival popup modal
       const modal = document.getElementById('riderArrivedModal');
@@ -7392,12 +7349,9 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
         FoodDashCall.triggerArrivalAlarm(orderId, currentTrackingRiderName || 'Rider');
       }
 
-      // Programmatically play arrival alert sound & chime immediately
+      // Programmatically play persistent looping arrival alert sound immediately
       if (typeof playArrivalAlertSound === 'function') {
         playArrivalAlertSound();
-      }
-      if (typeof playCustomerChime === 'function') {
-        playCustomerChime();
       }
 
       updateOrderStatusToArrived(orderId);
@@ -8022,16 +7976,17 @@ function showCustomerFloatingBanner(title, text, onClick = null) {
   const now = Date.now();
   const isArrivalNotification = bannerTitle.includes('ARRIVED') || bannerTitle.includes('OUTSIDE');
 
-  // Deduplication guard: ignore identical non-arrival notifications within 3.5 seconds
-  if (!isArrivalNotification) {
-    const lastTime = _customerRecentBanners.get(dedupeKey) || 0;
-    if (now - lastTime < 3500) {
-      return;
-    }
-    _customerRecentBanners.set(dedupeKey, now);
-  } else {
-    _customerRecentBanners.set(dedupeKey, now);
+  // Deduplication guard & duplicate prevention: arrival notifications render ONLY in center arrival modal
+  if (isArrivalNotification) {
+    dismissLiveRiderBanner();
+    return;
   }
+
+  const lastTime = _customerRecentBanners.get(dedupeKey) || 0;
+  if (now - lastTime < 3500) {
+    return;
+  }
+  _customerRecentBanners.set(dedupeKey, now);
 
   // Clean old entries in map
   if (_customerRecentBanners.size > 40) {
@@ -8568,34 +8523,12 @@ function handleRiderArrivedEvent(data) {
     FoodDashCall.triggerArrivalAlarm(oId, rName);
   }
 
-  // Force the arrival banner to display and slide down reliably
-  const banner = document.getElementById('liveRiderMessageBanner');
-  if (banner) {
-    const titleEl = document.getElementById('liveMsgBannerTitle');
-    const textEl = document.getElementById('liveMsgBannerText');
-    if (titleEl) titleEl.textContent = 'RIDER ARRIVED';
-    if (textEl) textEl.textContent = 'Your rider has arrived outside with your order! 🛵';
-    banner.style.display = 'block';
-    banner.classList.add('slide-down');
-    banner.classList.add('show');
-    if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
-    msgBannerTimeout = setTimeout(() => {
-      dismissLiveRiderBanner();
-    }, 7000);
-  } else {
-    showCustomerFloatingBanner('RIDER ARRIVED', 'Rider is outside now! / Arrived at your door!', () => {
-      if (typeof openCustomerTrackingModal === 'function') openCustomerTrackingModal(oId);
-      else if (typeof openTrackingModal === 'function') openTrackingModal(oId);
-      else if (typeof showScreen === 'function') showScreen('orders');
-    });
-  }
+  // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
+  dismissLiveRiderBanner();
 
-  // Programmatically play audio alert sound immediately
+  // Programmatically play persistent looping arrival alert sound immediately
   if (typeof playArrivalAlertSound === 'function') {
     playArrivalAlertSound();
-  }
-  if (typeof playCustomerChime === 'function') {
-    playCustomerChime();
   }
 
   updateOrderStatusToArrived(oId);

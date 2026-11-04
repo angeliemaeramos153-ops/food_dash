@@ -1879,21 +1879,15 @@ function handleRiderArrivedEvent(data) {
 
   const rName = data.rider_name || 'Alex';
 
-  // Force the arrival banner to display and slide down reliably
+  // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
   const banner = document.getElementById('liveRiderMessageBanner');
   if (banner) {
-    const titleEl = document.getElementById('liveMsgBannerTitle');
-    const textEl = document.getElementById('liveMsgBannerText');
-    if (titleEl) titleEl.textContent = 'RIDER ARRIVED';
-    if (textEl) textEl.textContent = 'Your rider has arrived outside with your order! 🛵';
-    banner.style.display = 'block';
-    banner.classList.add('slide-down');
-    banner.classList.add('show');
-    if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
-    msgBannerTimeout = setTimeout(() => {
-      banner.style.display = 'none';
-      banner.classList.remove('slide-down', 'show');
-    }, 7000);
+    banner.style.display = 'none';
+    banner.classList.remove('slide-down', 'show');
+  }
+  if (msgBannerTimeout) {
+    clearTimeout(msgBannerTimeout);
+    msgBannerTimeout = null;
   }
 
   // Trigger persistent looping arrival alarm / arrival modal
@@ -1908,9 +1902,8 @@ function handleRiderArrivedEvent(data) {
     FoodDashCall.triggerArrivalAlarm(orderId, rName);
   }
 
-  // Programmatically play audio alert sound & chime immediately
+  // Programmatically play persistent looping arrival audio alert sound immediately
   playArrivalAlertSound();
-  playCustomerChime();
 
   // Update status badge on page to Arrived
   const statusPills = document.querySelectorAll('.status-pill');

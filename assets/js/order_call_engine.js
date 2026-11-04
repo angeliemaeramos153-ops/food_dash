@@ -48,14 +48,56 @@
   }
 
   // Pre-bind gesture listeners for browser audio policy (especially mobile Safari & Chrome)
-  function unlockAudioContextOnGesture() {
+  let audioUnlocked = false;
+  function unlockAudioContextOnGesture(e) {
     initAudioContext();
     if (audioCtx && audioCtx.state === 'suspended') {
       audioCtx.resume().catch(() => {});
     }
+
+    // Prime Web Audio on mobile with a silent 1-sample buffer
+    if (audioCtx && !audioUnlocked) {
+      try {
+        const buffer = audioCtx.createBuffer(1, 1, 22050);
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+        audioUnlocked = true;
+      } catch (err) {}
+    }
+
+    // If arrival alarm is active but was waiting for user touch gesture on mobile:
+    if (arrivalAlarmActive && !arrivalAcknowledged) {
+      if (e && e.target && e.target.closest && e.target.closest('.btn-arrival-action')) {
+        return; // Action button click handler will stop and dismiss
+      }
+      if (audioCtx) {
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume().then(() => {
+            if (arrivalAlarmActive && !arrivalAcknowledged && !synthLoopInterval) {
+              playSynthArrivalAlarm();
+            }
+          }).catch(() => {});
+        } else if (!synthLoopInterval) {
+          playSynthArrivalAlarm();
+        }
+      }
+      if (arrivalAudio && arrivalAudio.paused) {
+        arrivalAudio.loop = true;
+        arrivalAudio.currentTime = 0;
+        arrivalAudio.play().catch(() => {
+          if (arrivalAlarmActive && !arrivalAcknowledged && !synthLoopInterval) {
+            playSynthArrivalAlarm();
+          }
+        });
+      }
+    }
   }
-  ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => {
+
+  ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(evt => {
     document.addEventListener(evt, unlockAudioContextOnGesture, { passive: true });
+    window.addEventListener(evt, unlockAudioContextOnGesture, { passive: true });
   });
 
   function resolveSoundPath(filename) {
@@ -1035,6 +1077,16 @@
 
     // Ensure buttons have the exact required responses
     injectArrivalButtons(orderId);
+
+    // Hide/dismiss top notification banner completely upon arrival to keep ONLY the center arrival modal
+    const topBanner = document.getElementById('liveRiderMessageBanner');
+    if (topBanner) {
+      topBanner.style.display = 'none';
+      topBanner.classList.remove('show', 'slide-down');
+    }
+    if (typeof window.dismissLiveRiderBanner === 'function') {
+      try { window.dismissLiveRiderBanner(); } catch (e) {}
+    }
 
     if (modal) {
       modal.classList.add('show', 'active');
