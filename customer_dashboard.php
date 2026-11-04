@@ -474,48 +474,69 @@ try {
     } else {
         $stmt = $conn->prepare("
             SELECT 
-                COALESCE(o.id, o.order_id) AS order_id,
-                COALESCE(o.id, o.order_id) AS id,
-                COALESCE(o.order_number, CONCAT('#FD-', COALESCE(o.id, o.order_id))) AS order_ref,
-                COALESCE(s.shop_name, o.store_name, 'Partner Store') AS store_name,
-                COALESCE(o.items_summary, 'Food Dash Items') AS items_summary,
-                COALESCE(o.total_price, 0.00) AS total_amount,
-                COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
-                COALESCE(o.status, 'Pending') AS status,
-                COALESCE(o.status, 'Pending') AS delivery_status,
+                COALESCE(fo.order_id, o.order_id, o.id) AS order_id,
+                COALESCE(fo.order_id, o.order_id, o.id) AS id,
+                COALESCE(fo.order_ref, o.order_number, CONCAT('#FD-', COALESCE(fo.order_id, o.order_id, o.id))) AS order_ref,
+                COALESCE(fo.store_name, s.shop_name, o.store_name, 'Partner Store') AS store_name,
+                COALESCE(fo.items_summary, o.items_summary, 'Food Dash Items') AS items_summary,
+                COALESCE(fo.total_amount, o.total_price, 0.00) AS total_amount,
+                COALESCE(fo.payment_method, o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
+                COALESCE(fo.status, o.status, 'Pending') AS status,
+                COALESCE(fo.delivery_status, o.status, 'waiting') AS delivery_status,
                 'delivery' AS order_type,
-                COALESCE(o.delivery_address, '') AS delivery_address,
-                o.delivery_lat,
-                o.delivery_lng,
-                o.rider_name,
-                o.rider_phone,
-                o.current_lat,
-                o.current_lng,
-                o.created_at,
-                COALESCE(o.rider_cleared, 0) AS rider_cleared
-            FROM orders o
-            LEFT JOIN shops s ON (o.store_id = s.shop_id OR o.shop_id = s.shop_id)
-            WHERE (o.user_id = :uid OR o.customer_id = :uid2)
-              AND UPPER(COALESCE(o.status, '')) != 'CANCELLED'
-              AND COALESCE(o.rider_cleared, 0) = 0
-            ORDER BY o.order_id DESC LIMIT 50
+                COALESCE(fo.delivery_address, o.delivery_address, '') AS delivery_address,
+                COALESCE(fo.delivery_lat, o.delivery_lat) AS delivery_lat,
+                COALESCE(fo.delivery_lng, o.delivery_lng) AS delivery_lng,
+                COALESCE(r.rider_name, ru.full_name, o.rider_name, '') AS rider_name,
+                COALESCE(r.phone, ru.phone, fo.rider_phone, o.rider_phone, '') AS rider_phone,
+                COALESCE(fo.rider_lat, o.current_lat) AS current_lat,
+                COALESCE(fo.rider_lng, o.current_lng) AS current_lng,
+                COALESCE(fo.created_at, o.created_at) AS created_at,
+                COALESCE(fo.rider_cleared, o.rider_cleared, 0) AS rider_cleared
+            FROM food_orders fo
+            LEFT JOIN orders o ON (fo.order_id = o.order_id OR fo.order_id = o.id)
+            LEFT JOIN shops s ON (fo.shop_id = s.shop_id OR (fo.shop_id = 0 AND LOWER(TRIM(fo.store_name)) = LOWER(TRIM(s.shop_name))))
+            LEFT JOIN riders r ON (fo.rider_id = r.rider_id OR fo.rider_id = r.user_id)
+            LEFT JOIN users ru ON (r.user_id = ru.user_id)
+            WHERE (fo.customer_id = :uid OR fo.user_id = :uid2)
+              AND COALESCE(fo.rider_cleared, 0) = 0
+            ORDER BY fo.order_id DESC LIMIT 50
         ");
         $stmt->execute([':uid' => $user_id, ':uid2' => $user_id]);
         $db_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
 
-    // Fallback to food_orders table if no orders found in main orders table
-    if (empty($db_orders)) {
-        $f_stmt = $conn->prepare("
-            SELECT order_id, order_ref, store_name, items_summary, total_amount, payment_method, status, delivery_status, order_type, delivery_address, created_at, COALESCE(rider_cleared, 0) AS rider_cleared
-            FROM food_orders 
-            WHERE customer_id = :cid
-              AND UPPER(COALESCE(status, '')) != 'CANCELLED'
-              AND COALESCE(rider_cleared, 0) = 0 
-            ORDER BY order_id DESC LIMIT 50
-        ");
-        $f_stmt->execute([':cid' => $user_id]);
-        $db_orders = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Fallback to legacy orders table if food_orders had zero results
+        if (empty($db_orders)) {
+            $stmt_leg = $conn->prepare("
+                SELECT 
+                    COALESCE(o.id, o.order_id) AS order_id,
+                    COALESCE(o.id, o.order_id) AS id,
+                    COALESCE(o.order_number, CONCAT('#FD-', COALESCE(o.id, o.order_id))) AS order_ref,
+                    COALESCE(s.shop_name, o.store_name, 'Partner Store') AS store_name,
+                    COALESCE(o.items_summary, 'Food Dash Items') AS items_summary,
+                    COALESCE(o.total_price, 0.00) AS total_amount,
+                    COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
+                    COALESCE(o.status, 'Pending') AS status,
+                    COALESCE(o.status, 'Pending') AS delivery_status,
+                    'delivery' AS order_type,
+                    COALESCE(o.delivery_address, '') AS delivery_address,
+                    o.delivery_lat,
+                    o.delivery_lng,
+                    o.rider_name,
+                    o.rider_phone,
+                    o.current_lat,
+                    o.current_lng,
+                    o.created_at,
+                    COALESCE(o.rider_cleared, 0) AS rider_cleared
+                FROM orders o
+                LEFT JOIN shops s ON (o.store_id = s.shop_id OR o.shop_id = s.shop_id)
+                WHERE (o.user_id = :uid OR o.customer_id = :uid2)
+                  AND COALESCE(o.rider_cleared, 0) = 0
+                ORDER BY o.order_id DESC LIMIT 50
+            ");
+            $stmt_leg->execute([':uid' => $user_id, ':uid2' => $user_id]);
+            $db_orders = $stmt_leg->fetchAll(PDO::FETCH_ASSOC);
+        }
     }
 } catch (Throwable $e) {
     $db_orders = [];
@@ -5900,16 +5921,62 @@ async function loadCustomerOrdersLive() {
 }
 window.loadCustomerOrdersLive = loadCustomerOrdersLive;
 
-// Background polling for live orders updates every 4 seconds
-setInterval(() => {
-  const ordersScreen = document.getElementById('orders');
-  if (ordersScreen && ordersScreen.classList.contains('active')) {
-    loadCustomerOrdersLive();
+// Lightweight Client-Side Polling Mechanism (every 5 seconds)
+// Keeps customer order tracking view and status badges synchronized in real time without manual browser refresh
+let _customerLastOrderStates = {};
+let _isCustomerPollingRunning = false;
+
+async function pollCustomerOrdersLive() {
+  if (_isCustomerPollingRunning) return;
+  _isCustomerPollingRunning = true;
+
+  try {
+    const res = await fetch(`order_api.php?action=get_orders&_t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.success || !Array.isArray(data.orders)) return;
+
+    const orders = data.orders;
+
+    // Detect status transitions for real-time notifications
+    orders.forEach(ord => {
+      const oId = parseInt(ord.order_id || ord.id, 10);
+      const st = String(ord.status || '').toUpperCase().trim();
+      if (_customerLastOrderStates[oId] && _customerLastOrderStates[oId] !== st) {
+        const ref = ord.order_ref || ('#' + oId);
+        const readable = st.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        toast(`Order ${ref} status updated: ${readable}`);
+      }
+      _customerLastOrderStates[oId] = st;
+    });
+
+    // 1. Update the customer's order list if the element exists in DOM
+    const listEl = document.getElementById('orderList');
+    if (listEl) {
+      loadCustomerOrdersLive();
+    }
+
+    // 2. If Customer Tracking Modal is open, update the tracking view dynamically
+    const trackingModal = document.getElementById('customerTrackingModal') || document.getElementById('trackingModal');
+    if (trackingModal && (trackingModal.classList.contains('show') || trackingModal.style.display === 'flex')) {
+      const trackingOrderId = activeCustomerTrackingOrderId || (orders.length > 0 ? parseInt(orders[0].order_id || orders[0].id, 10) : null);
+      if (trackingOrderId) {
+        fetchCustomerLiveTracking(trackingOrderId, false);
+      }
+    }
+  } catch (err) {
+    console.debug('Order tracking poll error:', err);
+  } finally {
+    _isCustomerPollingRunning = false;
   }
-}, 4000);
+}
+window.pollCustomerOrdersLive = pollCustomerOrdersLive;
+
+// Continuous 5-second polling loop as specified in architecture requirements
+setInterval(pollCustomerOrdersLive, 5000);
 
 document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(loadCustomerOrdersLive, 500);
+  setTimeout(pollCustomerOrdersLive, 500);
 });
 
 function accountNotice(section) {

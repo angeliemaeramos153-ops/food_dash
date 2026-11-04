@@ -22,11 +22,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'update_order_status') {
         $order_id = isset($_POST['order_id']) ? (int)$_POST['order_id'] : 0;
         $raw_status = isset($_POST['status']) ? trim($_POST['status']) : '';
-        $new_status = strtoupper(trim(str_replace([' ', '-'], '_', $raw_status)));
-        if ($new_status === 'READY') $new_status = 'READY_FOR_PICKUP';
+        $s = strtolower(trim(str_replace([' ', '-'], '_', $raw_status)));
 
-        if ($order_id <= 0 || !in_array($new_status, ['PREPARING', 'READY_FOR_PICKUP'], true)) {
-            echo json_encode(['success' => false, 'message' => 'Invalid status transition.']);
+        // Comprehensive lifecycle status definitions across all supported states
+        $lifecycle_map = [
+            'pending' => [
+                'status'          => 'PENDING',
+                'delivery_status' => 'waiting',
+                'orders_status'   => 'Pending',
+                'audit_note'      => 'Order status set to Pending by Manager',
+            ],
+            'preparing' => [
+                'status'          => 'PREPARING',
+                'delivery_status' => 'preparing',
+                'orders_status'   => 'preparing',
+                'audit_note'      => 'Chef/Manager accepted order and started kitchen preparation',
+            ],
+            'accepted' => [
+                'status'          => 'PREPARING',
+                'delivery_status' => 'preparing',
+                'orders_status'   => 'preparing',
+                'audit_note'      => 'Chef/Manager accepted order and started kitchen preparation',
+            ],
+            'ready' => [
+                'status'          => 'READY_FOR_PICKUP',
+                'delivery_status' => 'ready_for_pickup',
+                'orders_status'   => 'ready',
+                'audit_note'      => 'Food prepared and packed, ready for rider pickup',
+            ],
+            'ready_for_pickup' => [
+                'status'          => 'READY_FOR_PICKUP',
+                'delivery_status' => 'ready_for_pickup',
+                'orders_status'   => 'ready',
+                'audit_note'      => 'Food prepared and packed, ready for rider pickup',
+            ],
+            'pickup_ready' => [
+                'status'          => 'READY_FOR_PICKUP',
+                'delivery_status' => 'ready_for_pickup',
+                'orders_status'   => 'ready',
+                'audit_note'      => 'Food prepared and packed, ready for rider pickup',
+            ],
+            'on_delivery' => [
+                'status'          => 'on_delivery',
+                'delivery_status' => 'on_the_way',
+                'orders_status'   => 'on_delivery',
+                'audit_note'      => 'Order dispatched and on delivery to customer',
+            ],
+            'out_for_delivery' => [
+                'status'          => 'on_delivery',
+                'delivery_status' => 'on_the_way',
+                'orders_status'   => 'on_delivery',
+                'audit_note'      => 'Order dispatched and on delivery to customer',
+            ],
+            'delivered' => [
+                'status'          => 'DELIVERED',
+                'delivery_status' => 'delivered',
+                'orders_status'   => 'delivered',
+                'audit_note'      => 'Order marked as delivered by Manager',
+            ],
+            'settled' => [
+                'status'          => 'SETTLED',
+                'delivery_status' => 'settled',
+                'orders_status'   => 'settled',
+                'audit_note'      => 'Order transaction settled and reconciled',
+            ],
+            'canceled' => [
+                'status'          => 'CANCELLED',
+                'delivery_status' => 'cancelled',
+                'orders_status'   => 'Cancelled',
+                'audit_note'      => 'Order cancelled by Manager',
+            ],
+            'cancelled' => [
+                'status'          => 'CANCELLED',
+                'delivery_status' => 'cancelled',
+                'orders_status'   => 'Cancelled',
+                'audit_note'      => 'Order cancelled by Manager',
+            ],
+        ];
+
+        if ($order_id <= 0 || !isset($lifecycle_map[$s])) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Invalid status transition. Supported: pending, preparing, ready, on_delivery, delivered, settled, canceled.'
+            ]);
             exit();
         }
 
@@ -40,8 +118,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $old_st = strtoupper(trim(str_replace([' ', '-'], '_', $ord_data['status'])));
-        $new_delivery_status = ($new_status === 'PREPARING') ? 'preparing' : 'ready_for_pickup';
-        $notes = ($new_status === 'PREPARING') ? 'Chef accepted order and started kitchen preparation' : 'Food prepared and packed, ready for rider pickup';
+        $config = $lifecycle_map[$s];
+        $new_status = $config['status'];
+        $new_delivery_status = $config['delivery_status'];
+        $new_orders_status = $config['orders_status'];
+        $notes = $config['audit_note'];
 
         $stmt = $conn->prepare("UPDATE food_orders SET status = :st, delivery_status = :dst, chef_id = :cid, updated_at = NOW() WHERE order_id = :oid");
         if ($stmt) {
@@ -52,8 +133,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':oid' => $order_id,
             ]);
 
+            // Synchronize status into orders compatibility table
+            try {
+                $ord_stmt = $conn->prepare("UPDATE orders SET status = :st, updated_at = NOW() WHERE order_id = :oid OR id = :oid2");
+                $ord_stmt->execute([
+                    ':st'   => $new_orders_status,
+                    ':oid'  => $order_id,
+                    ':oid2' => $order_id,
+                ]);
+            } catch (Throwable $e) {}
+
             // Record audit log
-            record_order_audit_log($conn, $order_id, $old_st, $new_status, $user_id, 'chef', $notes);
+            record_order_audit_log($conn, $order_id, $old_st, $new_status, $user_id, 'manager', $notes);
 
             // Contextual notifications
             $clean_chef_ref = '#' . ltrim(!empty($ord_data['order_ref']) ? $ord_data['order_ref'] : ('FD-' . $order_id), '#');
@@ -62,9 +153,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($new_status === 'READY_FOR_PICKUP') {
                 create_notification($conn, (int)$ord_data['customer_id'], 'order_ready', 'Order Ready for Pickup', "Your order {$clean_chef_ref} is freshly prepared and ready for rider pickup.", $order_id);
                 notify_role($conn, 'rider', 'pickup_ready', 'Order Ready for Pickup', "{$clean_chef_ref} at {$ord_data['store_name']} is ready for dispatch.", $order_id);
+            } elseif ($new_status === 'on_delivery') {
+                create_notification($conn, (int)$ord_data['customer_id'], 'order_on_the_way', 'Order on Delivery', "Your order {$clean_chef_ref} is now on the way for delivery.", $order_id);
+            } elseif ($new_status === 'DELIVERED') {
+                create_notification($conn, (int)$ord_data['customer_id'], 'order_delivered', 'Order Delivered', "Your order {$clean_chef_ref} has been delivered successfully.", $order_id);
+            } elseif ($new_status === 'CANCELLED') {
+                create_notification($conn, (int)$ord_data['customer_id'], 'order_cancelled', 'Order Cancelled', "Your order {$clean_chef_ref} has been cancelled by the store manager.", $order_id);
             }
 
-            echo json_encode(['success' => true, 'message' => 'Status updated to ' . $new_status]);
+            // Real-time Cloud Synchronization: Push to Supabase if configured
+            try {
+                if (file_exists(__DIR__ . '/supabase_lib.php')) {
+                    require_once __DIR__ . '/supabase_lib.php';
+                    if (function_exists('sync_order_to_supabase')) {
+                        sync_order_to_supabase($order_id, $conn);
+                    }
+                }
+            } catch (Throwable $e) {}
+
+            echo json_encode([
+                'success'         => true,
+                'order_id'        => $order_id,
+                'status'          => $new_status,
+                'delivery_status' => $new_delivery_status,
+                'orders_status'   => $new_orders_status,
+                'message'         => 'Status updated to ' . $new_status
+            ]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Database error']);
         }
@@ -202,11 +316,11 @@ if ($legacy_count_query) {
 $orders = array();
 if ($active_tab === 'orders') {
     if ($selected_shop_id === 0) {
-        // All stores - show all active and recent orders
-        $res = $conn->query("SELECT * FROM food_orders WHERE UPPER(status) IN ('PENDING', 'PREPARING', 'READY_FOR_PICKUP', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'SETTLED') ORDER BY order_id DESC");
+        // All stores - show all active and recent orders across all lifecycle states
+        $res = $conn->query("SELECT * FROM food_orders ORDER BY order_id DESC LIMIT 100");
     } else {
         // Specific store - filter by shop_id
-        $stmt = $conn->prepare("SELECT * FROM food_orders WHERE shop_id = :sid AND UPPER(status) IN ('PENDING', 'PREPARING', 'READY_FOR_PICKUP', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'SETTLED') ORDER BY order_id DESC");
+        $stmt = $conn->prepare("SELECT * FROM food_orders WHERE shop_id = :sid ORDER BY order_id DESC LIMIT 100");
         $stmt->execute([':sid' => $selected_shop_id]);
         $res = $stmt;
     }
@@ -770,7 +884,10 @@ html, body {
       <?php if (empty($orders)): ?>
         <div class="card"><p style="font-size:10px;color:var(--muted);text-align:center;">No orders found.</p></div>
       <?php else: foreach ($orders as $ord): 
-        $st = isset($ord['status']) ? strtoupper(trim($ord['status'])) : 'PENDING';
+        $raw_st = isset($ord['status']) ? strtoupper(trim(str_replace([' ', '-'], '_', $ord['status']))) : 'PENDING';
+        if ($raw_st === 'READY') $raw_st = 'READY_FOR_PICKUP';
+        if ($raw_st === 'ON_DELIVERY' || $raw_st === 'ON_THE_WAY') $raw_st = 'OUT_FOR_DELIVERY';
+        $st = $raw_st;
       ?>
         <div class="card">
           <div class="card-header">
@@ -787,7 +904,7 @@ html, body {
             <button class="action-btn btn-accept" onclick="updateOrderStatus(<?php echo $ord['order_id']; ?>, 'PREPARING')"><i class="fa-solid fa-fire-burner"></i> Accept & Prepare</button>
           <?php elseif ($st === 'PREPARING'): ?>
             <button class="action-btn btn-ready" onclick="updateOrderStatus(<?php echo $ord['order_id']; ?>, 'READY_FOR_PICKUP')"><i class="fa-solid fa-circle-check"></i> Mark Ready for Pickup</button>
-          <?php elseif ($st === 'READY' || $st === 'READY_FOR_PICKUP'): ?>
+          <?php elseif ($st === 'READY_FOR_PICKUP'): ?>
             <div style="font-size:10px;color:var(--harvest-sun);font-weight:600;margin-top:6px;background:#fdf9ed;padding:6px;border-radius:6px;text-align:center;"><i class="fa-solid fa-clock"></i> Ready for Pickup — Waiting for Rider</div>
           <?php elseif ($st === 'OUT_FOR_DELIVERY'): ?>
             <div style="font-size:10px;color:var(--olive-shadow);font-weight:600;margin-top:6px;background:#f5f7ee;padding:6px;border-radius:6px;text-align:center;"><i class="fa-solid fa-motorcycle"></i> Out for Delivery (Rider en route)</div>
@@ -795,7 +912,23 @@ html, body {
             <div style="font-size:10px;color:var(--sagebrush);font-weight:600;margin-top:6px;background:#eef3ec;padding:6px;border-radius:6px;text-align:center;"><i class="fa-solid fa-house-chimney-check"></i> Delivered to Customer</div>
           <?php elseif ($st === 'SETTLED'): ?>
             <div style="font-size:10px;color:var(--olive-dark);font-weight:600;margin-top:6px;background:#f0ece1;padding:6px;border-radius:6px;text-align:center;"><i class="fa-solid fa-file-invoice-dollar"></i> Settled & Audited by Admin</div>
+          <?php elseif ($st === 'CANCELLED' || $st === 'CANCELED'): ?>
+            <div style="font-size:10px;color:#dc2626;font-weight:600;margin-top:6px;background:#fef2f2;padding:6px;border-radius:6px;text-align:center;"><i class="fa-solid fa-ban"></i> Order Cancelled</div>
           <?php endif; ?>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; gap:6px; border-top:1px dashed var(--line); padding-top:6px;">
+            <span style="font-size:9.5px; color:var(--muted); font-weight:600;"><i class="fa-solid fa-arrows-rotate"></i> Lifecycle State:</span>
+            <select style="font-size:10px; padding:3px 6px; border-radius:6px; border:1px solid var(--line); background:#fff; font-weight:600;" onchange="if(this.value){ updateOrderStatus(<?php echo (int)$ord['order_id']; ?>, this.value); }">
+              <option value="">Update Status...</option>
+              <option value="pending" <?php echo $st === 'PENDING' ? 'selected' : ''; ?>>Pending</option>
+              <option value="preparing" <?php echo $st === 'PREPARING' ? 'selected' : ''; ?>>Preparing</option>
+              <option value="ready" <?php echo $st === 'READY_FOR_PICKUP' ? 'selected' : ''; ?>>Ready for Pickup</option>
+              <option value="on_delivery" <?php echo $st === 'OUT_FOR_DELIVERY' ? 'selected' : ''; ?>>On Delivery</option>
+              <option value="delivered" <?php echo $st === 'DELIVERED' ? 'selected' : ''; ?>>Delivered</option>
+              <option value="settled" <?php echo $st === 'SETTLED' ? 'selected' : ''; ?>>Settled</option>
+              <option value="canceled" <?php echo ($st === 'CANCELLED' || $st === 'CANCELED') ? 'selected' : ''; ?>>Canceled</option>
+            </select>
+          </div>
         </div>
       <?php endforeach; endif; ?>
 

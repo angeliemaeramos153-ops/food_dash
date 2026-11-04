@@ -194,7 +194,22 @@ try {
             }
         }
     } elseif ($role === 'chef' || $role === 'manager') {
-        if (isset($valid_chef_transitions[$current_status]) && in_array($target_status, $valid_chef_transitions[$current_status], true)) {
+        if ($role === 'manager') {
+            $manager_lifecycle = [
+                'PENDING'          => ['status' => 'pending',          'note' => 'Order marked pending by manager'],
+                'PREPARING'        => ['status' => 'preparing',        'note' => 'Chef accepted order and started preparation'],
+                'READY_FOR_PICKUP' => ['status' => 'ready_for_pickup', 'note' => 'Food prepared and packed, ready for rider pickup'],
+                'OUT_FOR_DELIVERY' => ['status' => 'on_the_way',       'note' => 'Order dispatched on delivery by manager'],
+                'DELIVERED'        => ['status' => 'delivered',        'note' => 'Order marked delivered by manager'],
+                'SETTLED'          => ['status' => 'settled',          'note' => 'Order settled and reconciled by manager'],
+                'CANCELLED'        => ['status' => 'cancelled',        'note' => 'Order cancelled by manager']
+            ];
+            if (isset($manager_lifecycle[$target_status])) {
+                $allowed = true;
+                $new_delivery_status = $manager_lifecycle[$target_status]['status'];
+                $notes = $manager_lifecycle[$target_status]['note'];
+            }
+        } elseif (isset($valid_chef_transitions[$current_status]) && in_array($target_status, $valid_chef_transitions[$current_status], true)) {
             $allowed = true;
             if ($target_status === 'PREPARING') {
                 $new_delivery_status = 'preparing';

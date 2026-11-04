@@ -353,14 +353,34 @@ if ($method === 'POST') {
             $allowed = true;
             $notes = 'Admin state transition to ' . $target_status;
         } elseif ($role === 'chef' || $role === 'manager') {
-            if ($target_status === 'PREPARING' && in_array($current_canonical, ['PENDING'], true)) {
-                $allowed = true;
-                $new_delivery_status = 'preparing';
-                $notes = 'Chef accepted order and started kitchen preparation';
-            } elseif ($target_status === 'READY_FOR_PICKUP' && in_array($current_canonical, ['PREPARING'], true)) {
-                $allowed = true;
-                $new_delivery_status = 'ready_for_pickup';
-                $notes = 'Food prepared and packed, ready for rider pickup';
+            if ($role === 'manager') {
+                // Store managers can update across all lifecycle states
+                $manager_lifecycle = [
+                    'PENDING'          => 'waiting',
+                    'PREPARING'        => 'preparing',
+                    'READY_FOR_PICKUP' => 'ready_for_pickup',
+                    'READY'            => 'ready_for_pickup',
+                    'OUT_FOR_DELIVERY' => 'on_the_way',
+                    'ON_DELIVERY'      => 'on_the_way',
+                    'DELIVERED'        => 'delivered',
+                    'SETTLED'          => 'settled',
+                    'CANCELLED'        => 'cancelled'
+                ];
+                if (isset($manager_lifecycle[$target_status])) {
+                    $allowed = true;
+                    $new_delivery_status = $manager_lifecycle[$target_status];
+                    $notes = "Order status updated to {$target_status} by Manager {$user_name}";
+                }
+            } else {
+                if ($target_status === 'PREPARING' && in_array($current_canonical, ['PENDING'], true)) {
+                    $allowed = true;
+                    $new_delivery_status = 'preparing';
+                    $notes = 'Chef accepted order and started kitchen preparation';
+                } elseif ($target_status === 'READY_FOR_PICKUP' && in_array($current_canonical, ['PREPARING'], true)) {
+                    $allowed = true;
+                    $new_delivery_status = 'ready_for_pickup';
+                    $notes = 'Food prepared and packed, ready for rider pickup';
+                }
             }
         } elseif ($role === 'rider') {
             if ($target_status === 'OUT_FOR_DELIVERY') {
@@ -535,9 +555,10 @@ if ($method === 'POST') {
 
             // Sync with orders table
             try {
-                $conn->prepare("UPDATE orders SET status = :st WHERE order_id = :oid")->execute([
-                    ':st'  => ($target_status === 'CANCELLED' ? 'Cancelled' : $target_status),
-                    ':oid' => $order_id
+                $conn->prepare("UPDATE orders SET status = :st WHERE order_id = :oid OR id = :oid2")->execute([
+                    ':st'   => ($target_status === 'CANCELLED' ? 'Cancelled' : $target_status),
+                    ':oid'  => $order_id,
+                    ':oid2' => $order_id
                 ]);
             } catch (Throwable $e) {}
 

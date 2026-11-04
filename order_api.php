@@ -215,31 +215,33 @@ if ($action === 'get_orders' || $action === 'my_orders' || $action === 'get_cust
         try {
             $stmt = $conn->prepare("
                 SELECT 
-                    COALESCE(o.id, o.order_id) AS order_id,
-                    COALESCE(o.id, o.order_id) AS id,
-                    COALESCE(o.order_number, CONCAT('#FD-', COALESCE(o.id, o.order_id))) AS order_ref,
-                    COALESCE(s.shop_name, o.store_name, 'Partner Store') AS store_name,
-                    COALESCE(o.items_summary, 'Food Dash Items') AS items_summary,
-                    COALESCE(o.total_price, 0.00) AS total_amount,
-                    COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
-                    COALESCE(o.status, 'Pending') AS status,
-                    COALESCE(o.status, 'Pending') AS delivery_status,
+                    COALESCE(fo.order_id, o.order_id, o.id) AS order_id,
+                    COALESCE(fo.order_id, o.order_id, o.id) AS id,
+                    COALESCE(fo.order_ref, o.order_number, CONCAT('#FD-', COALESCE(fo.order_id, o.order_id, o.id))) AS order_ref,
+                    COALESCE(fo.store_name, s.shop_name, o.store_name, 'Partner Store') AS store_name,
+                    COALESCE(fo.items_summary, o.items_summary, 'Food Dash Items') AS items_summary,
+                    COALESCE(fo.total_amount, o.total_price, 0.00) AS total_amount,
+                    COALESCE(fo.payment_method, o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
+                    COALESCE(fo.status, o.status, 'Pending') AS status,
+                    COALESCE(fo.delivery_status, o.status, 'waiting') AS delivery_status,
                     'delivery' AS order_type,
-                    COALESCE(o.delivery_address, '') AS delivery_address,
-                    o.delivery_lat,
-                    o.delivery_lng,
-                    o.rider_name,
-                    o.rider_phone,
-                    o.current_lat,
-                    o.current_lng,
-                    o.created_at,
-                    COALESCE(o.rider_cleared, 0) AS rider_cleared
-                FROM orders o
-                LEFT JOIN shops s ON (o.store_id = s.shop_id OR o.shop_id = s.shop_id)
-                WHERE (o.user_id = :uid OR o.customer_id = :uid2)
-                  AND UPPER(COALESCE(o.status, '')) != 'CANCELLED'
-                  AND COALESCE(o.rider_cleared, 0) = 0
-                ORDER BY o.order_id DESC LIMIT 50
+                    COALESCE(fo.delivery_address, o.delivery_address, '') AS delivery_address,
+                    COALESCE(fo.delivery_lat, o.delivery_lat) AS delivery_lat,
+                    COALESCE(fo.delivery_lng, o.delivery_lng) AS delivery_lng,
+                    COALESCE(r.rider_name, ru.full_name, o.rider_name, '') AS rider_name,
+                    COALESCE(r.phone, ru.phone, fo.rider_phone, o.rider_phone, '') AS rider_phone,
+                    COALESCE(fo.rider_lat, o.current_lat) AS current_lat,
+                    COALESCE(fo.rider_lng, o.current_lng) AS current_lng,
+                    COALESCE(fo.created_at, o.created_at) AS created_at,
+                    COALESCE(fo.rider_cleared, o.rider_cleared, 0) AS rider_cleared
+                FROM food_orders fo
+                LEFT JOIN orders o ON (fo.order_id = o.order_id OR fo.order_id = o.id)
+                LEFT JOIN shops s ON (fo.shop_id = s.shop_id OR (fo.shop_id = 0 AND LOWER(TRIM(fo.store_name)) = LOWER(TRIM(s.shop_name))))
+                LEFT JOIN riders r ON (fo.rider_id = r.rider_id OR fo.rider_id = r.user_id)
+                LEFT JOIN users ru ON (r.user_id = ru.user_id)
+                WHERE (fo.customer_id = :uid OR fo.user_id = :uid2)
+                  AND COALESCE(fo.rider_cleared, 0) = 0
+                ORDER BY fo.order_id DESC LIMIT 50
             ");
             $stmt->execute([':uid' => $user_id, ':uid2' => $user_id]);
             $raw_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -251,25 +253,46 @@ if ($action === 'get_orders' || $action === 'my_orders' || $action === 'get_cust
         } catch (Throwable $e) {
             $orders = [];
         }
-    }
 
-    // Fallback to food_orders if orders table had zero results
-    if (empty($orders)) {
-        try {
-            $f_stmt = $conn->prepare("SELECT order_id, order_ref, store_name, items_summary, subtotal, delivery_fee, total_amount, payment_method, status, delivery_status, rider_id, delivery_address, created_at 
-                FROM food_orders 
-                WHERE customer_id = :cid 
-                  AND UPPER(COALESCE(status, '')) != 'CANCELLED'
-                  AND COALESCE(rider_cleared, 0) = 0 
-                ORDER BY order_id DESC LIMIT 50");
-            $f_stmt->execute([':cid' => $user_id]);
-            $food_orders = $f_stmt->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($food_orders as $fo) {
-                $fo['order_ref'] = '#' . ltrim($fo['order_ref'] ?: ('FD-' . $fo['order_id']), '#');
-                $fo['payment_meta'] = get_payment_method_meta($fo['payment_method'] ?? 'Cash on Delivery (COD)');
-                $orders[] = $fo;
-            }
-        } catch (Throwable $e) {}
+        // Fallback to legacy orders table if food_orders returned empty
+        if (empty($orders)) {
+            try {
+                $stmt = $conn->prepare("
+                    SELECT 
+                        COALESCE(o.id, o.order_id) AS order_id,
+                        COALESCE(o.id, o.order_id) AS id,
+                        COALESCE(o.order_number, CONCAT('#FD-', COALESCE(o.id, o.order_id))) AS order_ref,
+                        COALESCE(s.shop_name, o.store_name, 'Partner Store') AS store_name,
+                        COALESCE(o.items_summary, 'Food Dash Items') AS items_summary,
+                        COALESCE(o.total_price, 0.00) AS total_amount,
+                        COALESCE(o.payment_method, 'Cash on Delivery (COD)') AS payment_method,
+                        COALESCE(o.status, 'Pending') AS status,
+                        COALESCE(o.status, 'Pending') AS delivery_status,
+                        'delivery' AS order_type,
+                        COALESCE(o.delivery_address, '') AS delivery_address,
+                        o.delivery_lat,
+                        o.delivery_lng,
+                        o.rider_name,
+                        o.rider_phone,
+                        o.current_lat,
+                        o.current_lng,
+                        o.created_at,
+                        COALESCE(o.rider_cleared, 0) AS rider_cleared
+                    FROM orders o
+                    LEFT JOIN shops s ON (o.store_id = s.shop_id OR o.shop_id = s.shop_id)
+                    WHERE (o.user_id = :uid OR o.customer_id = :uid2)
+                      AND COALESCE(o.rider_cleared, 0) = 0
+                    ORDER BY o.order_id DESC LIMIT 50
+                ");
+                $stmt->execute([':uid' => $user_id, ':uid2' => $user_id]);
+                $raw_orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($raw_orders as $ro) {
+                    $ro['order_ref'] = '#' . ltrim($ro['order_ref'] ?? ('FD-' . $ro['order_id']), '#');
+                    $ro['payment_meta'] = get_payment_method_meta($ro['payment_method'] ?? 'Cash on Delivery (COD)');
+                    $orders[] = $ro;
+                }
+            } catch (Throwable $e) {}
+        }
     }
 
     $is_empty = empty($orders);
@@ -277,6 +300,56 @@ if ($action === 'get_orders' || $action === 'my_orders' || $action === 'get_cust
         'orders'      => $orders,
         'count'       => count($orders),
         'empty_state' => $is_empty ? 'No orders placed yet! [Browse Stores]' : null
+    ]);
+}
+
+// 2.5 FAST ORDER STATUS & TRACKING POLLING ENDPOINT
+if ($action === 'get_order_status' || $action === 'poll_status') {
+    $order_id = (int)($_GET['order_id'] ?? $payload['order_id'] ?? 0);
+    if ($order_id <= 0) {
+        order_api_out(false, 'Valid order_id is required.', [], 422);
+    }
+
+    $stmt = $conn->prepare("SELECT 
+        fo.order_id, 
+        fo.order_ref,
+        COALESCE(fo.status, o.status, 'PENDING') AS status,
+        COALESCE(fo.delivery_status, o.status, 'waiting') AS delivery_status,
+        fo.store_name,
+        COALESCE(r.rider_name, ru.full_name, '') AS rider_name,
+        COALESCE(r.phone, ru.phone, fo.rider_phone, '') AS rider_phone,
+        fo.rider_lat,
+        fo.rider_lng,
+        fo.updated_at
+    FROM food_orders fo
+    LEFT JOIN orders o ON (fo.order_id = o.order_id OR fo.order_id = o.id)
+    LEFT JOIN riders r ON (fo.rider_id = r.rider_id OR fo.rider_id = r.user_id)
+    LEFT JOIN users ru ON (r.user_id = ru.user_id)
+    WHERE fo.order_id = :oid AND (fo.customer_id = :cid OR fo.user_id = :uid OR :is_admin = 1)
+    LIMIT 1");
+    $stmt->execute([
+        ':oid'      => $order_id,
+        ':cid'      => $user_id,
+        ':uid'      => $user_id,
+        ':is_admin' => ($role === 'admin' ? 1 : 0)
+    ]);
+    $res = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$res) {
+        order_api_out(false, 'Order not found.', [], 404);
+    }
+
+    order_api_out(true, 'Order status retrieved.', [
+        'order_id'        => (int)$res['order_id'],
+        'order_ref'       => '#' . ltrim($res['order_ref'] ?? ('FD-' . $res['order_id']), '#'),
+        'status'          => $res['status'],
+        'delivery_status' => $res['delivery_status'],
+        'store_name'      => $res['store_name'],
+        'rider_name'      => $res['rider_name'],
+        'rider_phone'     => $res['rider_phone'],
+        'rider_lat'       => $res['rider_lat'],
+        'rider_lng'       => $res['rider_lng'],
+        'updated_at'      => $res['updated_at']
     ]);
 }
 
