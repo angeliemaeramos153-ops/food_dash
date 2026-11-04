@@ -1704,26 +1704,32 @@ function playSynthArrivalAlarm() {
           trackSynthAudioCtx.resume().catch(() => {});
         }
         const now = trackSynthAudioCtx.currentTime;
-        // Exactly ONE clean, continuous two-tone chime (G5: 783.99Hz -> C5: 523.25Hz)
-        // Entire sequence lasts for 1.0 second total and fades out naturally into silence
+        // Cheerful, bouncy kawaii music-box / chiptune melody (inspired by cute ringtones & game alerts)
+        // Sweet, uplifting C-major sequence that sparkles upward and resolves warmly (~2.3s total)
         const notes = [
-          { freq: 783.99, time: 0.00, dur: 0.55, vol: 0.16 }, // Tone 1: "Ding" (G5)
-          { freq: 523.25, time: 0.28, dur: 0.70, vol: 0.18 }  // Tone 2: "Dong" (C5, completes at 0.98s)
+          { freq: 659.25, time: 0.00, dur: 0.28, vol: 0.14 }, // E5 (bright start)
+          { freq: 783.99, time: 0.18, dur: 0.28, vol: 0.14 }, // G5 (bouncy step)
+          { freq: 880.00, time: 0.36, dur: 0.28, vol: 0.15 }, // A5
+          { freq: 1046.50, time: 0.56, dur: 0.35, vol: 0.17 }, // C6 (sweet upward leap)
+          { freq: 1174.66, time: 0.82, dur: 0.28, vol: 0.15 }, // D6
+          { freq: 1318.51, time: 1.02, dur: 0.38, vol: 0.17 }, // E6 (sparkle peak)
+          { freq: 1567.98, time: 1.30, dur: 0.35, vol: 0.16 }, // G6 (cute chime bell)
+          { freq: 1318.51, time: 1.56, dur: 0.75, vol: 0.15 }  // E6 (warm, resonant music box finish)
         ];
         notes.forEach(n => {
           const osc = trackSynthAudioCtx.createOscillator();
           const gain = trackSynthAudioCtx.createGain();
-          osc.type = 'sine'; // pure sine wave prevents harmonic static & distortion
+          osc.type = 'triangle'; // Crisp music-box / chiptune bell timbre
           osc.frequency.setValueAtTime(n.freq, now + n.time);
 
           gain.gain.setValueAtTime(0.0001, now + n.time);
-          gain.gain.linearRampToValueAtTime(n.vol, now + n.time + 0.02);
+          gain.gain.linearRampToValueAtTime(n.vol, now + n.time + 0.015);
           gain.gain.exponentialRampToValueAtTime(0.0001, now + n.time + n.dur);
 
           osc.connect(gain);
           gain.connect(trackSynthAudioCtx.destination);
           osc.start(now + n.time);
-          osc.stop(now + n.time + n.dur + 0.02);
+          osc.stop(now + n.time + n.dur + 0.03);
 
           trackActiveOscillators.push(osc);
           osc.onended = () => {
@@ -1736,8 +1742,8 @@ function playSynthArrivalAlarm() {
     }
 
     chimeTick();
-    // 3500ms repeating interval: 1-second chime followed by 2.5 seconds of calm, quiet silence
-    trackSynthLoopInterval = setInterval(chimeTick, 3500);
+    // 4000ms repeating interval: ~2.3s kawaii melody rings out fully, followed by ~1.7s calm silence
+    trackSynthLoopInterval = setInterval(chimeTick, 4000);
   } catch (e) {
     console.warn('Track synth chime error:', e);
   }
