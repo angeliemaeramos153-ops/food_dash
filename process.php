@@ -282,6 +282,15 @@ try {
         ':id'              => $order_id
     ]);
 
+    // Synchronize to orders compatibility table
+    try {
+        $pdo->prepare("UPDATE orders SET status = :st, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([
+            ':st'   => ($target_status === 'CANCELLED' ? 'Cancelled' : $target_status),
+            ':oid'  => $order_id,
+            ':oid2' => $order_id
+        ]);
+    } catch (Throwable $e) {}
+
     // Dispatch automated chat message if order status transitioned to on_delivery
     if (in_array(strtolower($target_status), ['out_for_delivery', 'on_delivery']) || in_array(strtolower($new_delivery_status), ['on_the_way', 'on_delivery'])) {
         try {
