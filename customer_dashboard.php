@@ -7826,11 +7826,11 @@ function playSynthArrivalAlarm() {
           customerSynthAudioCtx.resume().catch(() => {});
         }
         const now = customerSynthAudioCtx.currentTime;
-        // Clean, soft ascending chime: E5, G#5, B5 with extended natural decay
+        // Elegant, smooth two-tone "Ding-Dong" melodic chime (high G5 -> low C5)
+        // Each tone rings out completely with a natural ~1 second acoustic fade-out
         const notes = [
-          { freq: 659.25, time: 0.00, dur: 0.75, vol: 0.15 },
-          { freq: 830.61, time: 0.18, dur: 0.80, vol: 0.15 },
-          { freq: 987.77, time: 0.36, dur: 0.82, vol: 0.14 }
+          { freq: 783.99, time: 0.00, dur: 0.90, vol: 0.16 }, // "Ding" (G5)
+          { freq: 523.25, time: 0.35, dur: 1.05, vol: 0.18 }  // "Dong" (C5)
         ];
         notes.forEach(n => {
           const osc = customerSynthAudioCtx.createOscillator();
@@ -7858,7 +7858,8 @@ function playSynthArrivalAlarm() {
     }
 
     chimeTick();
-    customerSynthLoopInterval = setInterval(chimeTick, 1500); // 1500ms spacing allows notes to ring out with calm pause
+    // Calm 3000ms (3 second) interval: chime plays for ~1s, followed by ~2s of complete silence
+    customerSynthLoopInterval = setInterval(chimeTick, 3000);
   } catch (e) {
     console.warn('Customer synth chime error:', e);
   }

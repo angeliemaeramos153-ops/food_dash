@@ -206,12 +206,11 @@
           audioCtx.resume().catch(() => {});
         }
         const now = audioCtx.currentTime;
-        // Clean, soft ascending doorbell chime: E5 (659.25Hz), G#5 (830.61Hz), B5 (987.77Hz)
-        // Note durations extended to 0.75s - 0.82s so each beat rings out fully with its natural decay
+        // Elegant, smooth two-tone "Ding-Dong" melodic chime (high G5 -> low C5)
+        // Each tone rings out completely with a natural ~1 second acoustic fade-out
         const notes = [
-          { freq: 659.25, time: 0.00, dur: 0.75, vol: 0.15 },
-          { freq: 830.61, time: 0.18, dur: 0.80, vol: 0.15 },
-          { freq: 987.77, time: 0.36, dur: 0.82, vol: 0.14 }
+          { freq: 783.99, time: 0.00, dur: 0.90, vol: 0.16 }, // "Ding" (G5)
+          { freq: 523.25, time: 0.35, dur: 1.05, vol: 0.18 }  // "Dong" (C5)
         ];
 
         notes.forEach(n => {
@@ -220,7 +219,7 @@
           osc.type = 'sine'; // Pure sine wave to prevent harmonic distortion & static
           osc.frequency.setValueAtTime(n.freq, now + n.time);
 
-          // Gentle linear attack ramp (30ms), then natural exponential decay to silence
+          // Gentle linear attack ramp (30ms), then natural exponential decay to silence (~1s)
           gain.gain.setValueAtTime(0.0001, now + n.time);
           gain.gain.linearRampToValueAtTime(n.vol, now + n.time + 0.03);
           gain.gain.exponentialRampToValueAtTime(0.0001, now + n.time + n.dur);
@@ -228,7 +227,7 @@
           osc.connect(gain);
           gain.connect(audioCtx.destination);
           osc.start(now + n.time);
-          // Let each chime beat ring out completely (stop at currentTime + 0.8s or longer)
+          // Let each chime tone ring out completely
           osc.stop(now + n.time + n.dur + 0.05);
 
           const nodeItem = { osc, gain };
@@ -248,8 +247,8 @@
     }
 
     playAlarmChime();
-    // 1500ms repeating interval ensures notes finish ringing out with a calm pause before next trigger
-    synthLoopInterval = setInterval(playAlarmChime, 1500);
+    // Calm 3000ms (3 second) interval: chime plays for ~1s, followed by ~2s of complete silence
+    synthLoopInterval = setInterval(playAlarmChime, 3000);
   }
 
   function stopSynthLoop() {
