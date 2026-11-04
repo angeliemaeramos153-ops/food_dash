@@ -61,19 +61,11 @@ if ($method === 'GET') {
         chat_out(false, 'Access denied.', [], 403);
     }
 
-    // Strict query: WHERE order_id = :order_id AND (sender_id = :user_id OR receiver_id = :user_id)
-    // Note: For demo accounts (15 and 26), map demo aliases so testing functions seamlessly
-    $scope_condition = $is_demo 
-        ? "(sender_id = :uid OR receiver_id = :uid OR sender_id = :cid OR receiver_id = :cid)"
-        : "(sender_id = :uid OR receiver_id = :uid)";
-
+    // Retrieve all order chat messages for this order
     $sql = "SELECT message_id, order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at 
             FROM order_messages 
-            WHERE order_id = :oid AND {$scope_condition} ";
-    $params = [':oid' => $order_id, ':uid' => $user_id];
-    if ($is_demo) {
-        $params[':cid'] = $customer_id ?: $user_id;
-    }
+            WHERE order_id = :oid ";
+    $params = [':oid' => $order_id];
 
     if ($after_id > 0) {
         $sql .= " AND message_id > :after_id ";
@@ -91,7 +83,9 @@ if ($method === 'GET') {
         $msg['sender_id'] = (int)$msg['sender_id'];
         $msg['receiver_id'] = (int)($msg['receiver_id'] ?? 0);
         $msg['time_formatted'] = date('g:i A', strtotime($msg['created_at']));
-        $msg['is_me'] = ($msg['sender_role'] === $role && ($msg['sender_id'] === $user_id || ($is_demo && in_array($msg['sender_id'], [15, 26], true))));
+        $msg['is_me'] = ($role === 'customer') 
+            ? ($msg['sender_role'] === 'customer') 
+            : ($msg['sender_role'] === 'rider');
     }
     unset($msg);
 

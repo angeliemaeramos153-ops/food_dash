@@ -1353,14 +1353,20 @@ a:active,
 .cust-chat-unread-badge {
   background: #ef4444;
   color: #ffffff;
-  border-radius: 10px;
-  padding: 1px 6px;
-  font-size: 9px;
+  border-radius: 99px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  font-size: 10px;
   font-weight: 800;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4);
+  line-height: 1;
+  box-shadow: 0 2px 5px rgba(239, 68, 68, 0.5);
+  border: 1.5px solid #ffffff;
+  margin-left: 5px;
+  vertical-align: middle;
 }
 
 /* In-App Notifications Modal (Food Dash Palette) */
@@ -6878,6 +6884,9 @@ function openCustomerTrackingModal(orderId, meta) {
   }
 
   fetchCustomerLiveTracking(targetId, true);
+  if (typeof syncCustomerChatUnreadBadge === 'function') {
+    syncCustomerChatUnreadBadge(targetId);
+  }
   setTimeout(() => {
     if (window.trackingMap && typeof window.trackingMap.invalidateSize === 'function') trackingMap.invalidateSize();
     if (window.map && typeof window.map.invalidateSize === 'function') map.invalidateSize();
@@ -7360,8 +7369,31 @@ function renderCustomerMap(opts) {
 }
 
 // Customer Chat Integration
-function openCustomerChat() {
-  const orderId = activeCustomerTrackingOrderId || <?php echo !empty($active_tracking_order['order_id']) ? (int)$active_tracking_order['order_id'] : '0'; ?>;
+async function syncCustomerChatUnreadBadge(orderId) {
+  if (!orderId) return;
+  const modal = document.getElementById('customerChatModal');
+  const isChatOpen = modal && modal.classList.contains('show');
+  if (isChatOpen) {
+    unreadChatCount = 0;
+    updateChatBadges();
+    return;
+  }
+
+  try {
+    const res = await fetch(`chat_api.php?order_id=${orderId}&_t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.success && Array.isArray(data.messages)) {
+      const lastReadId = parseInt(sessionStorage.getItem('fd_chat_last_read_' + orderId) || '0', 10);
+      const unreadList = data.messages.filter(m => m.sender_role !== 'customer' && m.message_id > lastReadId);
+      unreadChatCount = unreadList.length;
+      updateChatBadges();
+    }
+  } catch (e) {}
+}
+
+function openCustomerChat(explicitOrderId = null) {
+  const orderId = explicitOrderId || activeCustomerTrackingOrderId || <?php echo !empty($active_tracking_order['order_id']) ? (int)$active_tracking_order['order_id'] : '0'; ?>;
   if (!orderId) {
     showScreen('orders');
     return;
@@ -7374,14 +7406,19 @@ function openCustomerChat() {
   updateChatBadges();
 
   const titleEl = document.getElementById('custChatHeaderTitle');
-  if (titleEl) titleEl.textContent = `Chat with ${currentTrackingRiderName}`;
+  if (titleEl) titleEl.textContent = `Chat with ${currentTrackingRiderName || 'Rider'}`;
   const phoneEl = document.getElementById('custChatHeaderPhone');
-  if (phoneEl) phoneEl.textContent = currentTrackingRiderPhone;
+  if (phoneEl) phoneEl.textContent = currentTrackingRiderPhone || '';
 
   updateCustChatSmsLink('');
 
   const modal = document.getElementById('customerChatModal');
   if (modal) modal.classList.add('show');
+
+  const container = document.getElementById('custChatMessagesList');
+  if (container) {
+    container.innerHTML = '<div class="chat-loading-hint" style="padding:24px 16px;text-align:center;color:#64748b;font-size:12px;font-weight:600;"><i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;color:var(--harvest-sun);"></i> Loading conversation with your rider...</div>';
+  }
 
   fetchCustomerMessages(orderId, true);
 
@@ -7400,7 +7437,12 @@ function closeCustomerChat() {
     clearInterval(custChatPollTimer);
     custChatPollTimer = null;
   }
+  if (activeCustChatOrderId && custLastMessageId > 0) {
+    sessionStorage.setItem('fd_chat_last_read_' + activeCustChatOrderId, custLastMessageId);
+  }
   activeCustChatOrderId = null;
+  unreadChatCount = 0;
+  updateChatBadges();
 }
 
 function updateCustChatSmsLink(text) {
@@ -7415,19 +7457,21 @@ function renderChatMessages(messages, scrollToBottom = true) {
   const container = document.getElementById('custChatMessagesList');
   if (!container) return;
 
-  // Clear "Loading messages with your rider..." placeholder if present or on initial load
-  if (custLastMessageId === 0) {
-    container.innerHTML = '';
-  }
-  const hint = container.querySelector('.chat-empty-hint');
-  if (hint && Array.isArray(messages) && messages.length > 0) {
-    hint.remove();
-  }
+  const validMessages = Array.isArray(messages) ? messages : [];
 
-  if (Array.isArray(messages) && messages.length > 0) {
-    messages.forEach(msg => {
-      if (msg.message_id > custLastMessageId) {
-        custLastMessageId = msg.message_id;
+  if (validMessages.length > 0) {
+    // Remove loading placeholder or empty hint
+    const hints = container.querySelectorAll('.chat-empty-hint, .chat-loading-hint');
+    hints.forEach(h => h.remove());
+
+    let hasNew = false;
+    validMessages.forEach(msg => {
+      const existing = container.querySelector(`[data-msg-id="${msg.message_id}"]`);
+      if (!existing) {
+        if (msg.message_id > custLastMessageId) {
+          custLastMessageId = msg.message_id;
+        }
+        hasNew = true;
         const isMe = (msg.sender_role === 'customer');
         const bubble = document.createElement('div');
         bubble.className = `msg-bubble ${isMe ? 'me' : 'them'}`;
@@ -7444,10 +7488,17 @@ function renderChatMessages(messages, scrollToBottom = true) {
       }
     });
 
-    if (scrollToBottom || messages.length > 0) {
+    if (hasNew || scrollToBottom) {
       container.scrollTop = container.scrollHeight;
     }
-  } else if (custLastMessageId === 0) {
+
+    // Save as read since user is actively viewing this open chat modal
+    if (activeCustChatOrderId && custLastMessageId > 0) {
+      sessionStorage.setItem('fd_chat_last_read_' + activeCustChatOrderId, custLastMessageId);
+      unreadChatCount = 0;
+      updateChatBadges();
+    }
+  } else if (custLastMessageId === 0 && !container.querySelector('.msg-bubble')) {
     container.innerHTML = '<div class="chat-empty-hint">Start a conversation with your rider!</div>';
   }
 }
@@ -7456,6 +7507,7 @@ async function fetchCustomerMessages(orderId, scrollToBottom = true) {
   try {
     const res = await fetch(`chat_api.php?order_id=${orderId}&after_id=${custLastMessageId}&_t=${Date.now()}`);
     if (!res.ok) {
+      console.warn('chat_api returned status', res.status);
       if (custLastMessageId === 0) {
         renderChatMessages([]);
       }
@@ -7895,12 +7947,24 @@ function handleLiveRiderMessage(msg) {
 
   const senderName = msg.sender_name || currentTrackingRiderName || 'Alex';
 
-  // Show top floating push banner pinned at top matching rider dashboard
-  showCustomerFloatingBanner('MESSAGE FROM RIDER', msg.message_text, openChatFromBanner);
+  const modal = document.getElementById('customerChatModal');
+  const isChatOpen = modal && modal.classList.contains('show');
 
-  // Update the unread badge counter in real time
-  unreadChatCount++;
-  updateChatBadges();
+  if (!isChatOpen) {
+    // Show top floating push banner pinned at top matching rider dashboard
+    showCustomerFloatingBanner('MESSAGE FROM RIDER', msg.message_text, openChatFromBanner);
+
+    // Update the unread badge counter in real time
+    unreadChatCount++;
+    updateChatBadges();
+  } else {
+    unreadChatCount = 0;
+    updateChatBadges();
+    if (activeOId) {
+      sessionStorage.setItem('fd_chat_last_read_' + activeOId, msg.message_id);
+    }
+  }
+
   appendMessageToChatDrawer(msg);
 
   // Dynamically update notification badge on customer dashboard header

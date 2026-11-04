@@ -552,8 +552,8 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
     // Latest message on this order
     $latest_message = null;
     try {
-        $m_stmt = $conn->prepare("SELECT message_id, order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at FROM order_messages WHERE order_id = :oid AND (sender_id = :uid1 OR receiver_id = :uid2) ORDER BY message_id DESC LIMIT 1");
-        $m_stmt->execute([':oid' => $order_id, ':uid1' => $user_id, ':uid2' => $user_id]);
+        $m_stmt = $conn->prepare("SELECT message_id, order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at FROM order_messages WHERE order_id = :oid ORDER BY message_id DESC LIMIT 1");
+        $m_stmt->execute([':oid' => $order_id]);
         $latest_message = $m_stmt->fetch(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {}
 

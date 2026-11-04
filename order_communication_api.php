@@ -439,20 +439,11 @@ if ($action === 'get_updates' || $method === 'GET') {
         }
     }
 
-    // Fetch new messages since after_id strictly scoped to this order & user
-    $is_demo = ($user_id === 15 || $user_id === 26 || strtolower($user_name) === 'customer');
-    $customer_id = (int)($order['customer_id'] ?? 0);
-    $scope_condition = $is_demo 
-        ? "(sender_id = :uid OR receiver_id = :uid OR sender_id = :cid OR receiver_id = :cid)"
-        : "(sender_id = :uid OR receiver_id = :uid)";
-
+    // Fetch new messages since after_id strictly scoped to this order
     $m_sql = "SELECT message_id, order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at 
               FROM order_messages 
-              WHERE order_id = :oid AND {$scope_condition} ";
-    $m_params = [':oid' => $order_id, ':uid' => $user_id];
-    if ($is_demo) {
-        $m_params[':cid'] = $customer_id ?: $user_id;
-    }
+              WHERE order_id = :oid ";
+    $m_params = [':oid' => $order_id];
 
     if ($after_id > 0) {
         $m_sql .= " AND message_id > :aid ";
@@ -469,7 +460,7 @@ if ($action === 'get_updates' || $method === 'GET') {
         $msg['message_id'] = (int)$msg['message_id'];
         $msg['order_id'] = (int)$msg['order_id'];
         $msg['time_formatted'] = date('g:i A', strtotime($msg['created_at']));
-        $msg['is_me'] = ($msg['sender_role'] === $role && ($msg['sender_id'] === $user_id || ($is_demo && in_array($msg['sender_id'], [15, 26], true))));
+        $msg['is_me'] = ($role === 'customer') ? ($msg['sender_role'] === 'customer') : ($msg['sender_role'] === 'rider');
         if ($msg['message_id'] > $latest_msg_id) {
             $latest_msg_id = $msg['message_id'];
         }

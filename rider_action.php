@@ -248,6 +248,27 @@ if ($is_accept_action) {
     notify_role($conn, 'admin', 'Rider Dispatched', "Rider {$rider_name} confirmed pickup of order #{$clean_order_number} (Total: ₱{$formatted_total_amount})", $order_id);
 
     // Automated departure chat message in order_messages
+    $auto_chat_text = "Hi! Your order has been picked up by the rider and is now on the way. Total amount due: ₱{$formatted_total_amount}.";
+    try {
+        $chkMsg = $conn->prepare("SELECT message_id FROM order_messages WHERE order_id = :oid AND (message_text LIKE '%picked up by the rider%' OR message_text LIKE '%Total amount due:%') LIMIT 1");
+        $chkMsg->execute([':oid' => $order_id]);
+        if (!$chkMsg->fetch()) {
+            $insMsg = $conn->prepare("
+                INSERT INTO order_messages (order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at)
+                VALUES (:oid, 'rider', :uid, :rec, :name, :txt, NOW())
+            ");
+            $insMsg->execute([
+                ':oid'  => $order_id,
+                ':uid'  => (int)$rider_user_id,
+                ':rec'  => (int)$actual_customer_id,
+                ':name' => $rider_name ?: 'Rider',
+                ':txt'  => $auto_chat_text
+            ]);
+        }
+    } catch (Throwable $e) {
+        error_log('Error inserting auto chat message in rider_action: ' . $e->getMessage());
+    }
+
     try {
         if (function_exists('send_on_delivery_chat_message')) {
             send_on_delivery_chat_message($conn, $order_id, $rider_user_id, $rider_name);
