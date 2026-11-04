@@ -47,10 +47,26 @@
     }
   }
 
-  // Pre-bind gesture listeners for browser audio policy
-  ['click', 'touchstart', 'keydown'].forEach(evt => {
-    document.addEventListener(evt, initAudioContext, { once: true, passive: true });
+  // Pre-bind gesture listeners for browser audio policy (especially mobile Safari & Chrome)
+  function unlockAudioContextOnGesture() {
+    initAudioContext();
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+  }
+  ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => {
+    document.addEventListener(evt, unlockAudioContextOnGesture, { passive: true });
   });
+
+  function resolveSoundPath(filename) {
+    try {
+      const p = window.location.pathname;
+      if (p.includes('/food_dash/')) {
+        return window.location.origin + '/food_dash/assets/' + filename;
+      }
+    } catch (e) {}
+    return 'assets/' + filename;
+  }
 
   // -------------------------------------------------------------
   // AUDIO SYNTHESIS & PLAYBACK HELPERS
@@ -132,32 +148,48 @@
     stopSynthLoop();
     initAudioContext();
     if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
 
     function playAlarmChime() {
       if (!arrivalAlarmActive || arrivalAcknowledged) return;
       try {
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(() => {});
+        }
         const now = audioCtx.currentTime;
-        const freqs = [659.25, 830.61, 987.77, 1318.51];
-        freqs.forEach((freq, idx) => {
+        // Ascending pleasant doorbell/urgent arrival chime: E5, G#5, B5, E6
+        const notes = [
+          { freq: 659.25, time: 0.00, dur: 0.45 },
+          { freq: 830.61, time: 0.16, dur: 0.45 },
+          { freq: 987.77, time: 0.32, dur: 0.45 },
+          { freq: 1318.51, time: 0.48, dur: 0.65 }
+        ];
+
+        notes.forEach(n => {
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(freq, now + idx * 0.2);
+          osc.type = 'triangle'; // rich bell-like timbre
+          osc.frequency.setValueAtTime(n.freq, now + n.time);
 
-          gain.gain.setValueAtTime(0.001, now + idx * 0.2);
-          gain.gain.linearRampToValueAtTime(0.25, now + idx * 0.2 + 0.04);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.2 + 0.6);
+          gain.gain.setValueAtTime(0.001, now + n.time);
+          gain.gain.linearRampToValueAtTime(0.28, now + n.time + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + n.time + n.dur);
 
           osc.connect(gain);
           gain.connect(audioCtx.destination);
-          osc.start(now + idx * 0.2);
-          osc.stop(now + idx * 0.2 + 0.65);
+          osc.start(now + n.time);
+          osc.stop(now + n.time + n.dur + 0.05);
         });
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Synth arrival alarm error:', e);
+      }
     }
 
     playAlarmChime();
-    synthLoopInterval = setInterval(playAlarmChime, 2000);
+    synthLoopInterval = setInterval(playAlarmChime, 1800);
   }
 
   function stopSynthLoop() {
@@ -209,25 +241,71 @@
   function playArrivalAlarmAudio() {
     stopAllTones();
     arrivalAlarmActive = true;
+
+    let synthFallbackTriggered = false;
+    function triggerSynthFallback(reason) {
+      if (synthFallbackTriggered) return;
+      synthFallbackTriggered = true;
+      console.warn('Arrival audio fallback activated:', reason);
+      if (arrivalAudio) {
+        try { arrivalAudio.pause(); } catch (e) {}
+      }
+      if (arrivalAlarmActive && !arrivalAcknowledged) {
+        playSynthArrivalAlarm();
+      }
+    }
+
     try {
       if (!arrivalAudio) {
         if (window.arrivalAlertAudio) {
           arrivalAudio = window.arrivalAlertAudio;
         } else {
-          arrivalAudio = new Audio('assets/arrival_alarm.wav');
+          arrivalAudio = new Audio(resolveSoundPath('arrival_alarm.wav'));
         }
       }
+
+      // Check if audio already failed or has invalid source
+      if (arrivalAudio.error || arrivalAudio.networkState === 3 /* NETWORK_NO_SOURCE */) {
+        triggerSynthFallback('Audio element already in error state');
+      }
+
+      // Hook error and stall events for 404 / unsupported formats / loading issues
+      arrivalAudio.onerror = function () {
+        triggerSynthFallback('Audio onerror fired: failed to load or decode audio file');
+      };
+      arrivalAudio.onstalled = function () {
+        triggerSynthFallback('Audio onstalled fired');
+      };
+
       arrivalAudio.loop = true;
       arrivalAudio.volume = 0.95;
       arrivalAudio.currentTime = 0;
       window.arrivalAlertAudio = arrivalAudio;
+
       const p = arrivalAudio.play();
       if (p !== undefined) {
-        p.catch(() => playSynthArrivalAlarm());
+        p.then(() => {
+          if (!synthFallbackTriggered) {
+            stopSynthLoop();
+          }
+        }).catch(err => {
+          triggerSynthFallback('audio.play() rejected: ' + (err && err.message ? err.message : err));
+        });
       }
+
+      // Safety watchdog: on mobile devices where audio doesn't start advancing or is blocked
+      setTimeout(() => {
+        if (arrivalAlarmActive && !arrivalAcknowledged) {
+          if (!arrivalAudio || arrivalAudio.paused || arrivalAudio.currentTime === 0 || arrivalAudio.error) {
+            triggerSynthFallback('Watchdog: Audio not playing on mobile');
+          }
+        }
+      }, 1000);
+
     } catch (e) {
-      playSynthArrivalAlarm();
+      triggerSynthFallback('Synchronous playArrivalAlarmAudio exception: ' + e);
     }
+
     if ('vibrate' in navigator) {
       try { navigator.vibrate([300, 150, 300, 150, 500]); } catch (e) {}
     }
@@ -1081,6 +1159,7 @@
     syncCallStatus,
     triggerArrivalAlarm,
     playArrivalAlarmAudio,
+    playSynthArrivalAlarm,
     stopArrivalAlarmAudio,
     acknowledgeArrival,
     viewTrackingMap,
@@ -1089,6 +1168,8 @@
     setRole: (r) => { myRole = r; },
     getCallState: () => currentCallState
   };
+
+  window.playSynthArrivalAlarm = playSynthArrivalAlarm;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') {

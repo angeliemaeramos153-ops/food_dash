@@ -1659,8 +1659,73 @@ function handleLiveRiderMessage(msg) {
 
 let hasShownArrivedAlert = false;
 let arrivalAlertAudio = null;
+let trackSynthLoopInterval = null;
+let trackSynthAudioCtx = null;
+
+function playSynthArrivalAlarm() {
+  if (window.FoodDashCall && typeof window.FoodDashCall.playSynthArrivalAlarm === 'function') {
+    window.FoodDashCall.playSynthArrivalAlarm();
+    return;
+  }
+  try {
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtxClass) return;
+    if (!trackSynthAudioCtx) {
+      trackSynthAudioCtx = new AudioCtxClass();
+    }
+    if (trackSynthAudioCtx.state === 'suspended') {
+      trackSynthAudioCtx.resume().catch(() => {});
+    }
+
+    if (trackSynthLoopInterval) {
+      clearInterval(trackSynthLoopInterval);
+      trackSynthLoopInterval = null;
+    }
+
+    function chimeTick() {
+      try {
+        if (!trackSynthAudioCtx) return;
+        if (trackSynthAudioCtx.state === 'suspended') {
+          trackSynthAudioCtx.resume().catch(() => {});
+        }
+        const now = trackSynthAudioCtx.currentTime;
+        const notes = [
+          { freq: 659.25, time: 0.00, dur: 0.45 },
+          { freq: 830.61, time: 0.16, dur: 0.45 },
+          { freq: 987.77, time: 0.32, dur: 0.45 },
+          { freq: 1318.51, time: 0.48, dur: 0.65 }
+        ];
+        notes.forEach(n => {
+          const osc = trackSynthAudioCtx.createOscillator();
+          const gain = trackSynthAudioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(n.freq, now + n.time);
+
+          gain.gain.setValueAtTime(0.001, now + n.time);
+          gain.gain.linearRampToValueAtTime(0.28, now + n.time + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + n.time + n.dur);
+
+          osc.connect(gain);
+          gain.connect(trackSynthAudioCtx.destination);
+          osc.start(now + n.time);
+          osc.stop(now + n.time + n.dur + 0.05);
+        });
+      } catch (err) {}
+    }
+
+    chimeTick();
+    trackSynthLoopInterval = setInterval(chimeTick, 1800);
+  } catch (e) {
+    console.warn('Track synth chime error:', e);
+  }
+}
+window.playSynthArrivalAlarm = playSynthArrivalAlarm;
 
 function stopArrivalAlertSound() {
+  if (trackSynthLoopInterval) {
+    clearInterval(trackSynthLoopInterval);
+    trackSynthLoopInterval = null;
+  }
   if (arrivalAlertAudio) {
     try {
       arrivalAlertAudio.pause();
@@ -1737,26 +1802,73 @@ function playArrivalAlertSound() {
     FoodDashCall.playArrivalAlarmAudio();
     return;
   }
+
+  let synthFallbackTriggered = false;
+  function triggerFallback(reason) {
+    if (synthFallbackTriggered) return;
+    synthFallbackTriggered = true;
+    console.warn('Arrival alert audio file fallback triggered:', reason);
+    if (arrivalAlertAudio) {
+      try { arrivalAlertAudio.pause(); } catch (e) {}
+    }
+    playSynthArrivalAlarm();
+  }
+
   try {
+    const soundPath = (function() {
+      try {
+        if (window.location.pathname.includes('/food_dash/')) {
+          return window.location.origin + '/food_dash/assets/arrival_alarm.wav';
+        }
+      } catch (e) {}
+      return 'assets/arrival_alarm.wav';
+    })();
+
     if (!arrivalAlertAudio) {
       if (window.arrivalAlertAudio) {
         arrivalAlertAudio = window.arrivalAlertAudio;
       } else {
-        arrivalAlertAudio = new Audio('assets/arrival_alarm.wav');
+        arrivalAlertAudio = new Audio(soundPath);
         window.arrivalAlertAudio = arrivalAlertAudio;
       }
     }
+
+    if (arrivalAlertAudio.error || arrivalAlertAudio.networkState === 3) {
+      triggerFallback('Audio element in error state');
+    }
+
+    arrivalAlertAudio.onerror = function() {
+      triggerFallback('arrivalAlertAudio.onerror fired');
+    };
+    arrivalAlertAudio.onstalled = function() {
+      triggerFallback('arrivalAlertAudio.onstalled fired');
+    };
+
     arrivalAlertAudio.loop = true;
     arrivalAlertAudio.volume = 0.95;
     arrivalAlertAudio.currentTime = 0;
+
     const playPromise = arrivalAlertAudio.play();
     if (playPromise !== undefined) {
-      playPromise.catch((e) => {
-        console.warn('Arrival alert audio play blocked or failed:', e);
+      playPromise.then(() => {
+        if (trackSynthLoopInterval && !synthFallbackTriggered) {
+          clearInterval(trackSynthLoopInterval);
+          trackSynthLoopInterval = null;
+        }
+      }).catch((e) => {
+        triggerFallback('arrivalAlertAudio.play() rejected: ' + e);
       });
     }
+
+    // Safety watchdog for mobile browsers
+    setTimeout(() => {
+      if (!arrivalAlertAudio || arrivalAlertAudio.paused || arrivalAlertAudio.currentTime === 0 || arrivalAlertAudio.error) {
+        triggerFallback('Mobile audio stall watchdog timeout');
+      }
+    }, 1000);
+
   } catch (e) {
-    console.warn('Arrival alert sound error:', e);
+    triggerFallback('Synchronous playArrivalAlertSound exception: ' + e);
   }
 }
 window.playArrivalAlertSound = playArrivalAlertSound;
