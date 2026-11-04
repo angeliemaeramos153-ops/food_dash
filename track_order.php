@@ -1658,20 +1658,70 @@ function handleLiveRiderMessage(msg) {
 }
 
 let hasShownArrivedAlert = false;
+let arrivalAlertAudio = null;
+
+function stopArrivalAlertSound() {
+  if (arrivalAlertAudio) {
+    try {
+      arrivalAlertAudio.pause();
+      arrivalAlertAudio.currentTime = 0;
+    } catch (e) {}
+  }
+  if (window.arrivalAlertAudio) {
+    try {
+      window.arrivalAlertAudio.pause();
+      window.arrivalAlertAudio.currentTime = 0;
+    } catch (e) {}
+  }
+  if (window.FoodDashCall) {
+    if (typeof FoodDashCall.stopArrivalAlarmAudio === 'function') {
+      FoodDashCall.stopArrivalAlarmAudio();
+    } else if (typeof FoodDashCall.stopAllTones === 'function') {
+      FoodDashCall.stopAllTones();
+    }
+  }
+}
+window.stopArrivalAlertSound = stopArrivalAlertSound;
 
 function closeRiderArrivedModal() {
+  stopArrivalAlertSound();
   const modal = document.getElementById('riderArrivedModal');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('show', 'active');
+  }
   if (window.FoodDashCall) {
     FoodDashCall.stopAllTones();
   }
 }
 
 function respondToRiderArrival(responseOption) {
+  stopArrivalAlertSound();
   if (window.FoodDashCall) {
     FoodDashCall.acknowledgeArrival(orderId, responseOption);
   }
   closeRiderArrivedModal();
+}
+
+function attachTrackArrivalModalListeners() {
+  const modal = document.getElementById('riderArrivedModal');
+  if (!modal) return;
+  const buttons = modal.querySelectorAll('.btn-arrival-action');
+  buttons.forEach(btn => {
+    if (btn.dataset.arrivalAudioBound === 'true') return;
+    btn.dataset.arrivalAudioBound = 'true';
+    btn.addEventListener('click', function() {
+      stopArrivalAlertSound();
+    });
+  });
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachTrackArrivalModalListeners);
+  } else {
+    attachTrackArrivalModalListeners();
+  }
 }
 
 function initiateCustomerVoiceCall() {
@@ -1683,52 +1733,31 @@ function initiateCustomerVoiceCall() {
 }
 
 function playArrivalAlertSound() {
+  if (window.FoodDashCall && typeof FoodDashCall.playArrivalAlarmAudio === 'function') {
+    FoodDashCall.playArrivalAlarmAudio();
+    return;
+  }
   try {
-    const audio = new Audio('assets/arrival_alarm.wav');
-    audio.volume = 1.0;
-    const playPromise = audio.play();
+    if (!arrivalAlertAudio) {
+      if (window.arrivalAlertAudio) {
+        arrivalAlertAudio = window.arrivalAlertAudio;
+      } else {
+        arrivalAlertAudio = new Audio('assets/arrival_alarm.wav');
+        window.arrivalAlertAudio = arrivalAlertAudio;
+      }
+    }
+    arrivalAlertAudio.loop = true;
+    arrivalAlertAudio.volume = 0.95;
+    arrivalAlertAudio.currentTime = 0;
+    const playPromise = arrivalAlertAudio.play();
     if (playPromise !== undefined) {
-      playPromise.catch(() => {
-        playCustomerChime();
+      playPromise.catch((e) => {
+        console.warn('Arrival alert audio play blocked or failed:', e);
       });
     }
   } catch (e) {
-    playCustomerChime();
+    console.warn('Arrival alert sound error:', e);
   }
-
-  try {
-    playCustomerChime();
-  } catch (e) {}
-
-  try {
-    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
-    if (AudioCtxClass) {
-      const ctx = new AudioCtxClass();
-      if (ctx.state === 'suspended') ctx.resume();
-      const now = ctx.currentTime;
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(880, now);
-      gain1.gain.setValueAtTime(0.3, now);
-      gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.16);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(now);
-      osc1.stop(now + 0.16);
-
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(1174.66, now + 0.18);
-      gain2.gain.setValueAtTime(0.35, now + 0.18);
-      gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(now + 0.18);
-      osc2.stop(now + 0.45);
-    }
-  } catch (e) {}
 }
 window.playArrivalAlertSound = playArrivalAlertSound;
 

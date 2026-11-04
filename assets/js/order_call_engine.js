@@ -211,11 +211,16 @@
     arrivalAlarmActive = true;
     try {
       if (!arrivalAudio) {
-        arrivalAudio = new Audio('assets/arrival_alarm.wav');
-        arrivalAudio.loop = true;
-        arrivalAudio.volume = 0.95;
+        if (window.arrivalAlertAudio) {
+          arrivalAudio = window.arrivalAlertAudio;
+        } else {
+          arrivalAudio = new Audio('assets/arrival_alarm.wav');
+        }
       }
+      arrivalAudio.loop = true;
+      arrivalAudio.volume = 0.95;
       arrivalAudio.currentTime = 0;
+      window.arrivalAlertAudio = arrivalAudio;
       const p = arrivalAudio.play();
       if (p !== undefined) {
         p.catch(() => playSynthArrivalAlarm());
@@ -228,6 +233,23 @@
     }
   }
 
+  function stopArrivalAlarmAudio() {
+    stopSynthLoop();
+    if (arrivalAudio) {
+      try {
+        arrivalAudio.pause();
+        arrivalAudio.currentTime = 0;
+      } catch (e) {}
+    }
+    if (window.arrivalAlertAudio) {
+      try {
+        window.arrivalAlertAudio.pause();
+        window.arrivalAlertAudio.currentTime = 0;
+      } catch (e) {}
+    }
+    arrivalAlarmActive = false;
+  }
+
   function stopAllTones() {
     stopSynthLoop();
     if (ringbackAudio) {
@@ -238,6 +260,9 @@
     }
     if (arrivalAudio) {
       try { arrivalAudio.pause(); arrivalAudio.currentTime = 0; } catch (e) {}
+    }
+    if (window.arrivalAlertAudio) {
+      try { window.arrivalAlertAudio.pause(); window.arrivalAlertAudio.currentTime = 0; } catch (e) {}
     }
     arrivalAlarmActive = false;
   }
@@ -896,8 +921,28 @@
   // PERSISTENT ARRIVAL ALARM COORDINATOR
   // -------------------------------------------------------------
 
+  function bindArrivalModalListeners(modalEl) {
+    const root = modalEl || document.getElementById('riderArrivedModal');
+    if (!root) return;
+    const buttons = root.querySelectorAll('.btn-arrival-action, #riderArrivedActionButtons button');
+    buttons.forEach(btn => {
+      if (btn.dataset.arrivalAudioBound === 'true') return;
+      btn.dataset.arrivalAudioBound = 'true';
+      btn.addEventListener('click', function() {
+        stopArrivalAlarmAudio();
+        stopAllTones();
+        if (typeof window.stopArrivalAlertSound === 'function') {
+          window.stopArrivalAlertSound();
+        }
+      });
+    });
+  }
+
   function triggerArrivalAlarm(orderId, riderName) {
-    if (arrivalAcknowledged) return;
+    if (arrivalAcknowledged && activeOrderId === orderId) return;
+    if (orderId && orderId !== activeOrderId) {
+      arrivalAcknowledged = false;
+    }
     initAudioContext();
     activeOrderId = orderId;
 
@@ -923,6 +968,7 @@
       if (backdrop) {
         backdrop.onclick = (e) => { e.stopPropagation(); };
       }
+      bindArrivalModalListeners(modal);
     }
 
     // Play persistent looping arrival alarm audio
@@ -956,16 +1002,25 @@
       `;
       box.appendChild(actionsWrap);
     }
+
+    bindArrivalModalListeners(modal);
   }
 
   async function acknowledgeArrival(orderId, responseText) {
-    // 1. Immediately stop and mute the looping audio
+    // 1. Immediately stop, pause and reset the looping arrival audio
+    stopArrivalAlarmAudio();
     stopAllTones();
+    if (typeof window.stopArrivalAlertSound === 'function') {
+      window.stopArrivalAlertSound();
+    }
     arrivalAcknowledged = true;
 
     // 2. Hide modal
     const modal = document.getElementById('riderArrivedModal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+      modal.style.display = 'none';
+      modal.classList.remove('show', 'active');
+    }
 
     // 3. Send live automatic response message into chat
     try {
@@ -991,6 +1046,13 @@
   }
 
   function viewTrackingMap(orderId) {
+    stopArrivalAlarmAudio();
+    stopAllTones();
+    const modal = document.getElementById('riderArrivedModal');
+    if (modal) {
+      modal.style.display = 'none';
+      modal.classList.remove('show', 'active');
+    }
     if (typeof window.openTrackingFromArrived === 'function') {
       window.openTrackingFromArrived();
     } else if (typeof window.openCustomerTrackingModal === 'function') {
@@ -1005,6 +1067,7 @@
   function init(role = 'customer') {
     myRole = role;
     ensureCallModalDOM();
+    bindArrivalModalListeners();
   }
 
   // Expose global interface
@@ -1017,11 +1080,22 @@
     toggleMute,
     syncCallStatus,
     triggerArrivalAlarm,
+    playArrivalAlarmAudio,
+    stopArrivalAlarmAudio,
     acknowledgeArrival,
     viewTrackingMap,
     stopAllTones,
+    bindArrivalModalListeners,
     setRole: (r) => { myRole = r; },
     getCallState: () => currentCallState
   };
+
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => bindArrivalModalListeners());
+    } else {
+      bindArrivalModalListeners();
+    }
+  }
 
 })(window);
