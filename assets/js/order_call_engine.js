@@ -84,15 +84,6 @@
           playSynthArrivalAlarm();
         }
       }
-      if (arrivalAudio && arrivalAudio.paused) {
-        arrivalAudio.loop = true;
-        arrivalAudio.currentTime = 0;
-        arrivalAudio.play().catch(() => {
-          if (arrivalAlarmActive && !arrivalAcknowledged && !synthLoopInterval) {
-            playSynthArrivalAlarm();
-          }
-        });
-      }
     }
   }
 
@@ -187,7 +178,13 @@
     synthLoopInterval = setInterval(playRingPattern, 2400);
   }
 
+  let isChimePlaying = false;
+
   function playSynthArrivalAlarm() {
+    // If the single chime loop is already running, prevent duplicate restarts
+    if (synthLoopInterval && arrivalAlarmActive && !arrivalAcknowledged) {
+      return;
+    }
     stopSynthLoop();
     initAudioContext();
     if (!audioCtx) return;
@@ -195,40 +192,46 @@
       audioCtx.resume().catch(() => {});
     }
 
+    arrivalAlarmActive = true;
+    arrivalAcknowledged = false;
+
     function playAlarmChime() {
       if (!arrivalAlarmActive || arrivalAcknowledged) {
         stopSynthLoop();
         return;
       }
+      if (isChimePlaying) return;
+      isChimePlaying = true;
+      setTimeout(() => { isChimePlaying = false; }, 1050);
+
       try {
         if (!audioCtx) return;
         if (audioCtx.state === 'suspended') {
           audioCtx.resume().catch(() => {});
         }
         const now = audioCtx.currentTime;
-        // Elegant, smooth two-tone "Ding-Dong" melodic chime (high G5 -> low C5)
-        // Each tone rings out completely with a natural ~1 second acoustic fade-out
+        // Exactly ONE clean, continuous two-tone chime (G5: 783.99Hz -> C5: 523.25Hz)
+        // Entire sequence lasts for 1.0 second total and fades out naturally into silence
         const notes = [
-          { freq: 783.99, time: 0.00, dur: 0.90, vol: 0.16 }, // "Ding" (G5)
-          { freq: 523.25, time: 0.35, dur: 1.05, vol: 0.18 }  // "Dong" (C5)
+          { freq: 783.99, time: 0.00, dur: 0.55, vol: 0.16 }, // Tone 1: "Ding" (G5)
+          { freq: 523.25, time: 0.28, dur: 0.70, vol: 0.18 }  // Tone 2: "Dong" (C5, completes at 0.98s)
         ];
 
         notes.forEach(n => {
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
-          osc.type = 'sine'; // Pure sine wave to prevent harmonic distortion & static
+          osc.type = 'sine'; // Pure sine wave for smooth melodic tone
           osc.frequency.setValueAtTime(n.freq, now + n.time);
 
-          // Gentle linear attack ramp (30ms), then natural exponential decay to silence (~1s)
+          // Gentle linear attack ramp (20ms), then natural exponential decay to silence
           gain.gain.setValueAtTime(0.0001, now + n.time);
-          gain.gain.linearRampToValueAtTime(n.vol, now + n.time + 0.03);
+          gain.gain.linearRampToValueAtTime(n.vol, now + n.time + 0.02);
           gain.gain.exponentialRampToValueAtTime(0.0001, now + n.time + n.dur);
 
           osc.connect(gain);
           gain.connect(audioCtx.destination);
           osc.start(now + n.time);
-          // Let each chime tone ring out completely
-          osc.stop(now + n.time + n.dur + 0.05);
+          osc.stop(now + n.time + n.dur + 0.02);
 
           const nodeItem = { osc, gain };
           activeSynthNodes.push(nodeItem);
@@ -247,8 +250,8 @@
     }
 
     playAlarmChime();
-    // Calm 3000ms (3 second) interval: chime plays for ~1s, followed by ~2s of complete silence
-    synthLoopInterval = setInterval(playAlarmChime, 3000);
+    // 3500ms repeating interval: 1-second chime followed by 2.5 seconds of calm, quiet silence
+    synthLoopInterval = setInterval(playAlarmChime, 3500);
   }
 
   function stopSynthLoop() {
@@ -256,6 +259,7 @@
       clearInterval(synthLoopInterval);
       synthLoopInterval = null;
     }
+    isChimePlaying = false;
     if (activeSynthNodes && activeSynthNodes.length > 0) {
       const now = audioCtx ? audioCtx.currentTime : 0;
       activeSynthNodes.forEach(item => {
@@ -342,7 +346,7 @@
 
   function playArrivalAlarmAudio() {
     // If the persistent arrival alarm is already playing cleanly, do not duplicate or stack
-    if (arrivalAlarmActive && !arrivalAcknowledged) {
+    if (arrivalAlarmActive && !arrivalAcknowledged && synthLoopInterval) {
       return;
     }
 
@@ -351,81 +355,11 @@
     arrivalAlarmActive = true;
     arrivalAcknowledged = false;
 
-    let synthFallbackTriggered = false;
-    function triggerSynthFallback(reason) {
-      if (synthFallbackTriggered) return;
-      synthFallbackTriggered = true;
-      console.warn('Arrival audio fallback activated:', reason);
-      if (arrivalAudio) {
-        try { arrivalAudio.pause(); arrivalAudio.currentTime = 0; } catch (e) {}
-      }
-      if (arrivalAlarmActive && !arrivalAcknowledged) {
-        playSynthArrivalAlarm();
-      }
-    }
-
-    try {
-      if (!arrivalAudio) {
-        if (window.arrivalAlertAudio) {
-          arrivalAudio = window.arrivalAlertAudio;
-        } else {
-          arrivalAudio = new Audio(resolveSoundPath('arrival_alarm.wav'));
-        }
-      }
-
-      // Check if audio already failed or has invalid source
-      if (arrivalAudio.error || arrivalAudio.networkState === 3 /* NETWORK_NO_SOURCE */) {
-        triggerSynthFallback('Audio element already in error state');
-        return;
-      }
-
-      // Hook error and stall events for 404 / unsupported formats / loading issues
-      arrivalAudio.onerror = function () {
-        triggerSynthFallback('Audio onerror fired: failed to load or decode audio file');
-      };
-      arrivalAudio.onstalled = function () {
-        triggerSynthFallback('Audio onstalled fired');
-      };
-
-      arrivalAudio.loop = true;
-      arrivalAudio.volume = 0.95;
-      arrivalAudio.currentTime = 0;
-      arrivalAudio.onended = function () {
-        if (arrivalAlarmActive && !arrivalAcknowledged) {
-          arrivalAudio.currentTime = 0;
-          arrivalAudio.play().catch(() => {
-            playSynthArrivalAlarm();
-          });
-        }
-      };
-      window.arrivalAlertAudio = arrivalAudio;
-
-      const p = arrivalAudio.play();
-      if (p !== undefined) {
-        p.then(() => {
-          if (!synthFallbackTriggered) {
-            stopSynthLoop();
-          }
-        }).catch(err => {
-          triggerSynthFallback('audio.play() rejected: ' + (err && err.message ? err.message : err));
-        });
-      }
-
-      // Safety watchdog: on mobile devices where audio doesn't start advancing or is blocked
-      setTimeout(() => {
-        if (arrivalAlarmActive && !arrivalAcknowledged && !synthFallbackTriggered) {
-          if (!arrivalAudio || arrivalAudio.paused || arrivalAudio.currentTime === 0 || arrivalAudio.error) {
-            triggerSynthFallback('Watchdog: Audio not playing on mobile');
-          }
-        }
-      }, 1000);
-
-    } catch (e) {
-      triggerSynthFallback('Synchronous playArrivalAlarmAudio exception: ' + e);
-    }
+    // Trigger exactly ONE clean, continuous two-tone chime per 3500ms cycle
+    playSynthArrivalAlarm();
 
     if ('vibrate' in navigator) {
-      try { navigator.vibrate([300, 150, 300, 150, 500]); } catch (e) {}
+      try { navigator.vibrate([250, 150, 250]); } catch (e) {}
     }
   }
 

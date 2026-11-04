@@ -7826,11 +7826,11 @@ function playSynthArrivalAlarm() {
           customerSynthAudioCtx.resume().catch(() => {});
         }
         const now = customerSynthAudioCtx.currentTime;
-        // Elegant, smooth two-tone "Ding-Dong" melodic chime (high G5 -> low C5)
-        // Each tone rings out completely with a natural ~1 second acoustic fade-out
+        // Exactly ONE clean, continuous two-tone chime (G5: 783.99Hz -> C5: 523.25Hz)
+        // Entire sequence lasts for 1.0 second total and fades out naturally into silence
         const notes = [
-          { freq: 783.99, time: 0.00, dur: 0.90, vol: 0.16 }, // "Ding" (G5)
-          { freq: 523.25, time: 0.35, dur: 1.05, vol: 0.18 }  // "Dong" (C5)
+          { freq: 783.99, time: 0.00, dur: 0.55, vol: 0.16 }, // Tone 1: "Ding" (G5)
+          { freq: 523.25, time: 0.28, dur: 0.70, vol: 0.18 }  // Tone 2: "Dong" (C5, completes at 0.98s)
         ];
         notes.forEach(n => {
           const osc = customerSynthAudioCtx.createOscillator();
@@ -7839,13 +7839,13 @@ function playSynthArrivalAlarm() {
           osc.frequency.setValueAtTime(n.freq, now + n.time);
 
           gain.gain.setValueAtTime(0.0001, now + n.time);
-          gain.gain.linearRampToValueAtTime(n.vol, now + n.time + 0.03);
+          gain.gain.linearRampToValueAtTime(n.vol, now + n.time + 0.02);
           gain.gain.exponentialRampToValueAtTime(0.0001, now + n.time + n.dur);
 
           osc.connect(gain);
           gain.connect(customerSynthAudioCtx.destination);
           osc.start(now + n.time);
-          osc.stop(now + n.time + n.dur + 0.05);
+          osc.stop(now + n.time + n.dur + 0.02);
 
           customerActiveOscillators.push(osc);
           osc.onended = () => {
@@ -7858,8 +7858,8 @@ function playSynthArrivalAlarm() {
     }
 
     chimeTick();
-    // Calm 3000ms (3 second) interval: chime plays for ~1s, followed by ~2s of complete silence
-    customerSynthLoopInterval = setInterval(chimeTick, 3000);
+    // 3500ms repeating interval: 1-second chime followed by 2.5 seconds of calm, quiet silence
+    customerSynthLoopInterval = setInterval(chimeTick, 3500);
   } catch (e) {
     console.warn('Customer synth chime error:', e);
   }
@@ -7871,78 +7871,7 @@ function playArrivalAlertSound() {
     window.FoodDashCall.playArrivalAlarmAudio();
     return;
   }
-
-  // Clear any existing sound tracks or synth intervals before initiating a new playback loop
-  stopArrivalAlertSound();
-
-  let synthFallbackTriggered = false;
-  function triggerFallback(reason) {
-    if (synthFallbackTriggered) return;
-    synthFallbackTriggered = true;
-    console.warn('Arrival alert audio file fallback triggered:', reason);
-    if (arrivalAlertAudio) {
-      try { arrivalAlertAudio.pause(); } catch (e) {}
-    }
-    playSynthArrivalAlarm();
-  }
-
-  try {
-    const soundPath = (function() {
-      try {
-        if (window.location.pathname.includes('/food_dash/')) {
-          return window.location.origin + '/food_dash/assets/arrival_alarm.wav';
-        }
-      } catch (e) {}
-      return 'assets/arrival_alarm.wav';
-    })();
-
-    if (!arrivalAlertAudio) {
-      if (window.arrivalAlertAudio) {
-        arrivalAlertAudio = window.arrivalAlertAudio;
-      } else {
-        arrivalAlertAudio = new Audio(soundPath);
-        window.arrivalAlertAudio = arrivalAlertAudio;
-      }
-    }
-
-    if (arrivalAlertAudio.error || arrivalAlertAudio.networkState === 3) {
-      triggerFallback('Audio element in error state');
-      return;
-    }
-
-    arrivalAlertAudio.onerror = function() {
-      triggerFallback('arrivalAlertAudio.onerror fired');
-    };
-    arrivalAlertAudio.onstalled = function() {
-      triggerFallback('arrivalAlertAudio.onstalled fired');
-    };
-
-    arrivalAlertAudio.loop = true;
-    arrivalAlertAudio.volume = 0.95;
-    arrivalAlertAudio.currentTime = 0;
-
-    const playPromise = arrivalAlertAudio.play();
-    if (playPromise !== undefined) {
-      playPromise.then(() => {
-        if (customerSynthLoopInterval && !synthFallbackTriggered) {
-          clearInterval(customerSynthLoopInterval);
-          customerSynthLoopInterval = null;
-        }
-      }).catch((e) => {
-        triggerFallback('arrivalAlertAudio.play() rejected: ' + e);
-      });
-    }
-
-    // Safety watchdog for mobile browsers
-    setTimeout(() => {
-      if (!arrivalAlertAudio || arrivalAlertAudio.paused || arrivalAlertAudio.currentTime === 0 || arrivalAlertAudio.error) {
-        triggerFallback('Mobile audio stall watchdog timeout');
-      }
-    }, 1000);
-
-  } catch (e) {
-    triggerFallback('Synchronous playArrivalAlertSound exception: ' + e);
-  }
+  playSynthArrivalAlarm();
 }
 window.playArrivalAlertSound = playArrivalAlertSound;
 
