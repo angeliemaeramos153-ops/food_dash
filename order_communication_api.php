@@ -84,12 +84,28 @@ if ($action === 'trigger_call') {
     $receiver_id = ($caller_role === 'rider') ? $customer_id : (int)($order['rider_id'] ?? 0);
     $caller_phone = ($caller_role === 'rider') ? $rider_phone : $customer_phone;
 
+    // Explicitly resolve Caller & Receiver profile names
+    if ($caller_role === 'rider') {
+        $rq = $conn->prepare("SELECT COALESCE(r.rider_name, ru.full_name, :def) FROM riders r LEFT JOIN users ru ON r.user_id = ru.user_id WHERE r.rider_id = :rid OR r.user_id = :uid LIMIT 1");
+        $rq->execute([':def' => (!empty($user_name) && $user_name !== 'User') ? $user_name : 'Alex Rider', ':rid' => (int)($order['rider_id'] ?? 0), ':uid' => $user_id]);
+        $caller_name = $rq->fetchColumn() ?: ((!empty($user_name) && $user_name !== 'User') ? $user_name : 'Alex Rider');
+        $receiver_name = !empty($order['customer_name']) ? trim($order['customer_name']) : 'Customer';
+    } else {
+        $caller_name = !empty($order['customer_name']) ? trim($order['customer_name']) : ((!empty($user_name) && $user_name !== 'User') ? $user_name : 'Customer');
+        $receiver_name = 'Alex Rider';
+        if (!empty($order['rider_id'])) {
+            $rq = $conn->prepare("SELECT COALESCE(r.rider_name, ru.full_name, 'Alex Rider') FROM riders r LEFT JOIN users ru ON r.user_id = ru.user_id WHERE r.rider_id = :rid LIMIT 1");
+            $rq->execute([':rid' => (int)$order['rider_id']]);
+            $receiver_name = $rq->fetchColumn() ?: 'Alex Rider';
+        }
+    }
+
     $ins = $conn->prepare("INSERT INTO order_calls (order_id, caller_role, caller_id, caller_name, caller_phone, receiver_role, receiver_id, status, created_at) VALUES (:oid, :crole, :cid, :cname, :cphone, :rrole, :rid, 'ringing', NOW())");
     $ins->execute([
         ':oid'   => $order_id,
         ':crole' => $caller_role,
         ':cid'   => $user_id,
-        ':cname' => $user_name,
+        ':cname' => $caller_name,
         ':cphone'=> $caller_phone,
         ':rrole' => $receiver_role,
         ':rid'   => $receiver_id
@@ -104,7 +120,7 @@ if ($action === 'trigger_call') {
                 $conn,
                 $customer_id,
                 'incoming_call',
-                'Incoming Call from Rider (' . $user_name . ')',
+                'Incoming Call from Rider (' . $caller_name . ')',
                 'Your delivery rider is calling regarding order ' . $clean_ref . '.',
                 $order_id
             );
@@ -117,8 +133,11 @@ if ($action === 'trigger_call') {
         'call_id'        => $call_id,
         'order_id'       => $order_id,
         'status'         => 'ringing',
-        'caller_name'    => $user_name,
+        'caller_role'    => $caller_role,
+        'caller_name'    => $caller_name,
         'caller_phone'   => $caller_phone,
+        'receiver_role'  => $receiver_role,
+        'receiver_name'  => $receiver_name,
         'customer_phone' => $customer_phone,
         'rider_phone'    => $rider_phone,
         'created_at'     => date('Y-m-d H:i:s'),
@@ -430,15 +449,15 @@ if ($action === 'get_updates' || $method === 'GET') {
 
     // Check for active call within the last 60 seconds
     $call_stmt = $conn->prepare("SELECT 
-        call_id, order_id, caller_role, COALESCE(caller, caller_role) AS caller,
-        caller_id, caller_name, caller_phone, receiver_role, receiver_id,
-        COALESCE(call_status, status) AS call_status, status,
-        webrtc_signal, created_at, updated_at,
-        TIMESTAMPDIFF(SECOND, created_at, NOW()) AS elapsed_seconds,
-        TIMESTAMPDIFF(SECOND, updated_at, NOW()) AS seconds_since_update
-    FROM order_calls 
-    WHERE (order_id = :oid OR (receiver_id = :cid AND receiver_role = 'customer')) 
-    ORDER BY call_id DESC LIMIT 1");
+        c.call_id, c.order_id, c.caller_role, COALESCE(c.caller, c.caller_role) AS caller,
+        c.caller_id, c.caller_name, c.caller_phone, c.receiver_role, c.receiver_id,
+        COALESCE(c.call_status, c.status) AS call_status, c.status,
+        c.webrtc_signal, c.created_at, c.updated_at,
+        TIMESTAMPDIFF(SECOND, c.created_at, NOW()) AS elapsed_seconds,
+        TIMESTAMPDIFF(SECOND, c.updated_at, NOW()) AS seconds_since_update
+    FROM order_calls c
+    WHERE (c.order_id = :oid OR (c.receiver_id = :cid AND c.receiver_role = 'customer')) 
+    ORDER BY (CASE WHEN COALESCE(c.call_status, c.status) IN ('calling', 'ringing', 'connected', 'accepted') THEN 1 ELSE 2 END) ASC, c.call_id DESC LIMIT 1");
     $call_stmt->execute([':oid' => $order_id, ':cid' => $customer_id]);
     $call_row = $call_stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -451,15 +470,34 @@ if ($action === 'get_updates' || $method === 'GET') {
 
         // Only treat as active if calling/ringing/connected, or recent decline/end (< 8 seconds)
         if ((in_array($st, ['calling', 'ringing'], true) && $age <= 45) || ($st === 'connected') || (in_array($st, ['declined', 'ended'], true) && $age <= 8)) {
+            $caller_role = strtolower(trim((string)($call_row['caller_role'] ?? $call_row['caller'] ?? 'rider')));
+            if ($caller_role !== 'customer') $caller_role = 'rider';
+            $receiver_role = ($caller_role === 'rider') ? 'customer' : 'rider';
+
+            // Explicitly resolve Caller and Receiver profile names without name flashing
+            if ($caller_role === 'rider') {
+                $caller_name = !empty($order['rider_name']) ? trim($order['rider_name']) : (!empty($call_row['caller_name']) && $call_row['caller_name'] !== 'User' ? trim($call_row['caller_name']) : 'Alex Rider');
+                $caller_phone = !empty($order['rider_phone']) ? trim($order['rider_phone']) : (!empty($call_row['caller_phone']) ? trim($call_row['caller_phone']) : '+63 917 555 0192');
+                $receiver_name = !empty($order['customer_name']) ? trim($order['customer_name']) : 'Customer';
+                $receiver_phone = !empty($order['customer_phone']) ? trim($order['customer_phone']) : '+63 917 123 4567';
+            } else {
+                $caller_name = !empty($order['customer_name']) ? trim($order['customer_name']) : (!empty($call_row['caller_name']) && $call_row['caller_name'] !== 'User' ? trim($call_row['caller_name']) : 'Customer');
+                $caller_phone = !empty($order['customer_phone']) ? trim($order['customer_phone']) : (!empty($call_row['caller_phone']) ? trim($call_row['caller_phone']) : '+63 917 123 4567');
+                $receiver_name = !empty($order['rider_name']) ? trim($order['rider_name']) : 'Alex Rider';
+                $receiver_phone = !empty($order['rider_phone']) ? trim($order['rider_phone']) : '+63 917 555 0192';
+            }
+
             $active_call = [
                 'call_id'        => (int)$call_row['call_id'],
                 'order_id'       => (int)$call_row['order_id'],
-                'caller'         => $call_row['caller'] ?? 'rider',
-                'caller_role'    => $call_row['caller_role'] ?? 'rider',
-                'caller_name'    => $call_row['caller_name'] ?? '',
-                'caller_phone'   => $call_row['caller_phone'] ?? '',
-                'receiver_role'  => $call_row['receiver_role'] ?? 'customer',
+                'caller'         => $caller_role,
+                'caller_role'    => $caller_role,
+                'caller_name'    => $caller_name,
+                'caller_phone'   => $caller_phone,
+                'receiver_role'  => $receiver_role,
                 'receiver_id'    => (int)($call_row['receiver_id'] ?? 0),
+                'receiver_name'  => $receiver_name,
+                'receiver_phone' => $receiver_phone,
                 'call_status'    => $st,
                 'status'         => $st,
                 'elapsed_seconds'=> (int)$call_row['elapsed_seconds'],

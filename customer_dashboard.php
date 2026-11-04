@@ -6095,11 +6095,11 @@ async function pollCustomerOrdersLive() {
       loadCustomerOrdersLive();
     }
 
-    // 2. If Customer Tracking Modal is open, update the tracking view dynamically
+    // 2. If Customer Tracking Modal is open, update the tracking view dynamically (guarded from duplicate polling)
     const trackingModal = document.getElementById('customerTrackingModal') || document.getElementById('trackingModal');
     if (trackingModal && (trackingModal.classList.contains('show') || trackingModal.style.display === 'flex')) {
       const trackingOrderId = activeCustomerTrackingOrderId || (orders.length > 0 ? parseInt(orders[0].order_id || orders[0].id, 10) : null);
-      if (trackingOrderId) {
+      if (trackingOrderId && !custTrackingTimer) {
         fetchCustomerLiveTracking(trackingOrderId, false);
       }
     }
@@ -7137,16 +7137,45 @@ function updateCustomerEtaBadge(dKm, distMeters = null) {
 
 let lastCustRouteKey = '';
 
-// Unified OSRM Driving Routing API matching rider_dashboard.php
+// Unified OSRM Driving Routing API matching rider_dashboard.php with high-frequency telemetry sync
 async function fetchCustOsrmRoute(startLat, startLng, destLat, destLng) {
-  const routeKey = `${startLat.toFixed(5)},${startLng.toFixed(5)}_${destLat.toFixed(5)},${destLng.toFixed(5)}`;
+  // If we already have road waypoints from OSRM, slice along geometry & compute remaining road distance in 0ms
+  if (Array.isArray(currentCustOsrmPath) && currentCustOsrmPath.length > 1) {
+    let closestIdx = 0;
+    let minD = Infinity;
+    for (let i = 0; i < currentCustOsrmPath.length; i++) {
+      const pt = currentCustOsrmPath[i];
+      const d = calculateHaversineKm(startLat, startLng, pt[0], pt[1]);
+      if (d < minD) {
+        minD = d;
+        closestIdx = i;
+      }
+    }
+    // If rider is close to existing corridor (within ~150 meters), slice and compute remaining distance synchronously
+    if (minD < 0.15) {
+      const remainingCoords = currentCustOsrmPath.slice(closestIdx);
+      if (remainingCoords.length > 0) {
+        if (custRoutePolyline) {
+          custRoutePolyline.setLatLngs(remainingCoords);
+        }
+        let totalRemKm = 0;
+        for (let i = 0; i < remainingCoords.length - 1; i++) {
+          totalRemKm += calculateHaversineKm(remainingCoords[i][0], remainingCoords[i][1], remainingCoords[i+1][0], remainingCoords[i+1][1]);
+        }
+        updateCustomerEtaBadge(totalRemKm, totalRemKm * 1000);
+        return;
+      }
+    }
+  }
+
+  const routeKey = `${startLat.toFixed(4)},${startLng.toFixed(4)}_${destLat.toFixed(4)},${destLng.toFixed(4)}`;
   if (routeKey === lastCustRouteKey && custRoutePolyline) return;
   lastCustRouteKey = routeKey;
 
   const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${destLng},${destLat}?overview=full&geometries=geojson`;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
     clearTimeout(timeoutId);
 
@@ -7181,6 +7210,7 @@ async function fetchCustOsrmRoute(startLat, startLng, destLat, destLng) {
 
   // Fallback: Manhattan street corridor so route stays along street axes
   const fallback = generateFallbackStreetCorridor(startLat, startLng, destLat, destLng);
+  currentCustOsrmPath = fallback;
   if (custTrackingMap) {
     if (!custRoutePolyline) {
       custRoutePolyline = L.polyline(fallback, {
@@ -7196,7 +7226,10 @@ async function fetchCustOsrmRoute(startLat, startLng, destLat, destLng) {
   }
 }
 
+let _isFetchingCustomerTracking = false;
 async function fetchCustomerLiveTracking(orderId, isInitial) {
+  if (_isFetchingCustomerTracking && !isInitial) return;
+  _isFetchingCustomerTracking = true;
   try {
     // Append timestamp and no-cache to fetch fresh live GPS from order_api.php
     const res = await fetch(`order_api.php?action=get_rider_location&order_id=${orderId}&_t=${Date.now()}`, {
@@ -7298,7 +7331,7 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     updateCustomerEtaBadge(dKm);
 
     // Check for active incoming call from rider
-    if (data.active_call && (data.active_call.status === 'ringing' || data.active_call.call_status === 'ringing')) {
+    if (data.active_call && (data.active_call.status === 'ringing' || data.active_call.call_status === 'ringing') && (data.active_call.caller === 'rider' || data.active_call.caller_role === 'rider')) {
       handleIncomingCallAlert(data.active_call);
     } else {
       dismissIncomingCallIfRinging();
@@ -7318,6 +7351,8 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
 
   } catch (err) {
     console.warn('Error fetching customer tracking:', err);
+  } finally {
+    _isFetchingCustomerTracking = false;
   }
 }
 
@@ -7957,22 +7992,37 @@ function stopRingtone() {
 }
 
 function handleIncomingCallAlert(call) {
-  if (currentIncomingCall && currentIncomingCall.call_id === call.call_id) {
+  if (!call) return;
+
+  const clientRole = 'customer';
+  const callerRole = String(call.caller_role || call.caller || 'rider').toLowerCase().trim();
+
+  // If this customer initiated the call (outgoing call), do NOT display incoming call modal!
+  if (callerRole === clientRole) {
+    dismissIncomingCallIfRinging();
     return;
   }
-  currentIncomingCall = call;
+
+  // Explicitly render Rider's correct profile name and details instantly without name flashing
+  const callerName = call.caller_name || currentTrackingRiderName || 'Alex Rider';
+  const callerPhone = call.caller_phone || currentTrackingRiderPhone || '+63 917 555 0192';
 
   const modal = document.getElementById('incomingCallModal');
   if (!modal) return;
 
   const nameEl = document.getElementById('incomingCallerName');
-  if (nameEl) nameEl.textContent = call.caller_name || 'Your Rider';
+  if (nameEl) nameEl.textContent = callerName;
 
   const phoneEl = document.getElementById('incomingCallerPhone');
-  if (phoneEl) phoneEl.textContent = call.caller_phone || '+63 917 555 0192';
+  if (phoneEl) phoneEl.textContent = callerPhone;
 
   const statusEl = document.getElementById('incomingCallStatus');
-  if (statusEl) statusEl.textContent = 'Rider is calling regarding your delivery...';
+  if (statusEl) statusEl.textContent = `${callerName} (Rider) is calling regarding your delivery...`;
+
+  if (currentIncomingCall && currentIncomingCall.call_id === call.call_id && modal.classList.contains('show')) {
+    return;
+  }
+  currentIncomingCall = call;
 
   const actionsEl = document.getElementById('incomingCallActions');
   if (actionsEl) actionsEl.style.display = 'flex';

@@ -528,6 +528,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         if ($c) {
             $c['call_id'] = (int)$c['call_id'];
             $c['elapsed_seconds'] = (int)$c['elapsed_seconds'];
+            $c_role = strtolower(trim((string)($c['caller_role'] ?? 'rider')));
+            if ($c_role !== 'customer') $c_role = 'rider';
+            $c['caller'] = $c_role;
+            $c['caller_role'] = $c_role;
+            $c['receiver_role'] = ($c_role === 'rider') ? 'customer' : 'rider';
+            if ($c_role === 'rider') {
+                $c['caller_name'] = !empty($o['rider_name']) ? $o['rider_name'] : (!empty($c['caller_name']) ? $c['caller_name'] : 'Alex Rider');
+                $c['caller_phone'] = !empty($o['rider_phone']) ? $o['rider_phone'] : (!empty($c['caller_phone']) ? $c['caller_phone'] : '+63 917 555 0192');
+                $c['receiver_name'] = !empty($o['customer_name']) ? $o['customer_name'] : 'Customer';
+                $c['receiver_phone'] = !empty($o['customer_phone']) ? $o['customer_phone'] : '+63 917 123 4567';
+            } else {
+                $c['caller_name'] = !empty($o['customer_name']) ? $o['customer_name'] : (!empty($c['caller_name']) ? $c['caller_name'] : 'Customer');
+                $c['caller_phone'] = !empty($o['customer_phone']) ? $o['customer_phone'] : (!empty($c['caller_phone']) ? $c['caller_phone'] : '+63 917 123 4567');
+                $c['receiver_name'] = !empty($o['rider_name']) ? $o['rider_name'] : 'Alex Rider';
+                $c['receiver_phone'] = !empty($o['rider_phone']) ? $o['rider_phone'] : '+63 917 555 0192';
+            }
             $active_call = $c;
         }
     } catch (Throwable $e) {}

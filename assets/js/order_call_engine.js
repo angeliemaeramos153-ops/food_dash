@@ -850,28 +850,40 @@
     if (st === 'calling' || st === 'ringing') {
       if (isCallerMe) {
         // Outgoing call still ringing
+        const target = serverCallData.receiver_name || (myRole === 'rider' ? 'Customer' : 'Rider');
         if (currentCallState !== 'calling') {
           setCallState('calling', {
             isOutgoing: true,
-            targetName: (myRole === 'rider' ? 'Customer' : 'Rider')
+            targetName: target
           });
+        } else {
+          const nameEl = document.getElementById('fdCallTargetName');
+          if (nameEl && nameEl.textContent !== target) nameEl.textContent = target;
         }
       } else {
         // Incoming call to me!
+        const callerName = serverCallData.caller_name || (myRole === 'rider' ? 'Customer' : 'Rider');
         if (currentCallState !== 'calling') {
           setCallState('calling', {
             isOutgoing: false,
-            callerName: serverCallData.caller_name || (myRole === 'rider' ? 'Customer' : 'Rider')
+            callerName: callerName
           });
+        } else {
+          const nameEl = document.getElementById('fdCallTargetName');
+          if (nameEl && nameEl.textContent !== callerName) nameEl.textContent = callerName;
         }
       }
     } else if (st === 'connected' || st === 'accepted') {
+      const activeName = isCallerMe
+        ? (serverCallData.receiver_name || (myRole === 'rider' ? 'Customer' : 'Rider'))
+        : (serverCallData.caller_name || (myRole === 'rider' ? 'Customer' : 'Rider'));
       if (currentCallState !== 'connected') {
         setCallState('connected', {
-          targetName: isCallerMe
-            ? (myRole === 'rider' ? 'Customer' : 'Rider')
-            : (serverCallData.caller_name || (myRole === 'rider' ? 'Customer' : 'Rider'))
+          targetName: activeName
         });
+      } else {
+        const nameEl = document.getElementById('fdCallTargetName');
+        if (nameEl && nameEl.textContent !== activeName) nameEl.textContent = activeName;
       }
     } else if (st === 'declined' || st === 'ended' || st === 'missed') {
       if (currentCallState !== 'idle' && currentCallState !== 'ended') {

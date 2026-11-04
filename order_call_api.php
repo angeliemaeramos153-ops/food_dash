@@ -83,7 +83,24 @@ if ($action === 'start_call' || $action === 'trigger_call' || $action === 'call'
     $receiver_role = ($caller_role === 'rider') ? 'customer' : 'rider';
     $receiver_id = ($caller_role === 'rider') ? $customer_id : (int)($order['rider_id'] ?? 0);
     $caller_phone = ($caller_role === 'rider') ? $rider_phone : $customer_phone;
-    $receiver_name = ($caller_role === 'rider') ? ($order['customer_name'] ?? 'Customer') : 'Rider';
+
+    // Explicitly resolve Caller & Receiver profile names
+    if ($caller_role === 'rider') {
+        $rq = $conn->prepare("SELECT COALESCE(r.rider_name, ru.full_name, :def) FROM riders r LEFT JOIN users ru ON r.user_id = ru.user_id WHERE r.rider_id = :rid OR r.user_id = :uid LIMIT 1");
+        $rq->execute([':def' => (!empty($user_name) && $user_name !== 'User') ? $user_name : 'Alex Rider', ':rid' => (int)($order['rider_id'] ?? 0), ':uid' => $user_id]);
+        $caller_name = $rq->fetchColumn() ?: ((!empty($user_name) && $user_name !== 'User') ? $user_name : 'Alex Rider');
+        $receiver_name = !empty($order['customer_name']) ? trim($order['customer_name']) : 'Customer';
+        $receiver_phone = $customer_phone;
+    } else {
+        $caller_name = !empty($order['customer_name']) ? trim($order['customer_name']) : ((!empty($user_name) && $user_name !== 'User') ? $user_name : 'Customer');
+        $receiver_name = 'Alex Rider';
+        if (!empty($order['rider_id'])) {
+            $rq = $conn->prepare("SELECT COALESCE(r.rider_name, ru.full_name, 'Alex Rider') FROM riders r LEFT JOIN users ru ON r.user_id = ru.user_id WHERE r.rider_id = :rid LIMIT 1");
+            $rq->execute([':rid' => (int)$order['rider_id']]);
+            $receiver_name = $rq->fetchColumn() ?: 'Alex Rider';
+        }
+        $receiver_phone = $rider_phone;
+    }
 
     $ins = $conn->prepare("INSERT INTO order_calls (
         order_id, caller_role, caller, caller_id, caller_name, caller_phone,
@@ -97,7 +114,7 @@ if ($action === 'start_call' || $action === 'trigger_call' || $action === 'call'
         ':crole'  => $caller_role,
         ':caller' => $caller_role,
         ':cid'    => $user_id,
-        ':cname'  => $user_name,
+        ':cname'  => $caller_name,
         ':cphone' => $caller_phone,
         ':rrole'  => $receiver_role,
         ':rid'    => $receiver_id
@@ -111,7 +128,7 @@ if ($action === 'start_call' || $action === 'trigger_call' || $action === 'call'
                     $conn,
                     $customer_id,
                     'incoming_call',
-                    'Incoming Call from Rider (' . $user_name . ')',
+                    'Incoming Call from Rider (' . $caller_name . ')',
                     'Your delivery rider is calling regarding order ' . $clean_ref . '.',
                     $order_id
                 );
@@ -119,18 +136,19 @@ if ($action === 'start_call' || $action === 'trigger_call' || $action === 'call'
     } catch (Throwable $e) {}
 
     call_api_json(true, 'Call started.', [
-        'call_id'       => $call_id,
-        'order_id'      => $order_id,
-        'call_status'   => 'ringing',
-        'status'        => 'ringing',
-        'caller'        => $caller_role,
-        'caller_role'   => $caller_role,
-        'caller_name'   => $user_name,
-        'caller_phone'  => $caller_phone,
-        'receiver_name' => $receiver_name,
-        'receiver_role' => $receiver_role,
-        'timestamp'     => time(),
-        'created_at'    => date('Y-m-d H:i:s')
+        'call_id'        => $call_id,
+        'order_id'       => $order_id,
+        'call_status'    => 'ringing',
+        'status'         => 'ringing',
+        'caller'         => $caller_role,
+        'caller_role'    => $caller_role,
+        'caller_name'    => $caller_name,
+        'caller_phone'   => $caller_phone,
+        'receiver_name'  => $receiver_name,
+        'receiver_phone' => $receiver_phone,
+        'receiver_role'  => $receiver_role,
+        'timestamp'      => time(),
+        'created_at'     => date('Y-m-d H:i:s')
     ]);
 }
 
@@ -197,6 +215,34 @@ if ($action === 'get_status' || $action === 'poll') {
         }
 
         $normalized_status = $raw_st;
+
+        if ($normalized_status !== 'idle') {
+            $c_role = strtolower(trim((string)($call['caller_role'] ?? $call['caller'] ?? 'rider')));
+            if ($c_role !== 'customer') $c_role = 'rider';
+            $call['caller'] = $c_role;
+            $call['caller_role'] = $c_role;
+            $call['receiver_role'] = ($c_role === 'rider') ? 'customer' : 'rider';
+
+            // Query order details to ensure canonical caller/receiver names
+            try {
+                $oq = $conn->prepare("SELECT o.customer_name, COALESCE(o.customer_phone, '+63 917 123 4567') AS customer_phone, COALESCE(r.rider_name, ru.full_name, 'Alex Rider') AS rider_name, COALESCE(o.rider_phone, r.phone, ru.phone, '+63 917 555 0192') AS rider_phone FROM food_orders o LEFT JOIN riders r ON o.rider_id = r.rider_id LEFT JOIN users ru ON r.user_id = ru.user_id WHERE o.order_id = :oid LIMIT 1");
+                $oq->execute([':oid' => $order_id]);
+                $orow = $oq->fetch(PDO::FETCH_ASSOC);
+                if ($orow) {
+                    if ($c_role === 'rider') {
+                        $call['caller_name'] = !empty($orow['rider_name']) ? $orow['rider_name'] : (!empty($call['caller_name']) ? $call['caller_name'] : 'Alex Rider');
+                        $call['caller_phone'] = !empty($orow['rider_phone']) ? $orow['rider_phone'] : (!empty($call['caller_phone']) ? $call['caller_phone'] : '+63 917 555 0192');
+                        $call['receiver_name'] = !empty($orow['customer_name']) ? $orow['customer_name'] : 'Customer';
+                        $call['receiver_phone'] = !empty($orow['customer_phone']) ? $orow['customer_phone'] : '+63 917 123 4567';
+                    } else {
+                        $call['caller_name'] = !empty($orow['customer_name']) ? $orow['customer_name'] : (!empty($call['caller_name']) ? $call['caller_name'] : 'Customer');
+                        $call['caller_phone'] = !empty($orow['customer_phone']) ? $orow['customer_phone'] : (!empty($call['caller_phone']) ? $call['caller_phone'] : '+63 917 123 4567');
+                        $call['receiver_name'] = !empty($orow['rider_name']) ? $orow['rider_name'] : 'Alex Rider';
+                        $call['receiver_phone'] = !empty($orow['rider_phone']) ? $orow['rider_phone'] : '+63 917 555 0192';
+                    }
+                }
+            } catch (Throwable $e) {}
+        }
     }
 
     call_api_json(true, 'Call status retrieved.', [
@@ -207,6 +253,8 @@ if ($action === 'get_status' || $action === 'poll') {
         'caller_role'    => $call['caller_role'] ?? null,
         'caller_name'    => $call['caller_name'] ?? '',
         'caller_phone'   => $call['caller_phone'] ?? '',
+        'receiver_name'  => $call['receiver_name'] ?? '',
+        'receiver_phone' => $call['receiver_phone'] ?? '',
         'receiver_role'  => $call['receiver_role'] ?? '',
         'receiver_id'    => (int)($call['receiver_id'] ?? 0),
         'call_id'        => (int)($call['call_id'] ?? 0),

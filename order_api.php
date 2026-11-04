@@ -554,6 +554,22 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
         $c_stmt->execute([':oid' => $order_id, ':cid' => $user_id]);
         $call_row = $c_stmt->fetch(PDO::FETCH_ASSOC);
         if ($call_row && (int)$call_row['seconds_since_update'] <= 45) {
+            $c_role = strtolower(trim((string)($call_row['caller_role'] ?? 'rider')));
+            if ($c_role !== 'customer') $c_role = 'rider';
+            $call_row['caller'] = $c_role;
+            $call_row['caller_role'] = $c_role;
+            $call_row['receiver_role'] = ($c_role === 'rider') ? 'customer' : 'rider';
+            if ($c_role === 'rider') {
+                $call_row['caller_name'] = !empty($o['rider_name']) ? $o['rider_name'] : (!empty($call_row['caller_name']) ? $call_row['caller_name'] : 'Alex Rider');
+                $call_row['caller_phone'] = !empty($o['rider_phone']) ? $o['rider_phone'] : (!empty($call_row['caller_phone']) ? $call_row['caller_phone'] : '+63 917 555 0192');
+                $call_row['receiver_name'] = !empty($o['customer_name']) ? $o['customer_name'] : 'Customer';
+                $call_row['receiver_phone'] = !empty($o['customer_phone']) ? $o['customer_phone'] : '+63 917 123 4567';
+            } else {
+                $call_row['caller_name'] = !empty($o['customer_name']) ? $o['customer_name'] : (!empty($call_row['caller_name']) ? $call_row['caller_name'] : 'Customer');
+                $call_row['caller_phone'] = !empty($o['customer_phone']) ? $o['customer_phone'] : (!empty($call_row['caller_phone']) ? $call_row['caller_phone'] : '+63 917 123 4567');
+                $call_row['receiver_name'] = !empty($o['rider_name']) ? $o['rider_name'] : 'Alex Rider';
+                $call_row['receiver_phone'] = !empty($o['rider_phone']) ? $o['rider_phone'] : '+63 917 555 0192';
+            }
             $active_call = $call_row;
         }
     } catch (Throwable $e) {}
