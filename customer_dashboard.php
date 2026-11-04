@@ -797,9 +797,9 @@ a:active,
 .incoming-call-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
 .incoming-call-modal[style*="display:none"],
 .incoming-call-modal[style*="display: none"],
-.customer-floating-banner:not(.show),
-#liveRiderMessageBanner:not(.show),
-.live-rider-msg-banner:not(.show),
+.customer-floating-banner:not(.show):not(.slide-down),
+#liveRiderMessageBanner:not(.show):not(.slide-down),
+.live-rider-msg-banner:not(.show):not(.slide-down),
 .customer-floating-banner[style*="display:none"],
 .customer-floating-banner[style*="display: none"],
 .fd-gmail-modal-backdrop:not(.active),
@@ -2332,18 +2332,25 @@ a:active,
 }
 .customer-floating-banner.show,
 #liveRiderMessageBanner.show,
-.live-rider-msg-banner.show {
+.live-rider-msg-banner.show,
+.customer-floating-banner.slide-down,
+#liveRiderMessageBanner.slide-down,
+.live-rider-msg-banner.slide-down,
+.slide-down {
   display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
   pointer-events: auto !important;
+  animation: bannerSlideDown 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
 }
-.customer-floating-banner:not(.show),
-#liveRiderMessageBanner:not(.show),
-.live-rider-msg-banner:not(.show) {
+.customer-floating-banner:not(.show):not(.slide-down),
+#liveRiderMessageBanner:not(.show):not(.slide-down),
+.live-rider-msg-banner:not(.show):not(.slide-down) {
   display: none !important;
   pointer-events: none !important;
 }
 @keyframes bannerSlideDown {
-  0% { transform: translateY(-25px); opacity: 0; }
+  0% { transform: translateY(-30px); opacity: 0; }
   100% { transform: translateY(0); opacity: 1; }
 }
 .customer-floating-banner .rct-icon,
@@ -6032,27 +6039,58 @@ async function pollCustomerOrdersLive() {
       const alreadyArrivedAlerted = (sessionStorage.getItem(arrivedKey) === '1');
       const wasArrived = prevStatus && ['ARRIVED', 'ARRIVED_DESTINATION'].includes(prevStatus);
 
-      // Trigger arrival notification top banner & audio alert
-      if (isArrived && (!alreadyArrivedAlerted || (prevStatus && !wasArrived))) {
+      // Client-side state-transition checking: detect exact transitions to 'arrived'
+      const isTransitionToArrived = isArrived && !wasArrived;
+
+      // Trigger arrival notification top banner & audio alert immediately upon arrival transition
+      if (isTransitionToArrived || (isArrived && !alreadyArrivedAlerted)) {
         sessionStorage.setItem(arrivedKey, '1');
         window.displayedNotificationIds.add('arrived_' + oId);
 
-        // Top notification banner ("Rider is outside now! / Arrived at your door!")
-        showCustomerFloatingBanner('RIDER ARRIVED', 'Rider is outside now! / Arrived at your door!', () => {
-          if (typeof openCustomerTrackingModal === 'function') {
-            openCustomerTrackingModal(oId);
-          } else if (typeof openTrackingModal === 'function') {
-            openTrackingModal(oId);
-          } else if (typeof showScreen === 'function') {
-            showScreen('orders');
-          }
-        });
+        // Force the arrival banner to display and slide down reliably
+        const banner = document.getElementById('liveRiderMessageBanner');
+        if (banner) {
+          const titleEl = document.getElementById('liveMsgBannerTitle');
+          const textEl = document.getElementById('liveMsgBannerText');
+          if (titleEl) titleEl.textContent = 'RIDER ARRIVED';
+          if (textEl) textEl.textContent = 'Your rider has arrived outside with your order! 🛵';
+          banner.style.display = 'block';
+          banner.classList.add('slide-down');
+          banner.classList.add('show');
+          if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
+          msgBannerTimeout = setTimeout(() => {
+            dismissLiveRiderBanner();
+          }, 7000);
+        } else {
+          showCustomerFloatingBanner('RIDER ARRIVED', 'Rider is outside now! / Arrived at your door!', () => {
+            if (typeof openCustomerTrackingModal === 'function') {
+              openCustomerTrackingModal(oId);
+            } else if (typeof openTrackingModal === 'function') {
+              openTrackingModal(oId);
+            } else if (typeof showScreen === 'function') {
+              showScreen('orders');
+            }
+          });
+        }
 
-        // Programmatically play arrival audio alert sound (HTML5 Audio / base64 beep)
+        // Programmatically play arrival audio alert sound & chime immediately
         if (typeof playArrivalAlertSound === 'function') {
           playArrivalAlertSound();
-        } else if (typeof playCustomerChime === 'function') {
+        }
+        if (typeof playCustomerChime === 'function') {
           playCustomerChime();
+        }
+
+        // Prominently trigger arrival popup modal
+        const modal = document.getElementById('riderArrivedModal');
+        if (modal) {
+          modal.classList.add('show', 'active');
+          modal.style.display = 'flex';
+          modal.style.visibility = 'visible';
+          modal.style.pointerEvents = 'auto';
+        }
+        if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
+          FoodDashCall.triggerArrivalAlarm(oId, ord.rider_name || 'Rider');
         }
 
         // Update UI badges and cards to Arrived
@@ -6111,8 +6149,8 @@ async function pollCustomerOrdersLive() {
 }
 window.pollCustomerOrdersLive = pollCustomerOrdersLive;
 
-// Continuous 1000ms ultra-responsive polling loop for instant telemetry sync
-setInterval(pollCustomerOrdersLive, 1000);
+// Continuous 800ms ultra-responsive polling loop for instant telemetry sync
+setInterval(pollCustomerOrdersLive, 800);
 
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(pollCustomerOrdersLive, 500);
@@ -6955,7 +6993,7 @@ function openCustomerTrackingModal(orderId, meta) {
     if (activeCustomerTrackingOrderId) {
       fetchCustomerLiveTracking(activeCustomerTrackingOrderId, false);
     }
-  }, 1000); // 1-second ultra-responsive real-time tracking loop
+  }, 800); // 800ms ultra-responsive real-time tracking loop
 }
 
 function closeCustomerTrackingModal() {
@@ -6994,7 +7032,7 @@ function generateFallbackStreetCorridor(startLat, startLng, destLat, destLng) {
 // Smooth marker interpolation along OSRM road geometry
 let currentCustOsrmPath = [];
 
-function animateMarkerAlongRoad(marker, newLat, newLng, durationMs = 850) {
+function animateMarkerAlongRoad(marker, newLat, newLng, durationMs = 700) {
   if (!marker) return;
   const startLatLng = marker.getLatLng();
   const startLat = startLatLng.lat;
@@ -7231,13 +7269,23 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
   if (_isFetchingCustomerTracking && !isInitial) return;
   _isFetchingCustomerTracking = true;
   try {
-    // Append timestamp and no-cache to fetch fresh live GPS from order_api.php
-    const res = await fetch(`order_api.php?action=get_rider_location&order_id=${orderId}&_t=${Date.now()}`, {
-      cache: 'no-store'
-    });
-    const data = await res.json();
-    if (!data.success) {
-      console.warn('Tracking API response:', data.message);
+    // Append timestamp and no-cache to fetch fresh live GPS from get_order_status.php (with fallback to order_api.php)
+    let data = null;
+    try {
+      const res = await fetch(`get_order_status.php?order_id=${orderId}&_t=${Date.now()}`, {
+        cache: 'no-store'
+      });
+      if (res.ok) data = await res.json();
+    } catch (e) {}
+
+    if (!data || !data.success) {
+      const res = await fetch(`order_api.php?action=get_rider_location&order_id=${orderId}&_t=${Date.now()}`, {
+        cache: 'no-store'
+      });
+      data = await res.json();
+    }
+    if (!data || !data.success) {
+      console.warn('Tracking API response:', data?.message);
       return;
     }
 
@@ -7290,7 +7338,11 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
       statusBadgeEl.textContent = rawSt;
     }
 
-    // Detect arrived status in live tracking modal
+    // Detect arrived status & exact state-transition in live tracking modal
+    if (!window._customerTrackingLastStates) window._customerTrackingLastStates = {};
+    const prevTrackStatus = window._customerTrackingLastStates[orderId];
+    const wasTrackArrived = prevTrackStatus && ['ARRIVED', 'ARRIVED_DESTINATION', 'arrived', 'arrived_destination'].includes(prevTrackStatus);
+
     const ordRawSt = String(ord.status || '').toUpperCase().trim();
     const dataRawSt = String(data.status || '').toUpperCase().trim();
     const ordDelSt = String(ord.delivery_status || '').toLowerCase().trim();
@@ -7301,22 +7353,56 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
                        || ['arrived', 'arrived_destination'].includes(ordDelSt)
                        || ['arrived', 'arrived_destination'].includes(dataDelSt);
 
-    if (isLiveArrived) {
-      const arrivedAlertKey = 'fd_arrived_alert_seen_' + orderId;
-      if (sessionStorage.getItem(arrivedAlertKey) !== '1') {
-        sessionStorage.setItem(arrivedAlertKey, '1');
-        window.displayedNotificationIds.add('arrived_' + orderId);
+    const isTrackTransitionToArrived = isLiveArrived && !wasTrackArrived;
+    const arrivedAlertKey = 'fd_arrived_alert_seen_' + orderId;
+
+    if (isTrackTransitionToArrived || (isLiveArrived && sessionStorage.getItem(arrivedAlertKey) !== '1')) {
+      sessionStorage.setItem(arrivedAlertKey, '1');
+      window.displayedNotificationIds.add('arrived_' + orderId);
+
+      // Force the arrival banner to display and slide down reliably
+      const banner = document.getElementById('liveRiderMessageBanner');
+      if (banner) {
+        const titleEl = document.getElementById('liveMsgBannerTitle');
+        const textEl = document.getElementById('liveMsgBannerText');
+        if (titleEl) titleEl.textContent = 'RIDER ARRIVED';
+        if (textEl) textEl.textContent = 'Your rider has arrived outside with your order! 🛵';
+        banner.style.display = 'block';
+        banner.classList.add('slide-down');
+        banner.classList.add('show');
+        if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
+        msgBannerTimeout = setTimeout(() => {
+          dismissLiveRiderBanner();
+        }, 7000);
+      } else {
         showCustomerFloatingBanner('RIDER ARRIVED', 'Rider is outside now! / Arrived at your door!', () => {
           if (typeof openCustomerTrackingModal === 'function') openCustomerTrackingModal(orderId);
         });
-        if (typeof playArrivalAlertSound === 'function') {
-          playArrivalAlertSound();
-        } else if (typeof playCustomerChime === 'function') {
-          playCustomerChime();
-        }
       }
+
+      // Prominently trigger arrival popup modal
+      const modal = document.getElementById('riderArrivedModal');
+      if (modal) {
+        modal.classList.add('show', 'active');
+        modal.style.display = 'flex';
+        modal.style.visibility = 'visible';
+        modal.style.pointerEvents = 'auto';
+      }
+      if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
+        FoodDashCall.triggerArrivalAlarm(orderId, currentTrackingRiderName || 'Rider');
+      }
+
+      // Programmatically play arrival alert sound & chime immediately
+      if (typeof playArrivalAlertSound === 'function') {
+        playArrivalAlertSound();
+      }
+      if (typeof playCustomerChime === 'function') {
+        playCustomerChime();
+      }
+
       updateOrderStatusToArrived(orderId);
     }
+    window._customerTrackingLastStates[orderId] = data.delivery_status || ord.delivery_status || data.status || ord.status || 'unknown';
 
     const destAddrEl = document.getElementById('custTrackDestAddress');
     if (destAddrEl) {
@@ -7803,6 +7889,7 @@ function dismissLiveRiderBanner() {
   const banner = document.getElementById('liveRiderMessageBanner');
   if (banner) {
     banner.classList.remove('show');
+    banner.classList.remove('slide-down');
     banner.style.display = 'none';
   }
   if (msgBannerTimeout) {
@@ -7823,13 +7910,18 @@ function showCustomerFloatingBanner(title, text, onClick = null) {
   const bannerText = String(text).trim();
   const dedupeKey = `${bannerTitle}:::${bannerText}`;
   const now = Date.now();
+  const isArrivalNotification = bannerTitle.includes('ARRIVED') || bannerTitle.includes('OUTSIDE');
 
-  // Deduplication guard: ignore identical notification within 3.5 seconds
-  const lastTime = _customerRecentBanners.get(dedupeKey) || 0;
-  if (now - lastTime < 3500) {
-    return;
+  // Deduplication guard: ignore identical non-arrival notifications within 3.5 seconds
+  if (!isArrivalNotification) {
+    const lastTime = _customerRecentBanners.get(dedupeKey) || 0;
+    if (now - lastTime < 3500) {
+      return;
+    }
+    _customerRecentBanners.set(dedupeKey, now);
+  } else {
+    _customerRecentBanners.set(dedupeKey, now);
   }
-  _customerRecentBanners.set(dedupeKey, now);
 
   // Clean old entries in map
   if (_customerRecentBanners.size > 40) {
@@ -7873,8 +7965,10 @@ function showCustomerFloatingBanner(title, text, onClick = null) {
     }
   };
 
+  // Force the arrival banner to display and slide down reliably
+  banner.style.display = 'block';
+  banner.classList.add('slide-down');
   banner.classList.add('show');
-  banner.style.display = 'flex';
 
   if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
   msgBannerTimeout = setTimeout(() => {
@@ -8314,32 +8408,56 @@ function handleRiderArrivedEvent(data) {
   const oId = data.order_id || activeCustomerTrackingOrderId || 0;
   const arrivedKey = 'arrived_' + oId;
   const arrivedAlertKey = 'fd_arrived_alert_seen_' + oId;
-  const alreadyAlerted = (window.displayedNotificationIds.has(arrivedKey) && sessionStorage.getItem(arrivedAlertKey) === '1');
-  if (alreadyAlerted) return;
+
+  if (!window._customerArrivedHandledOrders) window._customerArrivedHandledOrders = new Set();
+  if (window._customerArrivedHandledOrders.has(oId) && sessionStorage.getItem(arrivedAlertKey) === '1') {
+    return;
+  }
+  window._customerArrivedHandledOrders.add(oId);
   window.displayedNotificationIds.add(arrivedKey);
   sessionStorage.setItem(arrivedAlertKey, '1');
 
   const rName = (data.rider_name || currentTrackingRiderName || 'Waiting for Rider Assignment');
 
-  // Trigger persistent looping arrival alarm (MUST ring until action button is clicked)
-  if (window.FoodDashCall) {
+  // Trigger persistent looping arrival alarm / arrival modal
+  const modal = document.getElementById('riderArrivedModal');
+  if (modal) {
+    modal.classList.add('show', 'active');
+    modal.style.display = 'flex';
+    modal.style.visibility = 'visible';
+    modal.style.pointerEvents = 'auto';
+  }
+  if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
     FoodDashCall.triggerArrivalAlarm(oId, rName);
-  } else {
-    const modal = document.getElementById('riderArrivedModal');
-    if (modal) modal.style.display = 'flex';
   }
 
-  // Top notification banner ("Rider is outside now! / Arrived at your door!")
-  showCustomerFloatingBanner('RIDER ARRIVED', 'Rider is outside now! / Arrived at your door!', () => {
-    if (typeof openCustomerTrackingModal === 'function') openCustomerTrackingModal(oId);
-    else if (typeof openTrackingModal === 'function') openTrackingModal(oId);
-    else if (typeof showScreen === 'function') showScreen('orders');
-  });
+  // Force the arrival banner to display and slide down reliably
+  const banner = document.getElementById('liveRiderMessageBanner');
+  if (banner) {
+    const titleEl = document.getElementById('liveMsgBannerTitle');
+    const textEl = document.getElementById('liveMsgBannerText');
+    if (titleEl) titleEl.textContent = 'RIDER ARRIVED';
+    if (textEl) textEl.textContent = 'Your rider has arrived outside with your order! 🛵';
+    banner.style.display = 'block';
+    banner.classList.add('slide-down');
+    banner.classList.add('show');
+    if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
+    msgBannerTimeout = setTimeout(() => {
+      dismissLiveRiderBanner();
+    }, 7000);
+  } else {
+    showCustomerFloatingBanner('RIDER ARRIVED', 'Rider is outside now! / Arrived at your door!', () => {
+      if (typeof openCustomerTrackingModal === 'function') openCustomerTrackingModal(oId);
+      else if (typeof openTrackingModal === 'function') openTrackingModal(oId);
+      else if (typeof showScreen === 'function') showScreen('orders');
+    });
+  }
 
-  // Programmatically play audio alert sound
+  // Programmatically play audio alert sound immediately
   if (typeof playArrivalAlertSound === 'function') {
     playArrivalAlertSound();
-  } else if (typeof playCustomerChime === 'function') {
+  }
+  if (typeof playCustomerChime === 'function') {
     playCustomerChime();
   }
 
@@ -8544,9 +8662,9 @@ async function pollCustomerCommunicationUpdates() {
   }
 }
 
-// Continuously execute every 1.0 second on ALL screens for real-time telemetry sync
+// Continuously execute every 800ms on ALL screens for real-time telemetry sync
 pollCustomerCommunicationUpdates();
-setInterval(pollCustomerCommunicationUpdates, 1000);
+setInterval(pollCustomerCommunicationUpdates, 800);
 
 // Check if navigating to a specific screen via hash (e.g. #orders, #cart)
 if (window.location.hash) {

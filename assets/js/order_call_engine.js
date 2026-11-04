@@ -914,7 +914,10 @@
     injectArrivalButtons(orderId);
 
     if (modal) {
+      modal.classList.add('show', 'active');
       modal.style.display = 'flex';
+      modal.style.visibility = 'visible';
+      modal.style.pointerEvents = 'auto';
       // Disable backdrop closing so customer MUST click one of the two explicit buttons
       const backdrop = modal.querySelector('.fd-modal-backdrop') || modal.querySelector('[onclick*="closeRiderArrivedModal"]');
       if (backdrop) {

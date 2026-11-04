@@ -453,6 +453,14 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
   cursor: pointer;
   animation: bannerSlideDown 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
+.live-rider-msg-banner.slide-down,
+.slide-down {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  animation: bannerSlideDown 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
 @keyframes bannerSlideDown {
   0% { transform: translate(-50%, -40px); opacity: 0; }
   100% { transform: translate(-50%, 0); opacity: 1; }
@@ -1192,17 +1200,27 @@ function initMap() {
   isTrackMapInitialized = true;
 }
 
-// Exactly 1000ms real-time high-frequency GPS telemetry polling loop
+// Exactly 800ms real-time high-frequency GPS telemetry polling loop
 let _isPollingLocation = false;
 async function pollRiderLocation() {
   if (!orderId || _isPollingLocation) return;
   _isPollingLocation = true;
   try {
     // Append timestamp and no-cache to prevent browser caching on polling requests
-    const res = await fetch(`tracking_api.php?action=get_location&order_id=${orderId}&_t=${Date.now()}`, {
-      cache: 'no-store'
-    });
-    const data = await res.json();
+    let data = null;
+    try {
+      const resStatus = await fetch(`get_order_status.php?order_id=${orderId}&_t=${Date.now()}`, {
+        cache: 'no-store'
+      });
+      if (resStatus.ok) data = await resStatus.json();
+    } catch (e) {}
+
+    if (!data || !data.success) {
+      const res = await fetch(`tracking_api.php?action=get_location&order_id=${orderId}&_t=${Date.now()}`, {
+        cache: 'no-store'
+      });
+      data = await res.json();
+    }
     if (!data.success || !data.order) return;
 
     const ord = data.order;
@@ -1211,9 +1229,9 @@ async function pollRiderLocation() {
     const dLat = parseFloat(data.destination_lat || ord.destination_lat || initDestLat);
     const dLng = parseFloat(data.destination_lng || ord.destination_lng || initDestLng);
 
-    // Updates riderMarker smoothly via OSRM road animation (850ms duration synchronized with 1000ms polling)
+    // Updates riderMarker smoothly via OSRM road animation (700ms duration synchronized with 800ms polling)
     if (riderMarker && !isNaN(rLat) && !isNaN(rLng) && rLat !== 0) {
-      animateMarkerTo(riderMarker, rLat, rLng, 850);
+      animateMarkerTo(riderMarker, rLat, rLng, 700);
       // Snap route polyline via OSRM roads
       fetchOsrmRoadPolyline(rLat, rLng, dLat, dLng);
     }
@@ -1664,19 +1682,94 @@ function initiateCustomerVoiceCall() {
   }
 }
 
+function playArrivalAlertSound() {
+  try {
+    const audio = new Audio('assets/arrival_alarm.wav');
+    audio.volume = 1.0;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        playCustomerChime();
+      });
+    }
+  } catch (e) {
+    playCustomerChime();
+  }
+
+  try {
+    playCustomerChime();
+  } catch (e) {}
+
+  try {
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtxClass) {
+      const ctx = new AudioCtxClass();
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(880, now);
+      gain1.gain.setValueAtTime(0.3, now);
+      gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.16);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.16);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1174.66, now + 0.18);
+      gain2.gain.setValueAtTime(0.35, now + 0.18);
+      gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.18);
+      osc2.stop(now + 0.45);
+    }
+  } catch (e) {}
+}
+window.playArrivalAlertSound = playArrivalAlertSound;
+
 function handleRiderArrivedEvent(data) {
-  if (hasShownArrivedAlert) return;
+  if (hasShownArrivedAlert && window._trackOrderPrevStatus && ['ARRIVED', 'ARRIVED_DESTINATION', 'arrived', 'arrived_destination'].includes(window._trackOrderPrevStatus)) return;
   hasShownArrivedAlert = true;
 
   const rName = data.rider_name || 'Alex';
 
-  // Trigger persistent looping arrival alarm (MUST ring until action button is clicked)
+  // Force the arrival banner to display and slide down reliably
+  const banner = document.getElementById('liveRiderMessageBanner');
+  if (banner) {
+    const titleEl = document.getElementById('liveMsgBannerTitle');
+    const textEl = document.getElementById('liveMsgBannerText');
+    if (titleEl) titleEl.textContent = 'RIDER ARRIVED';
+    if (textEl) textEl.textContent = 'Your rider has arrived outside with your order! 🛵';
+    banner.style.display = 'block';
+    banner.classList.add('slide-down');
+    banner.classList.add('show');
+    if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
+    msgBannerTimeout = setTimeout(() => {
+      banner.style.display = 'none';
+      banner.classList.remove('slide-down', 'show');
+    }, 7000);
+  }
+
+  // Trigger persistent looping arrival alarm / arrival modal
+  const modal = document.getElementById('riderArrivedModal');
+  if (modal) {
+    modal.classList.add('show', 'active');
+    modal.style.display = 'flex';
+    modal.style.visibility = 'visible';
+    modal.style.pointerEvents = 'auto';
+  }
   if (window.FoodDashCall) {
     FoodDashCall.triggerArrivalAlarm(orderId, rName);
-  } else {
-    const modal = document.getElementById('riderArrivedModal');
-    if (modal) modal.style.display = 'flex';
   }
+
+  // Programmatically play audio alert sound & chime immediately
+  playArrivalAlertSound();
+  playCustomerChime();
 
   // Update status badge on page to Arrived
   const statusPills = document.querySelectorAll('.status-pill');
@@ -1697,7 +1790,7 @@ function handleRiderArrivedEvent(data) {
   }
 }
 
-// 2.5-second background polling loop checking order_communication_api.php
+// 800ms background polling loop checking order_communication_api.php
 async function pollOrderCommunication() {
   if (!orderId) return;
   try {
@@ -1731,16 +1824,20 @@ async function pollOrderCommunication() {
       handleLiveRiderMessage(data.latest_banner);
     }
 
-    // Automated "Rider Arrived" Live Notification
+    // Automated "Rider Arrived" Live Notification with exact state-transition detection
     const sNorm = String(data.status || '').toUpperCase();
     const dNorm = String(data.delivery_status || '').toLowerCase();
-    if (data.is_arrived || ['arrived', 'arrived_destination'].includes(dNorm) || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(sNorm)) {
+    const isArrivedNow = Boolean(data.is_arrived) || ['arrived', 'arrived_destination'].includes(dNorm) || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(sNorm);
+    const wasArrivedBefore = window._trackOrderPrevStatus && ['ARRIVED', 'ARRIVED_DESTINATION', 'arrived', 'arrived_destination'].includes(window._trackOrderPrevStatus);
+
+    if (isArrivedNow) {
       if (data.arrival_acknowledged) {
         if (window.FoodDashCall) FoodDashCall.stopAllTones();
-      } else {
+      } else if (!wasArrivedBefore || !hasShownArrivedAlert) {
         handleRiderArrivedEvent(data);
       }
     }
+    window._trackOrderPrevStatus = data.delivery_status || data.status;
   } catch (e) {}
 }
 
@@ -1748,11 +1845,11 @@ document.addEventListener('DOMContentLoaded', () => {
   initMap();
   pollRiderLocation();
   pollOrderCommunication();
-  // Continuous 1-second ultra-responsive polling loop
+  // Continuous 800ms ultra-responsive polling loop
   pollTimer = setInterval(() => {
     pollRiderLocation();
     pollOrderCommunication();
-  }, 1000);
+  }, 800);
 });
 </script>
 </body>
