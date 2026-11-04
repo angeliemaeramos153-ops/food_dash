@@ -315,6 +315,7 @@ if ($action === 'get_order_status' || $action === 'poll_status') {
         fo.order_ref,
         COALESCE(fo.status, o.status, 'PENDING') AS status,
         COALESCE(fo.delivery_status, o.status, 'waiting') AS delivery_status,
+        COALESCE(NULLIF(fo.total_amount, 0), NULLIF(o.total_price, 0), NULLIF(o.total_amount, 0), 0.00) AS total_amount,
         fo.store_name,
         COALESCE(r.rider_name, ru.full_name, '') AS rider_name,
         COALESCE(r.phone, ru.phone, fo.rider_phone, '') AS rider_phone,
@@ -339,17 +340,25 @@ if ($action === 'get_order_status' || $action === 'poll_status') {
         order_api_out(false, 'Order not found.', [], 404);
     }
 
+    $clean_status_ref = ltrim($res['order_ref'] ?? ('FD-' . $res['order_id']), '#');
+    $status_tot_val = (float)($res['total_amount'] ?? 0);
+
     order_api_out(true, 'Order status retrieved.', [
-        'order_id'        => (int)$res['order_id'],
-        'order_ref'       => '#' . ltrim($res['order_ref'] ?? ('FD-' . $res['order_id']), '#'),
-        'status'          => $res['status'],
-        'delivery_status' => $res['delivery_status'],
-        'store_name'      => $res['store_name'],
-        'rider_name'      => $res['rider_name'],
-        'rider_phone'     => $res['rider_phone'],
-        'rider_lat'       => $res['rider_lat'],
-        'rider_lng'       => $res['rider_lng'],
-        'updated_at'      => $res['updated_at']
+        'order_id'               => (int)$res['order_id'],
+        'order_ref'              => '#' . $clean_status_ref,
+        'order_number'           => '#' . $clean_status_ref,
+        'clean_order_number'     => $clean_status_ref,
+        'total_amount'           => $status_tot_val,
+        'formatted_total_amount' => '₱' . number_format($status_tot_val, 2),
+        'formatted_total'        => '₱' . number_format($status_tot_val, 2),
+        'status'                 => $res['status'],
+        'delivery_status'        => $res['delivery_status'],
+        'store_name'             => $res['store_name'],
+        'rider_name'             => $res['rider_name'],
+        'rider_phone'            => $res['rider_phone'],
+        'rider_lat'              => $res['rider_lat'],
+        'rider_lng'              => $res['rider_lng'],
+        'updated_at'             => $res['updated_at']
     ]);
 }
 

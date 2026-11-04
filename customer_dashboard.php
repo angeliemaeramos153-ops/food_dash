@@ -1703,7 +1703,7 @@ a:active,
 
 .nav{border:0;background:transparent;color:#72776a;font-size:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;position:relative}.nav i{font-size:15px}.nav.active{color:var(--olive-dark);font-weight:700}.badge{position:absolute;background:#e7352d;color:white;font-size:7px;border-radius:10px;padding:2px 5px;top:4px;right:20px}
 
-.toast{position:fixed;left:50%;bottom:82px;transform:translateX(-50%) translateY(20px);background:var(--olive-dark);color:white;padding:9px 13px;border-radius:20px;font-size:9px;opacity:0;pointer-events:none;transition:.25s;z-index:200;white-space:nowrap}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast{position:fixed;left:50%;bottom:82px;transform:translateX(-50%) translateY(20px);background:var(--olive-dark);color:white;padding:12px 22px;border-radius:24px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:999999;white-space:normal;text-align:center;max-width:min(92vw, 520px);box-shadow:0 8px 24px rgba(0,0,0,.35);line-height:1.4}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 .logout{width:100%;background:#fff;cursor:pointer;font-family:inherit;margin-top:12px;border:1px solid #e55b52;color:#d33b32;border-radius:11px;padding:10px;font-size:9px;font-weight:600}
 .logout-modal{display:none;visibility:hidden;pointer-events:none;position:fixed;inset:0;background:rgba(28,32,6,.38);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:18px;z-index:1000}.logout-modal.show,.logout-modal.active,.logout-modal[style*="display: flex"],.logout-modal[style*="display:flex"]{display:flex !important;visibility:visible !important;pointer-events:auto !important;}.logout-box{width:min(360px,100%);background:#fffdf7;border:1px solid var(--line);border-radius:22px;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(55,65,22,.22)}.logout-box .logout-logo{width:58px;height:58px;border-radius:50%;object-fit:cover;border:1px solid #d7c98d;margin-bottom:9px}.logout-box h3{font-size:16px;color:var(--olive-dark);margin:0 0 5px}.logout-box p{font-size:9px;color:var(--muted);line-height:1.5;margin-bottom:17px}.logout-actions{display:flex;gap:8px}.logout-actions button,.logout-actions a{flex:1;padding:10px;border-radius:11px;font-size:9px;font-weight:700;text-decoration:none;border:0;font-family:inherit}.logout-cancel{background:#eee9d7;color:var(--olive)}.logout-confirm{background:var(--olive);color:white;display:grid;place-items:center}
@@ -4077,6 +4077,35 @@ async function loadNotifications() {
         </div>
       `).join('') : '<div style="padding:15px;text-align:center;font-size:9px;color:var(--muted);">No notifications yet.</div>';
     }
+
+    // Dynamic on-screen toast & banner display for unread pickup / out-for-delivery notifications
+    if (Array.isArray(d.notifications)) {
+      d.notifications.forEach(n => {
+        const isUnread = (n.is_read == 0 || n.is_read === false || n.is_read === 'f' || n.status === 'unread');
+        if (isUnread) {
+          const type = String(n.notification_type || '').toLowerCase();
+          const title = String(n.title || '').toLowerCase();
+          const msg = String(n.message || '');
+          const isPickupNote = type === 'rider_assigned' || type === 'order_on_the_way' || type === 'rider_on_way' 
+                            || title.includes('out for delivery') || title.includes('picked up') || title.includes('on delivery')
+                            || msg.toLowerCase().includes('picked up');
+          if (isPickupNote && n.order_id) {
+            const notifKey = 'fd_notif_seen_' + n.notification_id;
+            const pickupKey = 'fd_pickup_alert_seen_' + n.order_id;
+            if (sessionStorage.getItem(notifKey) !== '1' && sessionStorage.getItem(pickupKey) !== '1') {
+              sessionStorage.setItem(notifKey, '1');
+              sessionStorage.setItem(pickupKey, '1');
+              toast(msg);
+              showCustomerFloatingBanner('ORDER PICKED UP - READY FOR DELIVERY', msg, () => {
+                if (typeof openTrackingModal === 'function') openTrackingModal(n.order_id);
+                else if (typeof showScreen === 'function') showScreen('orders');
+              });
+              if (typeof playCustomerChime === 'function') playCustomerChime();
+            }
+          }
+        }
+      });
+    }
   } catch (e) {
     console.error('Failed to load notifications', e);
   }
@@ -5941,13 +5970,48 @@ async function pollCustomerOrdersLive() {
     // Detect status transitions for real-time notifications
     orders.forEach(ord => {
       const oId = parseInt(ord.order_id || ord.id, 10);
-      const st = String(ord.status || '').toUpperCase().trim();
-      if (_customerLastOrderStates[oId] && _customerLastOrderStates[oId] !== st) {
+      const raw_status = String(ord.status || '').toUpperCase().replace(/[ -]/g, '_');
+      const del_status = String(ord.delivery_status || '').toLowerCase().trim();
+      const status_lower = String(ord.status || '').toLowerCase().trim();
+
+      const isDelivering = ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'].includes(raw_status)
+                  || ['on_the_way', 'on_delivery', 'picked_up'].includes(del_status)
+                  || ['out_for_delivery', 'on_the_way', 'on_delivery'].includes(status_lower);
+
+      const pickupKey = 'fd_pickup_alert_seen_' + oId;
+      const alreadyAlerted = (sessionStorage.getItem(pickupKey) === '1');
+      const prevStatus = _customerLastOrderStates[oId];
+      const wasDelivering = prevStatus && ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'].includes(prevStatus);
+
+      // Trigger pickup notification toast/banner if newly transitioning to on_delivery OR if freshly loaded and not yet alerted
+      if (isDelivering && (!alreadyAlerted || (prevStatus && !wasDelivering))) {
+        sessionStorage.setItem(pickupKey, '1');
+        const cleanRef = '#' + String(ord.order_ref || ('FD-' + oId)).replace(/^#+/, '');
+        const totalNum = parseFloat(ord.total_amount || ord.total_price || 0).toFixed(2);
+        const formattedTotal = '₱' + Number(totalNum).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        const pickupMsg = `Order ${cleanRef} has been picked up! Total due: ${formattedTotal}`;
+
+        // 1. Bottom Toast Alert
+        toast(pickupMsg);
+
+        // 2. Top Floating Banner Alert
+        showCustomerFloatingBanner('ORDER PICKED UP - READY FOR DELIVERY', pickupMsg, () => {
+          if (typeof openTrackingModal === 'function') {
+            openTrackingModal(oId);
+          } else if (typeof showScreen === 'function') {
+            showScreen('orders');
+          }
+        });
+
+        // 3. Audio Chime
+        if (typeof playCustomerChime === 'function') playCustomerChime();
+      } else if (prevStatus && prevStatus !== raw_status && !isDelivering) {
         const ref = ord.order_ref || ('#' + oId);
-        const readable = st.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        const readable = raw_status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
         toast(`Order ${ref} status updated: ${readable}`);
       }
-      _customerLastOrderStates[oId] = st;
+
+      _customerLastOrderStates[oId] = raw_status;
     });
 
     // 1. Update the customer's order list if the element exists in DOM
@@ -8000,6 +8064,24 @@ async function pollCustomerCommunicationUpdates() {
     const isDelivering = (sNorm === 'ON_DELIVERY' || sNorm === 'OUT_FOR_DELIVERY' || sNorm === 'ON_THE_WAY' || dNorm === 'on_the_way' || dNorm === 'on_delivery' || dNorm === 'picked_up');
     if (data.order_id && isDelivering) {
       const oId = data.order_id;
+
+      // Real-time on-screen toast & banner alert for customer when order is picked up
+      const pickupKey = 'fd_pickup_alert_seen_' + oId;
+      if (sessionStorage.getItem(pickupKey) !== '1') {
+        sessionStorage.setItem(pickupKey, '1');
+        const cleanRef = '#' + String(data.order_ref || ('FD-' + oId)).replace(/^#+/, '');
+        const totalNum = parseFloat(data.total_amount || 0).toFixed(2);
+        const formattedTotal = (totalNum > 0) ? ('₱' + Number(totalNum).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})) : '';
+        const pickupMsg = formattedTotal 
+          ? `Order ${cleanRef} has been picked up! Total due: ${formattedTotal}` 
+          : `Order ${cleanRef} has been picked up! Ready for delivery.`;
+        toast(pickupMsg);
+        showCustomerFloatingBanner('ORDER PICKED UP - READY FOR DELIVERY', pickupMsg, () => {
+          if (typeof openTrackingModal === 'function') openTrackingModal(oId);
+          else if (typeof showScreen === 'function') showScreen('orders');
+        });
+        if (typeof playCustomerChime === 'function') playCustomerChime();
+      }
       const tag = document.getElementById(`status-tag-${oId}`);
       if (tag) {
         if (data.is_arrived || dNorm === 'arrived' || sNorm === 'ARRIVED') {

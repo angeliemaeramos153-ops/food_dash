@@ -363,11 +363,13 @@ if ($action === 'get_updates' || $method === 'GET') {
         o.order_id, o.order_ref, o.customer_id, o.customer_name,
         COALESCE(o.customer_phone, cu.phone, '+63 917 123 4567') AS customer_phone,
         o.store_name, o.delivery_address, o.status, o.delivery_status,
+        COALESCE(NULLIF(o.total_amount, 0), NULLIF(ord.total_price, 0), NULLIF(ord.total_amount, 0), 0.00) AS total_amount,
         o.arrival_acknowledged_at, o.arrival_ack_response,
         COALESCE(o.acknowledged_seen, 0) AS acknowledged_seen,
         COALESCE(r.rider_name, ru.full_name, 'Alex Rider') AS rider_name,
         COALESCE(o.rider_phone, r.phone, ru.phone, '+63 917 555 0192') AS rider_phone
     FROM food_orders o
+    LEFT JOIN orders ord ON (o.order_id = ord.order_id OR o.order_id = ord.id)
     LEFT JOIN riders r ON (o.rider_id = r.rider_id)
     LEFT JOIN users ru ON (r.user_id = ru.user_id)
     LEFT JOIN users cu ON (o.customer_id = cu.user_id)
@@ -501,9 +503,15 @@ if ($action === 'get_updates' || $method === 'GET') {
     $acknowledged_seen = !empty($order['acknowledged_seen']);
     $arrival_ack_response = $order['arrival_ack_response'] ?? null;
 
+    $comm_total_val = (float)($order['total_amount'] ?? 0);
+    $comm_ref_clean = ltrim($order['order_ref'] ?: ('FD-' . $order_id), '#');
+
     comm_out(true, 'Updates retrieved.', [
         'order_id'              => $order_id,
-        'order_ref'             => '#' . ltrim($order['order_ref'] ?: ('FD-' . $order_id), '#'),
+        'order_ref'             => '#' . $comm_ref_clean,
+        'order_number'          => '#' . $comm_ref_clean,
+        'total_amount'          => $comm_total_val,
+        'formatted_total_amount'=> '₱' . number_format($comm_total_val, 2),
         'status'                => $order['status'] ?? 'none',
         'delivery_status'       => $order['delivery_status'] ?? 'none',
         'is_arrived'            => $is_arrived,

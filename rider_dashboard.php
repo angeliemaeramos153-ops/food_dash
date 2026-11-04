@@ -268,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                 $old_st = strtoupper(trim($order['status'] ?? ''));
                 $norm_st = strtolower(trim($order['status'] ?? ''));
 
-                if ($action === 'claim' || $action === 'pickup') {
+                if ($action === 'claim' || $action === 'pickup' || $action === 'accept' || $action === 'accept_order' || $action === 'on_delivery' || ($input['status'] ?? '') === 'on_delivery') {
                     $assigned_rid = (int)($order['rider_id'] ?? 0);
                     if (!in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'pending', 'preparing', 'on_delivery', 'on_the_way']) || (!empty($assigned_rid) && $assigned_rid !== $rid)) {
                         throw new Exception('This order is not ready for pickup or has already been assigned.');
@@ -276,15 +276,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'on_the_way', status = 'on_delivery', updated_at = NOW() WHERE order_id = :oid");
                     $stmt->execute([':rid' => $rid, ':oid' => $order_id]);
 
-                    $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref WHERE rider_id = :rid");
-                    $stmt->execute([':ref' => $ref, ':rid' => $rid]);
+                    $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref, active_order_id = :oid WHERE rider_id = :rid");
+                    $stmt->execute([':ref' => $ref, ':oid' => $order_id, ':rid' => $rid]);
 
                     // Sync to orders table: Run exact required SQL query UPDATE orders SET status = 'on_delivery' WHERE id = ?
                     try {
                         $conn->prepare("UPDATE orders SET status = 'on_delivery' WHERE id = :oid")->execute([':oid' => $order_id]);
                     } catch (Throwable $e) {}
                     try {
-                        $conn->prepare("UPDATE orders SET status = 'on_delivery', rider_id = :rid WHERE order_id = :oid")->execute([':rid' => $rid, ':oid' => $order_id]);
+                        $conn->prepare("UPDATE orders SET status = 'on_delivery', rider_id = :rid, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':rid' => $rid, ':oid' => $order_id, ':oid2' => $order_id]);
                     } catch (Throwable $e) {}
 
                     // 1 & 2. Dynamically query database for specific order and real calculated total amount directly from 'orders' and 'order_items'
@@ -317,9 +317,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     }
                     $formatted_total_amount = number_format($real_total_amount, 2);
 
+                    try {
+                        $conn->prepare("UPDATE orders SET total_amount = :tot, total_price = :tot2 WHERE order_id = :oid OR id = :oid2")->execute([':tot' => $real_total_amount, ':tot2' => $real_total_amount, ':oid' => $order_id, ':oid2' => $order_id]);
+                    } catch (Throwable $e) {}
+
                     // 3. Programmatically construct the notification message using these live database values
                     $dynamic_notif_title = "Order Out for Delivery";
-                    $dynamic_notif_message = "Your order #{$clean_order_number} has been picked up and is on the way! Total amount: ₱{$formatted_total_amount}";
+                    $dynamic_notif_message = "Order #{$clean_order_number} has been picked up! Total due: ₱{$formatted_total_amount}";
 
                     record_order_audit_log($conn, $order_id, $old_st, 'on_delivery', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
 
@@ -351,7 +355,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
 
                     if (ob_get_level()) ob_clean();
                     header('Content-Type: application/json; charset=utf-8');
-                    echo json_encode(['success' => true, 'message' => 'Order picked up! Status transitioned to On Delivery.', 'order_id' => $order_id]);
+                    echo json_encode([
+                        'success'                => true,
+                        'message'                => 'Order picked up! Status transitioned to On Delivery.',
+                        'order_id'               => $order_id,
+                        'order_number'           => '#' . $clean_order_number,
+                        'order_ref'              => '#' . $clean_order_number,
+                        'clean_order_number'     => $clean_order_number,
+                        'total_amount'           => (float)$real_total_amount,
+                        'total_price'            => (float)$real_total_amount,
+                        'formatted_total_amount' => '₱' . $formatted_total_amount,
+                        'formatted_total'        => '₱' . $formatted_total_amount,
+                        'status'                 => 'on_delivery',
+                        'delivery_status'        => 'on_the_way',
+                        'customer_id'            => $actual_customer_id,
+                        'rider_id'               => $rid,
+                        'rider_name'             => $user_name,
+                        'data'                   => [
+                            'order_id'               => $order_id,
+                            'order_number'           => '#' . $clean_order_number,
+                            'order_ref'              => '#' . $clean_order_number,
+                            'clean_order_number'     => $clean_order_number,
+                            'total_amount'           => (float)$real_total_amount,
+                            'total_price'            => (float)$real_total_amount,
+                            'formatted_total_amount' => '₱' . $formatted_total_amount,
+                            'formatted_total'        => '₱' . $formatted_total_amount,
+                            'status'                 => 'on_delivery',
+                            'delivery_status'        => 'on_the_way'
+                        ]
+                    ]);
                     exit();
                 } elseif ($action === 'on_way') {
                     if ((int)($order['rider_id'] ?? 0) !== $rid) throw new Exception('You are not assigned to this order.');
@@ -563,7 +595,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
 
                         // 3. Programmatically construct the notification message using these live database values
                         $dynamic_notif_title = "Order Out for Delivery";
-                        $dynamic_notif_message = "Your order #{$clean_order_number} has been picked up and is on the way! Total amount: ₱{$formatted_total_amount}";
+                        $dynamic_notif_message = "Order #{$clean_order_number} has been picked up! Total due: ₱{$formatted_total_amount}";
 
                         record_order_audit_log($conn, $order_id, $old_st, 'on_delivery', $user_id, 'rider', 'Order picked up / confirmed by rider ' . $user_name);
 

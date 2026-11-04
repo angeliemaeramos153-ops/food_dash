@@ -108,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit();
         }
 
-        $chk = $conn->prepare("SELECT order_id, customer_id, order_ref, store_name, status FROM food_orders WHERE order_id = :oid LIMIT 1");
+        $chk = $conn->prepare("SELECT order_id, customer_id, order_ref, store_name, status, total_amount FROM food_orders WHERE order_id = :oid LIMIT 1");
         $chk->execute([':oid' => $order_id]);
         $ord_data = $chk->fetch(PDO::FETCH_ASSOC);
 
@@ -148,13 +148,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Contextual notifications
             $clean_chef_ref = '#' . ltrim(!empty($ord_data['order_ref']) ? $ord_data['order_ref'] : ('FD-' . $order_id), '#');
+            $formatted_chef_tot = number_format((float)($ord_data['total_amount'] ?? 0), 2);
             if ($new_status === 'PREPARING') {
                 create_notification($conn, (int)$ord_data['customer_id'], 'chef_preparing', 'Kitchen Preparing Order', "Your order {$clean_chef_ref} is now being prepared by the Chef.", $order_id);
             } elseif ($new_status === 'READY_FOR_PICKUP') {
                 create_notification($conn, (int)$ord_data['customer_id'], 'order_ready', 'Order Ready for Pickup', "Your order {$clean_chef_ref} is freshly prepared and ready for rider pickup.", $order_id);
                 notify_role($conn, 'rider', 'pickup_ready', 'Order Ready for Pickup', "{$clean_chef_ref} at {$ord_data['store_name']} is ready for dispatch.", $order_id);
             } elseif ($new_status === 'on_delivery') {
-                create_notification($conn, (int)$ord_data['customer_id'], 'order_on_the_way', 'Order on Delivery', "Your order {$clean_chef_ref} is now on the way for delivery.", $order_id);
+                create_notification($conn, (int)$ord_data['customer_id'], 'order_on_the_way', 'Order on Delivery', "Order {$clean_chef_ref} has been picked up! Total due: ₱{$formatted_chef_tot}", $order_id);
             } elseif ($new_status === 'DELIVERED') {
                 create_notification($conn, (int)$ord_data['customer_id'], 'order_delivered', 'Order Delivered', "Your order {$clean_chef_ref} has been delivered successfully.", $order_id);
             } elseif ($new_status === 'CANCELLED') {

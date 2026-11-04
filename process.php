@@ -329,12 +329,14 @@ try {
         notify_role($pdo, 'rider', 'pickup_ready', 'Order Ready for Pickup', "{$ref} at {$order['store_name']} is ready for dispatch.", $order_id);
         log_activity($pdo, $user_id, 'ORDER_PREPARED', "Order {$ref} packed and ready for rider pickup by {$user_name}.");
     } elseif ($target_status === 'OUT_FOR_DELIVERY') {
+        $clean_ref_tag = ltrim($ref, '#');
+        $formatted_tot_str = number_format((float)($order['total_amount'] ?? 0), 2);
         if ($new_delivery_status === 'near_customer') {
             create_notification($pdo, $cust_id, 'rider_near', 'Rider is Near You', "Your rider is arriving shortly with {$ref}.", $order_id);
         } elseif ($new_delivery_status === 'on_the_way') {
-            create_notification($pdo, $cust_id, 'rider_on_way', 'Rider on the Way', "Your rider has picked up {$ref} and is on the way.", $order_id);
+            create_notification($pdo, $cust_id, 'rider_on_way', 'Order Out for Delivery', "Order #{$clean_ref_tag} has been picked up! Total due: ₱{$formatted_tot_str}", $order_id);
         } else {
-            create_notification($pdo, $cust_id, 'rider_assigned', 'Rider Out for Delivery', "A rider has claimed {$ref} and is out for delivery.", $order_id);
+            create_notification($pdo, $cust_id, 'rider_assigned', 'Order Out for Delivery', "Order #{$clean_ref_tag} has been picked up! Total due: ₱{$formatted_tot_str}", $order_id);
         }
         log_activity($pdo, $user_id, 'ORDER_DISPATCHED', "Order {$ref} dispatched ({$new_delivery_status}) with rider {$user_name}.");
     } elseif ($target_status === 'DELIVERED') {
@@ -351,12 +353,30 @@ try {
 
     $pdo->commit();
 
+    $tot_proc_val = (float)($order['total_amount'] ?? 0);
+    $clean_proc_ref = ltrim(!empty($order['order_ref']) ? $order['order_ref'] : ('FD-' . $order_id), '#');
+
     json_response(true, 'Order status updated successfully.', [
-        'order_id'        => $order_id,
-        'order_ref'       => $order['order_ref'],
-        'status'          => $target_status,
-        'delivery_status' => $new_delivery_status,
-        'previous_status' => $current_status
+        'order_id'               => $order_id,
+        'order_ref'              => '#' . $clean_proc_ref,
+        'order_number'           => '#' . $clean_proc_ref,
+        'clean_order_number'     => $clean_proc_ref,
+        'total_amount'           => $tot_proc_val,
+        'total_price'            => $tot_proc_val,
+        'formatted_total_amount' => '₱' . number_format($tot_proc_val, 2),
+        'formatted_total'        => '₱' . number_format($tot_proc_val, 2),
+        'status'                 => $target_status,
+        'delivery_status'        => $new_delivery_status,
+        'previous_status'        => $current_status,
+        'data'                   => [
+            'order_id'               => $order_id,
+            'order_number'           => '#' . $clean_proc_ref,
+            'order_ref'              => '#' . $clean_proc_ref,
+            'total_amount'           => $tot_proc_val,
+            'formatted_total_amount' => '₱' . number_format($tot_proc_val, 2),
+            'status'                 => $target_status,
+            'delivery_status'        => $new_delivery_status
+        ]
     ]);
 
 } catch (PDOException $e) {

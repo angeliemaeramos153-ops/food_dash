@@ -849,6 +849,44 @@ if ($isApi) {
         if (btn) { btn.disabled = false; btn.textContent = 'Yes, Received!'; }
       });
     }
+
+    // Real-Time Background Status Polling for Orders Page
+    let _ordersLastStates = {};
+    async function pollOrdersStatusLive() {
+      try {
+        const res = await fetch(`order_api.php?action=get_orders&_t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.success || !Array.isArray(data.orders)) return;
+
+        data.orders.forEach(ord => {
+          const oId = parseInt(ord.order_id || ord.id, 10);
+          const raw_status = String(ord.status || '').toUpperCase().replace(/[ -]/g, '_');
+          const del_status = String(ord.delivery_status || '').toLowerCase().trim();
+          const isDelivering = ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'].includes(raw_status)
+                      || ['on_the_way', 'on_delivery', 'picked_up'].includes(del_status);
+
+          const pickupKey = 'fd_pickup_alert_seen_' + oId;
+          const alreadyAlerted = (sessionStorage.getItem(pickupKey) === '1');
+          const prevStatus = _ordersLastStates[oId];
+          const wasDelivering = prevStatus && ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'].includes(prevStatus);
+
+          if (isDelivering && (!alreadyAlerted || (prevStatus && !wasDelivering))) {
+            sessionStorage.setItem(pickupKey, '1');
+            const cleanRef = '#' + String(ord.order_ref || ('FD-' + oId)).replace(/^#+/, '');
+            const totalNum = parseFloat(ord.total_amount || ord.total_price || 0).toFixed(2);
+            const formattedTotal = '₱' + Number(totalNum).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            showOrdersToast(`Order ${cleanRef} has been picked up! Total due: ${formattedTotal}`);
+          }
+          _ordersLastStates[oId] = raw_status;
+        });
+      } catch (e) {}
+    }
+
+    setInterval(pollOrdersStatusLive, 5000);
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(pollOrdersStatusLive, 800);
+    });
   </script>
 </body>
 </html>
