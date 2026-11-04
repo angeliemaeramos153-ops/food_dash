@@ -181,16 +181,13 @@
   let isChimePlaying = false;
 
   function playSynthArrivalAlarm() {
-    // If the single chime loop is already running, prevent duplicate restarts
+    // If the arpeggio loop is already running, prevent duplicate restarts
     if (synthLoopInterval && arrivalAlarmActive && !arrivalAcknowledged) {
       return;
     }
     stopSynthLoop();
     initAudioContext();
     if (!audioCtx) return;
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume().catch(() => {});
-    }
 
     arrivalAlarmActive = true;
     arrivalAcknowledged = false;
@@ -201,41 +198,53 @@
         return;
       }
       if (isChimePlaying) return;
+
+      if (!audioCtx) return;
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().then(() => {
+          if (arrivalAlarmActive && !arrivalAcknowledged) {
+            playAlarmChime();
+          }
+        }).catch(() => {});
+        return;
+      }
+
       isChimePlaying = true;
-      setTimeout(() => { isChimePlaying = false; }, 1600);
+      setTimeout(() => { isChimePlaying = false; }, 1400);
 
       try {
-        if (!audioCtx) return;
-        if (audioCtx.state === 'suspended') {
-          audioCtx.resume().catch(() => {});
-        }
         const now = audioCtx.currentTime;
-        // Authentic, multi-note kawaii music-box arpeggio: C5 -> E5 -> G5 -> C6
-        // The entire melodic sequence takes 1.5 seconds to play through fully with gentle exponential decay
+        // Pleasant 4-note arpeggio phrase (C5 -> E5 -> G5 -> C6)
+        // Spaced sequentially using precise ctx.currentTime offsets: 0ms, 150ms, 300ms, 450ms
         const notes = [
-          { freq: 523.25, time: 0.00, dur: 0.50, vol: 0.16 }, // C5
-          { freq: 659.25, time: 0.25, dur: 0.50, vol: 0.16 }, // E5
-          { freq: 783.99, time: 0.50, dur: 0.50, vol: 0.16 }, // G5
-          { freq: 1046.50, time: 0.75, dur: 0.75, vol: 0.18 } // C6 (rings out to 1.50s)
+          { freq: 523.25, time: 0.000, dur: 0.45, vol: 0.16 }, // C5 (0ms)
+          { freq: 659.25, time: 0.150, dur: 0.45, vol: 0.16 }, // E5 (150ms)
+          { freq: 783.99, time: 0.300, dur: 0.45, vol: 0.16 }, // G5 (300ms)
+          { freq: 1046.50, time: 0.450, dur: 0.85, vol: 0.18 }  // C6 (450ms, decays cleanly to ~1.30s)
         ];
 
         notes.forEach(n => {
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
-          osc.type = 'triangle'; // Gentle music-box chime timbre
+
+          osc.type = 'triangle'; // Clean, sparkling music-box bell voice
           osc.frequency.setValueAtTime(n.freq, now + n.time);
 
-          // Initialize gain to 0.0001 immediately to eliminate any DC click or initial pop
-          gain.gain.setValueAtTime(0.0001, now);
-          gain.gain.setValueAtTime(0.0001, now + n.time);
-          // Gentle 25ms attack ramp, then smooth exponential music-box decay
-          gain.gain.linearRampToValueAtTime(n.vol, now + n.time + 0.025);
-          gain.gain.exponentialRampToValueAtTime(0.0001, now + n.time + n.dur);
+          // Initialize gain value to silence
+          gain.gain.value = 0.0001;
+
+          const noteStart = now + n.time;
+          const decayEnd = noteStart + n.dur;
+
+          // Smooth envelope: 20ms linear attack ramp, then exponential decay to silence without clipping
+          gain.gain.setValueAtTime(0.0001, noteStart);
+          gain.gain.linearRampToValueAtTime(n.vol, noteStart + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, decayEnd);
 
           osc.connect(gain);
           gain.connect(audioCtx.destination);
-          osc.start(now + n.time);
-          osc.stop(now + n.time + n.dur + 0.02);
+          osc.start(noteStart);
+          osc.stop(decayEnd + 0.02);
 
           const nodeItem = { osc, gain };
           activeSynthNodes.push(nodeItem);
@@ -254,8 +263,9 @@
     }
 
     playAlarmChime();
-    // 4500ms repeating interval: 1.5s music-box melody followed by 3.0s of total silence before repeating
-    synthLoopInterval = setInterval(playAlarmChime, 4500);
+    // Repeating interval set to ~4000ms (4 seconds):
+    // Full 4-note melody phrase rings out (~1.3s), pauses in silence (~2.7s), then replays
+    synthLoopInterval = setInterval(playAlarmChime, 4000);
   }
 
   function stopSynthLoop() {
