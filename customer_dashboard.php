@@ -1366,16 +1366,33 @@ a:active,
 /* In-App Notifications Modal (Food Dash Palette) */
 .bell-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  background: var(--earth-clay);
-  color: white;
+  top: -3px;
+  right: -3px;
+  background: #ea4335;
+  color: #ffffff;
   border-radius: 99px;
-  font-size: 7px;
+  font-size: 8px;
   font-weight: 700;
-  padding: 2px 5px;
-  min-width: 14px;
+  padding: 1px 4px;
+  min-width: 15px;
+  height: 15px;
+  line-height: 13px;
   text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(234, 67, 53, 0.45);
+  border: 1.5px solid #ffffff;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.bell-badge.has-unread {
+  display: inline-flex !important;
+  animation: bellPulse 1.8s infinite;
+}
+@keyframes bellPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
 }
 .fd-modal {
   display: none;
@@ -4064,8 +4081,14 @@ async function loadNotifications() {
     if (!d.success) return;
     const b = document.getElementById('custNoteBadge');
     if (b) {
-      b.textContent = d.unread;
-      b.style.display = d.unread > 0 ? 'block' : 'none';
+      const unreadCount = parseInt(d.unread ?? d.unread_count ?? 0, 10);
+      b.textContent = unreadCount > 99 ? '99+' : unreadCount;
+      b.style.display = unreadCount > 0 ? 'inline-flex' : 'none';
+      if (unreadCount > 0) {
+        b.classList.add('has-unread');
+      } else {
+        b.classList.remove('has-unread');
+      }
     }
     const el = document.getElementById('customerNoteList');
     if (el) {
@@ -4078,7 +4101,7 @@ async function loadNotifications() {
       `).join('') : '<div style="padding:15px;text-align:center;font-size:9px;color:var(--muted);">No notifications yet.</div>';
     }
 
-    // Dynamic on-screen toast & banner display for unread pickup / out-for-delivery notifications
+    // Dynamic on-screen structured banner display for unread pickup / out-for-delivery notifications
     if (Array.isArray(d.notifications)) {
       d.notifications.forEach(n => {
         const isUnread = (n.is_read == 0 || n.is_read === false || n.is_read === 'f' || n.status === 'unread');
@@ -4095,12 +4118,10 @@ async function loadNotifications() {
             if (sessionStorage.getItem(notifKey) !== '1' && sessionStorage.getItem(pickupKey) !== '1') {
               sessionStorage.setItem(notifKey, '1');
               sessionStorage.setItem(pickupKey, '1');
-              toast(msg);
               showCustomerFloatingBanner('ORDER PICKED UP - READY FOR DELIVERY', msg, () => {
                 if (typeof openTrackingModal === 'function') openTrackingModal(n.order_id);
                 else if (typeof showScreen === 'function') showScreen('orders');
               });
-              if (typeof playCustomerChime === 'function') playCustomerChime();
             }
           }
         }
@@ -5983,7 +6004,7 @@ async function pollCustomerOrdersLive() {
       const prevStatus = _customerLastOrderStates[oId];
       const wasDelivering = prevStatus && ['OUT_FOR_DELIVERY', 'ON_THE_WAY', 'ON_DELIVERY'].includes(prevStatus);
 
-      // Trigger pickup notification toast/banner if newly transitioning to on_delivery OR if freshly loaded and not yet alerted
+      // Trigger pickup notification structured banner if newly transitioning to on_delivery OR if freshly loaded and not yet alerted
       if (isDelivering && (!alreadyAlerted || (prevStatus && !wasDelivering))) {
         sessionStorage.setItem(pickupKey, '1');
         const cleanRef = '#' + String(ord.order_ref || ('FD-' + oId)).replace(/^#+/, '');
@@ -5991,10 +6012,7 @@ async function pollCustomerOrdersLive() {
         const formattedTotal = '₱' + Number(totalNum).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         const pickupMsg = `Order ${cleanRef} has been picked up! Total due: ${formattedTotal}`;
 
-        // 1. Bottom Toast Alert
-        toast(pickupMsg);
-
-        // 2. Top Floating Banner Alert
+        // Top Floating Banner Alert (Structured Notification with Sound)
         showCustomerFloatingBanner('ORDER PICKED UP - READY FOR DELIVERY', pickupMsg, () => {
           if (typeof openTrackingModal === 'function') {
             openTrackingModal(oId);
@@ -6003,12 +6021,13 @@ async function pollCustomerOrdersLive() {
           }
         });
 
-        // 3. Audio Chime
-        if (typeof playCustomerChime === 'function') playCustomerChime();
+        // Dynamically update notification badge on header
+        if (typeof loadNotifications === 'function') loadNotifications();
       } else if (prevStatus && prevStatus !== raw_status && !isDelivering) {
-        const ref = ord.order_ref || ('#' + oId);
-        const readable = raw_status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-        toast(`Order ${ref} status updated: ${readable}`);
+        // Status updated (e.g. Preparing, Ready for Pickup):
+        // Clean interface: old floating green toast removed entirely.
+        // Dynamically update notification badge on customer dashboard header.
+        if (typeof loadNotifications === 'function') loadNotifications();
       }
 
       _customerLastOrderStates[oId] = raw_status;
@@ -7492,10 +7511,22 @@ async function submitCustomerMessage(orderId, text) {
 }
 
 // -------------------------------------------------------------
-// WEB AUDIO SYNTHETIC 2-TONE CHIME & MATCHING RIDER-STYLE BANNER
+// NOTIFICATION CHIME & TOP MESSAGE BANNER
 // -------------------------------------------------------------
+const CUSTOMER_CHIME_B64_URI = 'data:audio/wav;base64,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';
+
 function playCustomerChime() {
-  // 1. Web Audio API synthesized melodic two-tone chime (880Hz -> 1320Hz) matching rider_dashboard.php
+  // 1. Subtle notification sound effect via HTML5 Audio object (lightweight base64 audio data URI)
+  try {
+    const audio = new Audio(CUSTOMER_CHIME_B64_URI);
+    audio.volume = 0.85;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {});
+    }
+  } catch (e) {}
+
+  // 2. Synthesized Web Audio API two-tone melodic chime (880Hz -> 1320Hz)
   try {
     const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
     if (AudioCtxClass) {
@@ -7506,7 +7537,7 @@ function playCustomerChime() {
       const gain1 = ctx.createGain();
       osc1.type = 'sine';
       osc1.frequency.setValueAtTime(880, now);
-      gain1.gain.setValueAtTime(0.2, now);
+      gain1.gain.setValueAtTime(0.18, now);
       gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
       osc1.connect(gain1);
       gain1.connect(ctx.destination);
@@ -7517,20 +7548,13 @@ function playCustomerChime() {
       const gain2 = ctx.createGain();
       osc2.type = 'sine';
       osc2.frequency.setValueAtTime(1320, now + 0.12);
-      gain2.gain.setValueAtTime(0.25, now + 0.12);
+      gain2.gain.setValueAtTime(0.22, now + 0.12);
       gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
       osc2.connect(gain2);
       gain2.connect(ctx.destination);
       osc2.start(now + 0.12);
       osc2.stop(now + 0.5);
     }
-  } catch (e) {}
-
-  // 2. Audio file fallback
-  try {
-    const snd = new Audio('assets/notification_chime.wav');
-    snd.volume = 0.85;
-    snd.play().catch(() => {});
   } catch (e) {}
 }
 window.playMessageChime = playCustomerChime;
@@ -7554,9 +7578,18 @@ function showCustomerFloatingBanner(title, text, onClick = null) {
   const banner = document.getElementById('liveRiderMessageBanner');
   const titleEl = document.getElementById('liveMsgBannerTitle');
   const textEl = document.getElementById('liveMsgBannerText');
+  const iconEl = banner ? banner.querySelector('.rct-icon i') : null;
   if (banner && textEl) {
-    if (titleEl) titleEl.textContent = title || 'MESSAGE FROM RIDER';
+    const bannerTitle = title || 'MESSAGE FROM RIDER';
+    if (titleEl) titleEl.textContent = bannerTitle;
     textEl.textContent = text;
+    if (iconEl) {
+      if (bannerTitle.includes('PICKED UP') || bannerTitle.includes('DELIVERY')) {
+        iconEl.className = 'fa-solid fa-motorcycle';
+      } else {
+        iconEl.className = 'fa-solid fa-comment-dots';
+      }
+    }
     banner.onclick = (e) => {
       if (e.target.closest('.rct-close')) return;
       if (typeof onClick === 'function') onClick();
@@ -7568,7 +7601,7 @@ function showCustomerFloatingBanner(title, text, onClick = null) {
     if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
     msgBannerTimeout = setTimeout(() => {
       dismissLiveRiderBanner();
-    }, 4500);
+    }, 6000);
   }
   playCustomerChime();
 }
@@ -7869,6 +7902,9 @@ function handleLiveRiderMessage(msg) {
   unreadChatCount++;
   updateChatBadges();
   appendMessageToChatDrawer(msg);
+
+  // Dynamically update notification badge on customer dashboard header
+  if (typeof loadNotifications === 'function') loadNotifications();
 }
 
 function openChatFromBanner() {
@@ -8065,7 +8101,7 @@ async function pollCustomerCommunicationUpdates() {
     if (data.order_id && isDelivering) {
       const oId = data.order_id;
 
-      // Real-time on-screen toast & banner alert for customer when order is picked up
+      // Real-time on-screen banner alert for customer when order is picked up
       const pickupKey = 'fd_pickup_alert_seen_' + oId;
       if (sessionStorage.getItem(pickupKey) !== '1') {
         sessionStorage.setItem(pickupKey, '1');
@@ -8075,12 +8111,11 @@ async function pollCustomerCommunicationUpdates() {
         const pickupMsg = formattedTotal 
           ? `Order ${cleanRef} has been picked up! Total due: ${formattedTotal}` 
           : `Order ${cleanRef} has been picked up! Ready for delivery.`;
-        toast(pickupMsg);
         showCustomerFloatingBanner('ORDER PICKED UP - READY FOR DELIVERY', pickupMsg, () => {
           if (typeof openTrackingModal === 'function') openTrackingModal(oId);
           else if (typeof showScreen === 'function') showScreen('orders');
         });
-        if (typeof playCustomerChime === 'function') playCustomerChime();
+        if (typeof loadNotifications === 'function') loadNotifications();
       }
       const tag = document.getElementById(`status-tag-${oId}`);
       if (tag) {
