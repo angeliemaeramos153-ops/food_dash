@@ -1669,6 +1669,7 @@ let hasShownArrivedAlert = false;
 let arrivalAlertAudio = null;
 let trackSynthLoopInterval = null;
 let trackSynthAudioCtx = null;
+let trackActiveOscillators = [];
 
 function playSynthArrivalAlarm() {
   if (window.FoodDashCall && typeof window.FoodDashCall.playSynthArrivalAlarm === 'function') {
@@ -1689,6 +1690,12 @@ function playSynthArrivalAlarm() {
       clearInterval(trackSynthLoopInterval);
       trackSynthLoopInterval = null;
     }
+    if (trackActiveOscillators && trackActiveOscillators.length > 0) {
+      trackActiveOscillators.forEach(osc => {
+        try { osc.stop(); osc.disconnect(); } catch (e) {}
+      });
+      trackActiveOscillators = [];
+    }
 
     function chimeTick() {
       try {
@@ -1697,32 +1704,39 @@ function playSynthArrivalAlarm() {
           trackSynthAudioCtx.resume().catch(() => {});
         }
         const now = trackSynthAudioCtx.currentTime;
+        // Clean, soft ascending chime: E5, G#5, B5 using pure sine waves
         const notes = [
-          { freq: 659.25, time: 0.00, dur: 0.45 },
-          { freq: 830.61, time: 0.16, dur: 0.45 },
-          { freq: 987.77, time: 0.32, dur: 0.45 },
-          { freq: 1318.51, time: 0.48, dur: 0.65 }
+          { freq: 659.25, time: 0.00, dur: 0.38, vol: 0.16 },
+          { freq: 830.61, time: 0.18, dur: 0.38, vol: 0.16 },
+          { freq: 987.77, time: 0.36, dur: 0.50, vol: 0.14 }
         ];
         notes.forEach(n => {
           const osc = trackSynthAudioCtx.createOscillator();
           const gain = trackSynthAudioCtx.createGain();
-          osc.type = 'triangle';
+          osc.type = 'sine'; // pure sine wave prevents harmonic static & distortion
           osc.frequency.setValueAtTime(n.freq, now + n.time);
 
-          gain.gain.setValueAtTime(0.001, now + n.time);
-          gain.gain.linearRampToValueAtTime(0.28, now + n.time + 0.03);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + n.time + n.dur);
+          gain.gain.setValueAtTime(0.0001, now + n.time);
+          gain.gain.linearRampToValueAtTime(n.vol, now + n.time + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + n.time + n.dur);
 
           osc.connect(gain);
           gain.connect(trackSynthAudioCtx.destination);
           osc.start(now + n.time);
-          osc.stop(now + n.time + n.dur + 0.05);
+          osc.stop(now + n.time + n.dur + 0.02);
+
+          trackActiveOscillators.push(osc);
+          osc.onended = () => {
+            const idx = trackActiveOscillators.indexOf(osc);
+            if (idx > -1) trackActiveOscillators.splice(idx, 1);
+            try { osc.disconnect(); } catch (e) {}
+          };
         });
       } catch (err) {}
     }
 
     chimeTick();
-    trackSynthLoopInterval = setInterval(chimeTick, 1800);
+    trackSynthLoopInterval = setInterval(chimeTick, 2400); // 2.4s spacing prevents overlapping noise
   } catch (e) {
     console.warn('Track synth chime error:', e);
   }
@@ -1733,6 +1747,12 @@ function stopArrivalAlertSound() {
   if (trackSynthLoopInterval) {
     clearInterval(trackSynthLoopInterval);
     trackSynthLoopInterval = null;
+  }
+  if (trackActiveOscillators && trackActiveOscillators.length > 0) {
+    trackActiveOscillators.forEach(osc => {
+      try { osc.stop(); osc.disconnect(); } catch (e) {}
+    });
+    trackActiveOscillators = [];
   }
   if (arrivalAlertAudio) {
     try {
@@ -1747,7 +1767,9 @@ function stopArrivalAlertSound() {
     } catch (e) {}
   }
   if (window.FoodDashCall) {
-    if (typeof FoodDashCall.stopArrivalAlarmAudio === 'function') {
+    if (typeof FoodDashCall.stopArrivalAlarm === 'function') {
+      FoodDashCall.stopArrivalAlarm();
+    } else if (typeof FoodDashCall.stopArrivalAlarmAudio === 'function') {
       FoodDashCall.stopArrivalAlarmAudio();
     } else if (typeof FoodDashCall.stopAllTones === 'function') {
       FoodDashCall.stopAllTones();
@@ -1755,6 +1777,7 @@ function stopArrivalAlertSound() {
   }
 }
 window.stopArrivalAlertSound = stopArrivalAlertSound;
+window.stopArrivalAlarm = stopArrivalAlertSound;
 
 function closeRiderArrivedModal() {
   stopArrivalAlertSound();
@@ -1813,6 +1836,9 @@ function playArrivalAlertSound() {
     FoodDashCall.playArrivalAlarmAudio();
     return;
   }
+
+  // Clear any existing sound tracks or synth intervals before initiating a new playback loop
+  stopArrivalAlertSound();
 
   let synthFallbackTriggered = false;
   function triggerFallback(reason) {
@@ -1903,11 +1929,6 @@ function handleRiderArrivedEvent(data) {
       modal.style.visibility = 'visible';
       modal.style.pointerEvents = 'auto';
     }
-    const rName = data.rider_name || 'Alex';
-    if (window.FoodDashCall) {
-      FoodDashCall.triggerArrivalAlarm(orderId, rName);
-    }
-
     // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
     const banner = document.getElementById('liveRiderMessageBanner');
     if (banner) {
@@ -1919,8 +1940,12 @@ function handleRiderArrivedEvent(data) {
       msgBannerTimeout = null;
     }
 
-    // Programmatically play persistent looping arrival audio alert sound immediately
-    playArrivalAlertSound();
+    const rName = data.rider_name || 'Alex';
+    if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
+      FoodDashCall.triggerArrivalAlarm(orderId, rName);
+    } else if (typeof playArrivalAlertSound === 'function') {
+      playArrivalAlertSound();
+    }
   }
 
   // Update status badge on page to Arrived

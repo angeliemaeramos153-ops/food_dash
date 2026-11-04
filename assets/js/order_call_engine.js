@@ -13,6 +13,7 @@
   let ringtoneAudio = null;
   let arrivalAudio = null;
   let synthLoopInterval = null;
+  let activeOscillators = [];
   let isMuted = false;
   let localMediaStream = null;
 
@@ -195,35 +196,46 @@
     }
 
     function playAlarmChime() {
-      if (!arrivalAlarmActive || arrivalAcknowledged) return;
+      if (!arrivalAlarmActive || arrivalAcknowledged) {
+        stopSynthLoop();
+        return;
+      }
       try {
         if (!audioCtx) return;
         if (audioCtx.state === 'suspended') {
           audioCtx.resume().catch(() => {});
         }
         const now = audioCtx.currentTime;
-        // Ascending pleasant doorbell/urgent arrival chime: E5, G#5, B5, E6
+        // Clean, soft ascending doorbell chime: E5 (659.25Hz), G#5 (830.61Hz), B5 (987.77Hz)
+        // Using pure sine waves with smooth attack/decay to eliminate clicks, pops, and static
         const notes = [
-          { freq: 659.25, time: 0.00, dur: 0.45 },
-          { freq: 830.61, time: 0.16, dur: 0.45 },
-          { freq: 987.77, time: 0.32, dur: 0.45 },
-          { freq: 1318.51, time: 0.48, dur: 0.65 }
+          { freq: 659.25, time: 0.00, dur: 0.38, vol: 0.16 },
+          { freq: 830.61, time: 0.18, dur: 0.38, vol: 0.16 },
+          { freq: 987.77, time: 0.36, dur: 0.50, vol: 0.14 }
         ];
 
         notes.forEach(n => {
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
-          osc.type = 'triangle'; // rich bell-like timbre
+          osc.type = 'sine'; // Pure sine wave to prevent harmonic distortion & static
           osc.frequency.setValueAtTime(n.freq, now + n.time);
 
-          gain.gain.setValueAtTime(0.001, now + n.time);
-          gain.gain.linearRampToValueAtTime(0.28, now + n.time + 0.03);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + n.time + n.dur);
+          // Gentle linear attack ramp (30ms), then exponential decay to silence
+          gain.gain.setValueAtTime(0.0001, now + n.time);
+          gain.gain.linearRampToValueAtTime(n.vol, now + n.time + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + n.time + n.dur);
 
           osc.connect(gain);
           gain.connect(audioCtx.destination);
           osc.start(now + n.time);
-          osc.stop(now + n.time + n.dur + 0.05);
+          osc.stop(now + n.time + n.dur + 0.02);
+
+          activeOscillators.push(osc);
+          osc.onended = () => {
+            const idx = activeOscillators.indexOf(osc);
+            if (idx > -1) activeOscillators.splice(idx, 1);
+            try { osc.disconnect(); } catch (e) {}
+          };
         });
       } catch (e) {
         console.warn('Synth arrival alarm error:', e);
@@ -231,13 +243,22 @@
     }
 
     playAlarmChime();
-    synthLoopInterval = setInterval(playAlarmChime, 1800);
+    synthLoopInterval = setInterval(playAlarmChime, 2400); // 2.4s spacing prevents overlapping noise
   }
 
   function stopSynthLoop() {
     if (synthLoopInterval) {
       clearInterval(synthLoopInterval);
       synthLoopInterval = null;
+    }
+    if (activeOscillators && activeOscillators.length > 0) {
+      activeOscillators.forEach(osc => {
+        try {
+          osc.stop();
+          osc.disconnect();
+        } catch (e) {}
+      });
+      activeOscillators = [];
     }
   }
 
@@ -280,9 +301,34 @@
     }
   }
 
+  function stopArrivalAlarm() {
+    stopSynthLoop();
+    if (arrivalAudio) {
+      try {
+        arrivalAudio.pause();
+        arrivalAudio.currentTime = 0;
+      } catch (e) {}
+    }
+    if (window.arrivalAlertAudio) {
+      try {
+        window.arrivalAlertAudio.pause();
+        window.arrivalAlertAudio.currentTime = 0;
+      } catch (e) {}
+    }
+    arrivalAlarmActive = false;
+  }
+  const stopArrivalAlarmAudio = stopArrivalAlarm;
+
   function playArrivalAlarmAudio() {
-    stopAllTones();
+    // If the persistent arrival alarm is already playing cleanly, do not duplicate or stack
+    if (arrivalAlarmActive && !arrivalAcknowledged) {
+      return;
+    }
+
+    // Completely halt any existing tracks or synthesizer intervals before starting a new loop
+    stopArrivalAlarm();
     arrivalAlarmActive = true;
+    arrivalAcknowledged = false;
 
     let synthFallbackTriggered = false;
     function triggerSynthFallback(reason) {
@@ -290,7 +336,7 @@
       synthFallbackTriggered = true;
       console.warn('Arrival audio fallback activated:', reason);
       if (arrivalAudio) {
-        try { arrivalAudio.pause(); } catch (e) {}
+        try { arrivalAudio.pause(); arrivalAudio.currentTime = 0; } catch (e) {}
       }
       if (arrivalAlarmActive && !arrivalAcknowledged) {
         playSynthArrivalAlarm();
@@ -309,6 +355,7 @@
       // Check if audio already failed or has invalid source
       if (arrivalAudio.error || arrivalAudio.networkState === 3 /* NETWORK_NO_SOURCE */) {
         triggerSynthFallback('Audio element already in error state');
+        return;
       }
 
       // Hook error and stall events for 404 / unsupported formats / loading issues
@@ -345,7 +392,7 @@
 
       // Safety watchdog: on mobile devices where audio doesn't start advancing or is blocked
       setTimeout(() => {
-        if (arrivalAlarmActive && !arrivalAcknowledged) {
+        if (arrivalAlarmActive && !arrivalAcknowledged && !synthFallbackTriggered) {
           if (!arrivalAudio || arrivalAudio.paused || arrivalAudio.currentTime === 0 || arrivalAudio.error) {
             triggerSynthFallback('Watchdog: Audio not playing on mobile');
           }
@@ -361,36 +408,13 @@
     }
   }
 
-  function stopArrivalAlarmAudio() {
-    stopSynthLoop();
-    if (arrivalAudio) {
-      try {
-        arrivalAudio.pause();
-        arrivalAudio.currentTime = 0;
-      } catch (e) {}
-    }
-    if (window.arrivalAlertAudio) {
-      try {
-        window.arrivalAlertAudio.pause();
-        window.arrivalAlertAudio.currentTime = 0;
-      } catch (e) {}
-    }
-    arrivalAlarmActive = false;
-  }
-
   function stopAllTones() {
-    stopSynthLoop();
+    stopArrivalAlarm();
     if (ringbackAudio) {
       try { ringbackAudio.pause(); ringbackAudio.currentTime = 0; } catch (e) {}
     }
     if (ringtoneAudio) {
       try { ringtoneAudio.pause(); ringtoneAudio.currentTime = 0; } catch (e) {}
-    }
-    if (arrivalAudio) {
-      try { arrivalAudio.pause(); arrivalAudio.currentTime = 0; } catch (e) {}
-    }
-    if (window.arrivalAlertAudio) {
-      try { window.arrivalAlertAudio.pause(); window.arrivalAlertAudio.currentTime = 0; } catch (e) {}
     }
     arrivalAlarmActive = false;
   }
@@ -1224,6 +1248,7 @@
     triggerArrivalAlarm,
     playArrivalAlarmAudio,
     playSynthArrivalAlarm,
+    stopArrivalAlarm,
     stopArrivalAlarmAudio,
     acknowledgeArrival,
     viewTrackingMap,
@@ -1234,6 +1259,8 @@
   };
 
   window.playSynthArrivalAlarm = playSynthArrivalAlarm;
+  window.stopArrivalAlarm = stopArrivalAlarm;
+  window.stopArrivalAlertSound = stopArrivalAlarm;
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') {
