@@ -1730,7 +1730,7 @@ a:active,
 .toast, .cust-toast { position: fixed !important; display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; z-index: -9999 !important; }
 
 .logout{width:100%;background:#fff;cursor:pointer;font-family:inherit;margin-top:12px;border:1px solid #e55b52;color:#d33b32;border-radius:11px;padding:10px;font-size:9px;font-weight:600}
-.logout-modal{display:none;visibility:hidden;pointer-events:none;position:fixed;inset:0;background:rgba(28,32,6,.38);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:18px;z-index:1000}.logout-modal.show,.logout-modal.active,.logout-modal[style*="display: flex"],.logout-modal[style*="display:flex"]{display:flex !important;visibility:visible !important;pointer-events:auto !important;}.logout-box{width:min(360px,100%);background:#fffdf7;border:1px solid var(--line);border-radius:22px;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(55,65,22,.22)}.logout-box .logout-logo{width:58px;height:58px;border-radius:50%;object-fit:cover;border:1px solid #d7c98d;margin-bottom:9px}.logout-box h3{font-size:16px;color:var(--olive-dark);margin:0 0 5px}.logout-box p{font-size:9px;color:var(--muted);line-height:1.5;margin-bottom:17px}.logout-actions{display:flex;gap:8px}.logout-actions button,.logout-actions a{flex:1;padding:10px;border-radius:11px;font-size:9px;font-weight:700;text-decoration:none;border:0;font-family:inherit}.logout-cancel{background:#eee9d7;color:var(--olive)}.logout-confirm{background:var(--olive);color:white;display:grid;place-items:center}
+.logout-modal{display:none;visibility:hidden;pointer-events:none;position:fixed;inset:0;background:rgba(28,32,6,.38);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:18px;z-index:99999999 !important;}.logout-modal.show,.logout-modal.active,.logout-modal[style*="display: flex"],.logout-modal[style*="display:flex"]{display:flex !important;visibility:visible !important;pointer-events:auto !important;z-index:99999999 !important;}.logout-box{width:min(360px,100%);background:#fffdf7;border:1px solid var(--line);border-radius:22px;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(55,65,22,.22)}.logout-box .logout-logo{width:58px;height:58px;border-radius:50%;object-fit:cover;border:1px solid #d7c98d;margin-bottom:9px}.logout-box h3{font-size:16px;color:var(--olive-dark);margin:0 0 5px}.logout-box p{font-size:9px;color:var(--muted);line-height:1.5;margin-bottom:17px}.logout-actions{display:flex;gap:8px}.logout-actions button,.logout-actions a{flex:1;padding:10px;border-radius:11px;font-size:9px;font-weight:700;text-decoration:none;border:0;font-family:inherit}.logout-cancel{background:#eee9d7;color:var(--olive)}.logout-confirm{background:var(--olive);color:white;display:grid;place-items:center}
 
 /* Customer Live Tracking & Chat Styles */
 .cust-track-btn {
@@ -6002,8 +6002,10 @@ window.loadCustomerOrdersLive = loadCustomerOrdersLive;
 // Keeps customer order tracking view and status badges synchronized in real time without manual browser refresh
 let _customerLastOrderStates = {};
 let _isCustomerPollingRunning = false;
+let _pollCustomerOrdersTimer = null;
 
 async function pollCustomerOrdersLive() {
+  if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
   if (_isCustomerPollingRunning) return;
   _isCustomerPollingRunning = true;
 
@@ -6019,10 +6021,13 @@ async function pollCustomerOrdersLive() {
     const data = await res.json();
     if (!data.success || !Array.isArray(data.orders)) return;
 
+    if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
+
     const orders = data.orders;
 
     // Detect status transitions for real-time notifications
     orders.forEach(ord => {
+      if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
       const oId = parseInt(ord.order_id || ord.id, 10);
       const raw_status = String(ord.status || '').toUpperCase().replace(/[ -]/g, '_');
       const del_status = String(ord.delivery_status || '').toLowerCase().trim();
@@ -6047,7 +6052,7 @@ async function pollCustomerOrdersLive() {
       const isArrivalAck = (sessionStorage.getItem('fd_arrival_ack_' + oId) === '1') || (sessionStorage.getItem('fd_arrival_acknowledged_all') === '1');
 
       // Instant Modal Pop-up on Arrival: if status is arrived and not acknowledged, display immediately
-      if (isArrived && !isArrivalAck) {
+      if (isArrived && !isArrivalAck && !window.isLoggingOut && !(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
         sessionStorage.setItem(arrivedKey, '1');
         window.displayedNotificationIds.add('arrived_' + oId);
 
@@ -6124,7 +6129,7 @@ async function pollCustomerOrdersLive() {
 window.pollCustomerOrdersLive = pollCustomerOrdersLive;
 
 // Continuous 500ms ultra-responsive polling loop for instant telemetry sync
-setInterval(pollCustomerOrdersLive, 500);
+_pollCustomerOrdersTimer = setInterval(pollCustomerOrdersLive, 500);
 
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(pollCustomerOrdersLive, 500);
@@ -6761,17 +6766,144 @@ function closeTermsModal() {
 }
 
 /* ========================================================
-   LOGOUT WORKFLOW
+   LOGOUT WORKFLOW & ORDER POLLING STATE MANAGEMENT
    ======================================================== */
+window.isLoggingOut = false;
+try { sessionStorage.removeItem('fd_logging_out'); } catch (e) {}
+
+let _loadNotificationsTimer = null;
+
+function clearAllOrderPolling() {
+  if (typeof _pollCustomerOrdersTimer !== 'undefined' && _pollCustomerOrdersTimer) {
+    clearInterval(_pollCustomerOrdersTimer);
+    _pollCustomerOrdersTimer = null;
+  }
+  if (typeof _pollCustomerCommTimer !== 'undefined' && _pollCustomerCommTimer) {
+    clearInterval(_pollCustomerCommTimer);
+    _pollCustomerCommTimer = null;
+  }
+  if (typeof _loadNotificationsTimer !== 'undefined' && _loadNotificationsTimer) {
+    clearInterval(_loadNotificationsTimer);
+    _loadNotificationsTimer = null;
+  }
+  if (typeof custTrackingTimer !== 'undefined' && custTrackingTimer) {
+    clearInterval(custTrackingTimer);
+    custTrackingTimer = null;
+  }
+  if (typeof custChatPollTimer !== 'undefined' && custChatPollTimer) {
+    clearInterval(custChatPollTimer);
+    custChatPollTimer = null;
+  }
+  if (typeof customerSynthLoopInterval !== 'undefined' && customerSynthLoopInterval) {
+    clearInterval(customerSynthLoopInterval);
+    customerSynthLoopInterval = null;
+  }
+  if (typeof ringtoneInterval !== 'undefined' && ringtoneInterval) {
+    clearInterval(ringtoneInterval);
+    ringtoneInterval = null;
+  }
+  if (typeof callConnectedTimer !== 'undefined' && callConnectedTimer) {
+    clearInterval(callConnectedTimer);
+    callConnectedTimer = null;
+  }
+  if (window.FoodDashCall && typeof window.FoodDashCall.resetEngine === 'function') {
+    window.FoodDashCall.resetEngine();
+  }
+}
+
+function restartOrderPolling() {
+  if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
+  if (!_pollCustomerOrdersTimer && typeof pollCustomerOrdersLive === 'function') {
+    _pollCustomerOrdersTimer = setInterval(pollCustomerOrdersLive, 500);
+  }
+  if (!_pollCustomerCommTimer && typeof pollCustomerCommunicationUpdates === 'function') {
+    _pollCustomerCommTimer = setInterval(pollCustomerCommunicationUpdates, 500);
+  }
+  if (!_loadNotificationsTimer && typeof loadNotifications === 'function') {
+    _loadNotificationsTimer = setInterval(loadNotifications, 6000);
+  }
+}
+
 function openLogout() {
-  document.getElementById('logoutModal').classList.add('show');
+  window.isLoggingOut = true;
+  try {
+    sessionStorage.setItem('fd_logging_out', '1');
+    sessionStorage.setItem('fd_arrival_acknowledged_all', '1');
+  } catch (e) {}
+
+  // 1. Forcefully stop arrival alarm and all synth tones immediately
+  if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
+    window.FoodDashCall.stopArrivalAlarm();
+    if (typeof window.FoodDashCall.stopAllTones === 'function') {
+      window.FoodDashCall.stopAllTones();
+    }
+  }
+  if (typeof window.stopArrivalAlarm === 'function') {
+    try { window.stopArrivalAlarm(); } catch (e) {}
+  }
+  if (typeof window.stopArrivalAlertSound === 'function') {
+    try { window.stopArrivalAlertSound(); } catch (e) {}
+  }
+
+  // 2. Forcefully dismiss and hide the arrival modal so it can never pop up over the logout screen
+  const arrivedModal = document.getElementById('riderArrivedModal');
+  if (arrivedModal) {
+    arrivedModal.classList.remove('show', 'active');
+    arrivedModal.style.setProperty('display', 'none', 'important');
+    arrivedModal.style.setProperty('visibility', 'hidden', 'important');
+    arrivedModal.style.setProperty('pointer-events', 'none', 'important');
+  }
+
+  // 3. Entirely clear all pending order status, chat, and notification polling intervals
+  clearAllOrderPolling();
+
+  // 4. Forcefully present the logout confirmation screen at top layer
+  const logoutModal = document.getElementById('logoutModal');
+  if (logoutModal) {
+    logoutModal.classList.add('show', 'active');
+    logoutModal.style.setProperty('display', 'flex', 'important');
+    logoutModal.style.setProperty('visibility', 'visible', 'important');
+    logoutModal.style.setProperty('pointer-events', 'auto', 'important');
+    logoutModal.style.setProperty('z-index', '99999999', 'important');
+  }
 }
 
 function closeLogout() {
-  document.getElementById('logoutModal').classList.remove('show');
+  window.isLoggingOut = false;
+  try { sessionStorage.removeItem('fd_logging_out'); } catch (e) {}
+  const logoutModal = document.getElementById('logoutModal');
+  if (logoutModal) {
+    logoutModal.classList.remove('show', 'active');
+    logoutModal.style.setProperty('display', 'none', 'important');
+    logoutModal.style.setProperty('visibility', 'hidden', 'important');
+    logoutModal.style.setProperty('pointer-events', 'none', 'important');
+  }
+  restartOrderPolling();
 }
 
 function executeLogout() {
+  window.isLoggingOut = true;
+  try {
+    sessionStorage.setItem('fd_logging_out', '1');
+    sessionStorage.setItem('fd_arrival_acknowledged_all', '1');
+  } catch (e) {}
+
+  // Forcefully stop audio engine
+  if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
+    window.FoodDashCall.stopArrivalAlarm();
+    if (typeof window.FoodDashCall.stopAllTones === 'function') {
+      window.FoodDashCall.stopAllTones();
+    }
+  }
+  if (typeof window.stopArrivalAlarm === 'function') {
+    try { window.stopArrivalAlarm(); } catch (e) {}
+  }
+  if (typeof window.stopArrivalAlertSound === 'function') {
+    try { window.stopArrivalAlertSound(); } catch (e) {}
+  }
+
+  clearAllOrderPolling();
+
   try {
     localStorage.removeItem('fooddash_auth_token');
     localStorage.removeItem('fooddash_user');
@@ -6786,10 +6918,45 @@ function executeLogout() {
   }, 350);
 }
 
+// Immediate capture listener on document to intercept any logout action
+document.addEventListener('click', function(e) {
+  const btn = e.target && e.target.closest && (
+    e.target.closest('.logout') || 
+    e.target.closest('[onclick*="openLogout"]') || 
+    e.target.closest('[onclick*="executeLogout"]') || 
+    e.target.closest('a[href*="logout.php"]')
+  );
+  if (btn) {
+    window.isLoggingOut = true;
+    try {
+      sessionStorage.setItem('fd_logging_out', '1');
+      sessionStorage.setItem('fd_arrival_acknowledged_all', '1');
+    } catch (err) {}
+    if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
+      window.FoodDashCall.stopArrivalAlarm();
+      window.FoodDashCall.stopAllTones();
+    }
+    if (typeof window.stopArrivalAlarm === 'function') {
+      try { window.stopArrivalAlarm(); } catch (err) {}
+    }
+    if (typeof window.stopArrivalAlertSound === 'function') {
+      try { window.stopArrivalAlertSound(); } catch (err) {}
+    }
+    clearAllOrderPolling();
+    const arrivedModal = document.getElementById('riderArrivedModal');
+    if (arrivedModal) {
+      arrivedModal.classList.remove('show', 'active');
+      arrivedModal.style.setProperty('display', 'none', 'important');
+      arrivedModal.style.setProperty('visibility', 'hidden', 'important');
+      arrivedModal.style.setProperty('pointer-events', 'none', 'important');
+    }
+  }
+}, true);
+
 // Initial setup
 updateBadge();
 loadNotifications();
-setInterval(loadNotifications, 6000);
+_loadNotificationsTimer = setInterval(loadNotifications, 6000);
 
 // Auto-request live location if allowed by browser
 // Geolocation only runs on-demand when user clicks 'Locate Me' or 'Pin on Map'
@@ -7820,36 +7987,50 @@ function playSynthArrivalAlarm() {
     }
 
     function chimeTick() {
+      if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
+        if (customerSynthLoopInterval) {
+          clearInterval(customerSynthLoopInterval);
+          customerSynthLoopInterval = null;
+        }
+        return;
+      }
       try {
         if (!customerSynthAudioCtx) return;
         if (customerSynthAudioCtx.state === 'suspended') {
           customerSynthAudioCtx.resume().catch(() => {});
         }
         const now = customerSynthAudioCtx.currentTime;
-        // 4-note ascending chord sequence: C5 (523.25Hz) -> E5 (659.25Hz) -> G5 (783.99Hz) -> C6 (1046.50Hz)
+        // Clean, smooth, unhurried 4-note music-box arpeggio (C5 -> E5 -> G5 -> C6)
+        // Spaced ~350ms apart (0.00s, 0.35s, 0.70s, 1.05s) with pure sine waves
         const notes = [
-          { freq: 523.25, time: 0.0, dur: 0.6 }, // Note 1: 523.25 Hz (C5) at t = 0.0s, duration 0.6s
-          { freq: 659.25, time: 0.3, dur: 0.6 }, // Note 2: 659.25 Hz (E5) at t = 0.3s, duration 0.6s
-          { freq: 783.99, time: 0.6, dur: 0.6 }, // Note 3: 783.99 Hz (G5) at t = 0.6s, duration 0.6s
-          { freq: 1046.50, time: 0.9, dur: 0.8 }  // Note 4: 1046.50 Hz (C6) at t = 0.9s, duration 0.8s (final ringing note)
+          { freq: 523.25, time: 0.000, dur: 0.90, peak: 0.12 }, // Note 1: 523.25 Hz (C5) at 0ms
+          { freq: 659.25, time: 0.350, dur: 0.90, peak: 0.12 }, // Note 2: 659.25 Hz (E5) at 350ms
+          { freq: 783.99, time: 0.700, dur: 0.90, peak: 0.12 }, // Note 3: 783.99 Hz (G5) at 700ms
+          { freq: 1046.50, time: 1.050, dur: 1.20, peak: 0.14 }  // Note 4: 1046.50 Hz (C6) at 1050ms (rings out cleanly to ~2.25s)
         ];
+
+        const attackTime = 0.015; // 15ms soft linear attack ramp to completely eliminate any start click / transient tick
+
         notes.forEach(n => {
           const osc = customerSynthAudioCtx.createOscillator();
           const gain = customerSynthAudioCtx.createGain();
-          osc.type = 'sine'; // Soft, warm sine wave tone
+          osc.type = 'sine'; // Pure, warm sine wave tone for music-box chime
           const noteTime = now + n.time;
+          const attackEnd = noteTime + attackTime;
           const noteEnd = noteTime + n.dur;
 
           osc.frequency.setValueAtTime(n.freq, noteTime);
 
-          // Connect to individual gain node: 0.15 at noteTime, smoothly ramps down exponentially
-          gain.gain.setValueAtTime(0.15, noteTime);
+          // Smooth exponential gain decay envelope: start at 0.0001, quick 15ms soft linear attack ramp to peak,
+          // then smooth natural exponential decay to 0.0001 without clipping
+          gain.gain.setValueAtTime(0.0001, noteTime);
+          gain.gain.linearRampToValueAtTime(n.peak, attackEnd);
           gain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
 
           osc.connect(gain);
           gain.connect(customerSynthAudioCtx.destination);
           osc.start(noteTime);
-          osc.stop(noteEnd + 0.05);
+          osc.stop(noteEnd + 0.04);
 
           const nodeItem = { osc, gain, noteStart: noteTime };
           customerActiveOscillators.push(nodeItem);
@@ -7863,9 +8044,10 @@ function playSynthArrivalAlarm() {
     }
 
     chimeTick();
-    // Repeating interval set to exactly 5000ms (5 seconds):
-    // Full 1.7-second melody plays out fully, rests in total silence for over 3 seconds, then repeats cleanly
-    customerSynthLoopInterval = setInterval(chimeTick, 5000);
+    // Repeating interval: 4-note arpeggio plays out completely in ~2.25s,
+    // rests in 4.0 seconds of complete silence, and repeats cleanly without sounding harsh.
+    // Total cycle duration: 2250ms chime + 4000ms silence rest = 6250ms
+    customerSynthLoopInterval = setInterval(chimeTick, 6250);
   } catch (e) {
     console.warn('Customer synth chime error:', e);
   }
@@ -7873,6 +8055,9 @@ function playSynthArrivalAlarm() {
 window.playSynthArrivalAlarm = playSynthArrivalAlarm;
 
 function playArrivalAlertSound() {
+  if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
+    return;
+  }
   if (window.FoodDashCall && typeof window.FoodDashCall.playArrivalAlarmAudio === 'function') {
     window.FoodDashCall.playArrivalAlarmAudio();
     return;
@@ -7921,6 +8106,13 @@ function stopArrivalAlertSound() {
       window.arrivalAlertAudio.pause();
       window.arrivalAlertAudio.currentTime = 0;
     } catch (e) {}
+  }
+  const modal = document.getElementById('riderArrivedModal');
+  if (modal) {
+    modal.classList.remove('show', 'active');
+    modal.style.setProperty('display', 'none', 'important');
+    modal.style.setProperty('visibility', 'hidden', 'important');
+    modal.style.setProperty('pointer-events', 'none', 'important');
   }
   if (window.FoodDashCall) {
     if (typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
@@ -8507,6 +8699,7 @@ function updateOrderStatusToArrived(orderId) {
 }
 
 function handleRiderArrivedEvent(data) {
+  if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
   const oId = data.order_id || activeCustomerTrackingOrderId || 0;
   const isAck = Boolean(data.arrival_acknowledged) || (sessionStorage.getItem('fd_arrival_ack_' + oId) === '1') || (sessionStorage.getItem('fd_arrival_acknowledged_all') === '1');
   if (isAck) {
@@ -8540,8 +8733,11 @@ function handleRiderArrivedEvent(data) {
   updateOrderStatusToArrived(oId);
 }
 
+let _pollCustomerCommTimer = null;
+
 // Global background poll running continuously on ALL customer screens for real-time telemetry
 async function pollCustomerCommunicationUpdates() {
+  if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
   if (!currentCustomerId) return;
   try {
     const targetOrderId = activeCustomerTrackingOrderId || 0;
@@ -8746,7 +8942,7 @@ async function pollCustomerCommunicationUpdates() {
 
 // Continuously execute every 500ms on ALL screens for instant real-time telemetry sync
 pollCustomerCommunicationUpdates();
-setInterval(pollCustomerCommunicationUpdates, 500);
+_pollCustomerCommTimer = setInterval(pollCustomerCommunicationUpdates, 500);
 
 // Check if navigating to a specific screen via hash (e.g. #orders, #cart)
 if (window.location.hash) {

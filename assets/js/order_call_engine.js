@@ -71,13 +71,24 @@
 
     // If arrival alarm is active but was waiting for user touch gesture on mobile:
     if (arrivalAlarmActive && !arrivalAcknowledged) {
-      if (e && e.target && e.target.closest && e.target.closest('.btn-arrival-action')) {
-        return; // Action button click handler will stop and dismiss
+      if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
+        return;
+      }
+      if (e && e.target && e.target.closest && (
+        e.target.closest('.btn-arrival-action') || 
+        e.target.closest('.logout') || 
+        e.target.closest('.mobile-logout') || 
+        e.target.closest('.logout-btn') || 
+        e.target.closest('[onclick*="openLogout"]') || 
+        e.target.closest('[onclick*="executeLogout"]') || 
+        e.target.closest('a[href*="logout.php"]')
+      )) {
+        return; // Action button or logout click handler will stop and dismiss
       }
       if (audioCtx) {
         if (audioCtx.state === 'suspended') {
           audioCtx.resume().then(() => {
-            if (arrivalAlarmActive && !arrivalAcknowledged && !synthLoopInterval) {
+            if (arrivalAlarmActive && !arrivalAcknowledged && !synthLoopInterval && !window.isLoggingOut) {
               playSynthArrivalAlarm();
             }
           }).catch(() => {});
@@ -182,8 +193,8 @@
   let isChimePlaying = false;
 
   function playSynthArrivalAlarm() {
-    // If arrival was already acknowledged, do not play
-    if (arrivalAcknowledged) return;
+    // If arrival was already acknowledged or user is logging out, do not play
+    if (arrivalAcknowledged || window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
 
     // If the arpeggio loop is already running, prevent duplicate restarts / stuttering
     if (synthLoopInterval && arrivalAlarmActive) {
@@ -197,7 +208,7 @@
     arrivalAcknowledged = false;
 
     function playAlarmChime() {
-      if (!arrivalAlarmActive || arrivalAcknowledged) {
+      if (!arrivalAlarmActive || arrivalAcknowledged || window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
         stopSynthLoop();
         return;
       }
@@ -206,7 +217,7 @@
       if (!audioCtx) return;
       if (audioCtx.state === 'suspended') {
         audioCtx.resume().then(() => {
-          if (arrivalAlarmActive && !arrivalAcknowledged) {
+          if (arrivalAlarmActive && !arrivalAcknowledged && !window.isLoggingOut && !(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
             playAlarmChime();
           }
         }).catch(() => {});
@@ -214,7 +225,7 @@
       }
 
       isChimePlaying = true;
-      setTimeout(() => { isChimePlaying = false; }, 1800);
+      setTimeout(() => { isChimePlaying = false; }, 2300);
 
       try {
         const now = audioCtx.currentTime;
@@ -222,39 +233,45 @@
         // Dedicated arrival master gain node for instantaneous, clean cutoff on dismissal
         if (!arrivalMasterGain) {
           arrivalMasterGain = audioCtx.createGain();
-          arrivalMasterGain.gain.setValueAtTime(1.0, now);
+          arrivalMasterGain.gain.setValueAtTime(0.85, now);
           arrivalMasterGain.connect(audioCtx.destination);
         } else {
           arrivalMasterGain.gain.cancelScheduledValues(now);
-          arrivalMasterGain.gain.setValueAtTime(1.0, now);
+          arrivalMasterGain.gain.setValueAtTime(0.85, now);
         }
 
-        // 4-note ascending chord sequence: C5 (523.25Hz) -> E5 (659.25Hz) -> G5 (783.99Hz) -> C6 (1046.50Hz)
+        // Clean, smooth, unhurried 4-note music-box arpeggio (C5 -> E5 -> G5 -> C6)
+        // Spaced ~350ms apart (0.00s, 0.35s, 0.70s, 1.05s) with pure sine waves
         const notes = [
-          { freq: 523.25, time: 0.0, dur: 0.6 }, // Note 1: 523.25 Hz (C5) at t = 0.0s, duration 0.6s
-          { freq: 659.25, time: 0.3, dur: 0.6 }, // Note 2: 659.25 Hz (E5) at t = 0.3s, duration 0.6s
-          { freq: 783.99, time: 0.6, dur: 0.6 }, // Note 3: 783.99 Hz (G5) at t = 0.6s, duration 0.6s
-          { freq: 1046.50, time: 0.9, dur: 0.8 }  // Note 4: 1046.50 Hz (C6) at t = 0.9s, duration 0.8s (final ringing note)
+          { freq: 523.25, time: 0.000, dur: 0.90, peak: 0.12 }, // Note 1: 523.25 Hz (C5) at 0ms
+          { freq: 659.25, time: 0.350, dur: 0.90, peak: 0.12 }, // Note 2: 659.25 Hz (E5) at 350ms
+          { freq: 783.99, time: 0.700, dur: 0.90, peak: 0.12 }, // Note 3: 783.99 Hz (G5) at 700ms
+          { freq: 1046.50, time: 1.050, dur: 1.20, peak: 0.14 }  // Note 4: 1046.50 Hz (C6) at 1050ms (rings out cleanly to ~2.25s)
         ];
+
+        const attackTime = 0.015; // 15ms soft linear attack ramp to completely eliminate any start click / transient tick
 
         notes.forEach(n => {
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
 
-          osc.type = 'sine'; // Soft, warm sine wave tone
+          osc.type = 'sine'; // Soft, warm, pure sine wave tone for music-box chime
           const noteTime = now + n.time;
+          const attackEnd = noteTime + attackTime;
           const noteEnd = noteTime + n.dur;
 
           osc.frequency.setValueAtTime(n.freq, noteTime);
 
-          // Connect to individual gain node: 0.15 at noteTime, smoothly ramps down exponentially
-          gain.gain.setValueAtTime(0.15, noteTime);
+          // Smooth exponential gain decay envelope: start at 0.0001, quick 15ms soft linear attack ramp to peak,
+          // then smooth natural exponential decay to 0.0001 without clipping
+          gain.gain.setValueAtTime(0.0001, noteTime);
+          gain.gain.linearRampToValueAtTime(n.peak, attackEnd);
           gain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
 
           osc.connect(gain);
           gain.connect(arrivalMasterGain);
           osc.start(noteTime);
-          osc.stop(noteEnd + 0.05);
+          osc.stop(noteEnd + 0.04);
 
           const nodeItem = { osc, gain, noteStart: noteTime, decayEnd: noteEnd };
           activeSynthNodes.push(nodeItem);
@@ -273,9 +290,10 @@
     }
 
     playAlarmChime();
-    // Repeating interval set to exactly 5000ms (5 seconds):
-    // Full 1.7-second melody plays out fully, rests in total silence for over 3 seconds, then repeats cleanly
-    synthLoopInterval = setInterval(playAlarmChime, 5000);
+    // Repeating interval: 4-note arpeggio plays out completely in ~2.25s,
+    // rests in 4.0 seconds of complete silence, and repeats cleanly without sounding harsh.
+    // Total cycle duration: 2250ms chime + 4000ms silence rest = 6250ms
+    synthLoopInterval = setInterval(playAlarmChime, 6250);
   }
 
   function stopSynthLoop() {
@@ -384,10 +402,20 @@
         window.arrivalAlertAudio.currentTime = 0;
       } catch (e) {}
     }
+    const modal = document.getElementById('riderArrivedModal');
+    if (modal) {
+      modal.classList.remove('show', 'active');
+      modal.style.setProperty('display', 'none', 'important');
+      modal.style.setProperty('visibility', 'hidden', 'important');
+      modal.style.setProperty('pointer-events', 'none', 'important');
+    }
   }
   const stopArrivalAlarmAudio = stopArrivalAlarm;
 
   function playArrivalAlarmAudio() {
+    if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
+      return;
+    }
     // If the arrival has already been acknowledged, do not play
     if (arrivalAcknowledged) return;
 
@@ -401,7 +429,7 @@
     arrivalAlarmActive = true;
     arrivalAcknowledged = false;
 
-    // Trigger exactly ONE clean, peaceful arpeggio chime per 5000ms cycle
+    // Trigger exactly ONE clean, peaceful arpeggio chime per 6250ms cycle
     playSynthArrivalAlarm();
 
     if ('vibrate' in navigator) {
@@ -1092,6 +1120,9 @@
   }
 
   function triggerArrivalAlarm(orderId, riderName) {
+    if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
+      return;
+    }
     if (orderId && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1') {
       arrivalAcknowledged = true;
       return;
@@ -1249,6 +1280,29 @@
     }
   }
 
+  function resetEngine() {
+    stopArrivalAlarm();
+    stopAllTones();
+    if (callPollInterval) {
+      clearInterval(callPollInterval);
+      callPollInterval = null;
+    }
+    if (callTimerInterval) {
+      clearInterval(callTimerInterval);
+      callTimerInterval = null;
+    }
+    if (synthLoopInterval) {
+      clearInterval(synthLoopInterval);
+      synthLoopInterval = null;
+    }
+    if (localMediaStream) {
+      try {
+        localMediaStream.getTracks().forEach(track => track.stop());
+      } catch (e) {}
+      localMediaStream = null;
+    }
+  }
+
   // -------------------------------------------------------------
   // INITIALIZER
   // -------------------------------------------------------------
@@ -1276,6 +1330,7 @@
     acknowledgeArrival,
     viewTrackingMap,
     stopAllTones,
+    resetEngine,
     bindArrivalModalListeners,
     getActiveOrderId: () => activeOrderId,
     setRole: (r) => { myRole = r; },
@@ -1287,6 +1342,29 @@
   window.stopArrivalAlertSound = stopArrivalAlarm;
 
   if (typeof document !== 'undefined') {
+    // Immediate capture-phase handler to forcefully cancel arrival alarm and audio when Log Out is clicked anywhere
+    document.addEventListener('click', function(e) {
+      const isLogout = e.target && e.target.closest && (
+        e.target.closest('.logout') || 
+        e.target.closest('.mobile-logout') || 
+        e.target.closest('.logout-btn') || 
+        e.target.closest('[onclick*="openLogout"]') || 
+        e.target.closest('[onclick*="executeLogout"]') || 
+        e.target.closest('a[href*="logout.php"]')
+      );
+      if (isLogout) {
+        window.isLoggingOut = true;
+        try { sessionStorage.setItem('fd_logging_out', '1'); } catch (err) {}
+        stopArrivalAlarm();
+        stopAllTones();
+      }
+    }, true);
+
+    window.addEventListener('beforeunload', function() {
+      stopArrivalAlarm();
+      stopAllTones();
+    });
+
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => bindArrivalModalListeners());
     } else {

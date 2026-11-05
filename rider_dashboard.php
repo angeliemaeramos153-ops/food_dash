@@ -2064,7 +2064,7 @@ function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&l
 async function readNote(id){await fetch('notification_api.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_read',notification_id:id})});loadNotifications()}
 async function markAllRead(){await fetch('notification_api.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_all_read'})});loadNotifications()}
 function openNotifications(){document.getElementById('noteModal').classList.add('show');loadNotifications()}function closeNotifications(){document.getElementById('noteModal').classList.remove('show')}
-function openLogout(){document.getElementById('logoutModal').classList.add('show')}function closeLogout(){document.getElementById('logoutModal').classList.remove('show')}
+function openLogout(){window.isLoggingOut = true; try { sessionStorage.setItem('fd_logging_out', '1'); } catch(e) {} if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') { window.FoodDashCall.stopArrivalAlarm(); window.FoodDashCall.stopAllTones(); } document.getElementById('logoutModal').classList.add('show')}function closeLogout(){window.isLoggingOut = false; try { sessionStorage.removeItem('fd_logging_out'); } catch(e) {} document.getElementById('logoutModal').classList.remove('show')}
 loadNotifications();setInterval(loadNotifications,5000);document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNotifications();closeLogout()}});
 
 // Active Delivery Data passed from backend

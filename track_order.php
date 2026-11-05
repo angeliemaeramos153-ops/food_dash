@@ -1698,36 +1698,50 @@ function playSynthArrivalAlarm() {
     }
 
     function chimeTick() {
+      if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
+        if (trackSynthLoopInterval) {
+          clearInterval(trackSynthLoopInterval);
+          trackSynthLoopInterval = null;
+        }
+        return;
+      }
       try {
         if (!trackSynthAudioCtx) return;
         if (trackSynthAudioCtx.state === 'suspended') {
           trackSynthAudioCtx.resume().catch(() => {});
         }
         const now = trackSynthAudioCtx.currentTime;
-        // 4-note ascending chord sequence: C5 (523.25Hz) -> E5 (659.25Hz) -> G5 (783.99Hz) -> C6 (1046.50Hz)
+        // Clean, smooth, unhurried 4-note music-box arpeggio (C5 -> E5 -> G5 -> C6)
+        // Spaced ~350ms apart (0.00s, 0.35s, 0.70s, 1.05s) with pure sine waves
         const notes = [
-          { freq: 523.25, time: 0.0, dur: 0.6 }, // Note 1: 523.25 Hz (C5) at t = 0.0s, duration 0.6s
-          { freq: 659.25, time: 0.3, dur: 0.6 }, // Note 2: 659.25 Hz (E5) at t = 0.3s, duration 0.6s
-          { freq: 783.99, time: 0.6, dur: 0.6 }, // Note 3: 783.99 Hz (G5) at t = 0.6s, duration 0.6s
-          { freq: 1046.50, time: 0.9, dur: 0.8 }  // Note 4: 1046.50 Hz (C6) at t = 0.9s, duration 0.8s (final ringing note)
+          { freq: 523.25, time: 0.000, dur: 0.90, peak: 0.12 }, // Note 1: 523.25 Hz (C5) at 0ms
+          { freq: 659.25, time: 0.350, dur: 0.90, peak: 0.12 }, // Note 2: 659.25 Hz (E5) at 350ms
+          { freq: 783.99, time: 0.700, dur: 0.90, peak: 0.12 }, // Note 3: 783.99 Hz (G5) at 700ms
+          { freq: 1046.50, time: 1.050, dur: 1.20, peak: 0.14 }  // Note 4: 1046.50 Hz (C6) at 1050ms (rings out cleanly to ~2.25s)
         ];
+
+        const attackTime = 0.015; // 15ms soft linear attack ramp to completely eliminate any start click / transient tick
+
         notes.forEach(n => {
           const osc = trackSynthAudioCtx.createOscillator();
           const gain = trackSynthAudioCtx.createGain();
-          osc.type = 'sine'; // Soft, warm sine wave tone
+          osc.type = 'sine'; // Soft, warm sine wave tone for music-box chime
           const noteTime = now + n.time;
+          const attackEnd = noteTime + attackTime;
           const noteEnd = noteTime + n.dur;
 
           osc.frequency.setValueAtTime(n.freq, noteTime);
 
-          // Connect to individual gain node: 0.15 at noteTime, smoothly ramps down exponentially
-          gain.gain.setValueAtTime(0.15, noteTime);
+          // Smooth exponential gain decay envelope: start at 0.0001, quick 15ms soft linear attack ramp to peak,
+          // then smooth natural exponential decay to 0.0001 without clipping
+          gain.gain.setValueAtTime(0.0001, noteTime);
+          gain.gain.linearRampToValueAtTime(n.peak, attackEnd);
           gain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
 
           osc.connect(gain);
           gain.connect(trackSynthAudioCtx.destination);
           osc.start(noteTime);
-          osc.stop(noteEnd + 0.05);
+          osc.stop(noteEnd + 0.04);
 
           const nodeItem = { osc, gain, noteStart: noteTime };
           trackActiveOscillators.push(nodeItem);
@@ -1741,9 +1755,10 @@ function playSynthArrivalAlarm() {
     }
 
     chimeTick();
-    // Repeating interval set to exactly 5000ms (5 seconds):
-    // Full 1.7-second melody plays out fully, rests in total silence for over 3 seconds, then repeats cleanly
-    trackSynthLoopInterval = setInterval(chimeTick, 5000);
+    // Repeating interval: 4-note arpeggio plays out completely in ~2.25s,
+    // rests in 4.0 seconds of complete silence, and repeats cleanly without sounding harsh.
+    // Total cycle duration: 2250ms chime + 4000ms silence rest = 6250ms
+    trackSynthLoopInterval = setInterval(chimeTick, 6250);
   } catch (e) {
     console.warn('Track synth chime error:', e);
   }
@@ -1754,6 +1769,13 @@ function stopArrivalAlertSound() {
   if (trackSynthLoopInterval) {
     clearInterval(trackSynthLoopInterval);
     trackSynthLoopInterval = null;
+  }
+  const modal = document.getElementById('riderArrivedModal');
+  if (modal) {
+    modal.classList.remove('show', 'active');
+    modal.style.setProperty('display', 'none', 'important');
+    modal.style.setProperty('visibility', 'hidden', 'important');
+    modal.style.setProperty('pointer-events', 'none', 'important');
   }
   if (trackActiveOscillators && trackActiveOscillators.length > 0) {
     const now = trackSynthAudioCtx ? trackSynthAudioCtx.currentTime : 0;
