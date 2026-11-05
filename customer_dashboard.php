@@ -6045,16 +6045,20 @@ async function pollCustomerOrdersLive() {
 
       const isArrived = ['ARRIVED', 'ARRIVED_DESTINATION'].includes(raw_status)
                   || ['arrived', 'arrived_destination'].includes(del_status)
-                  || ['arrived', 'arrived_destination'].includes(status_lower);
+                  || ['arrived', 'arrived_destination'].includes(status_lower)
+                  || Boolean(ord.is_arrived);
+
+      // Dynamic adaptive polling: 1000ms (1s) when delivering / close to destination / arrived
+      if (isDelivering || del_status === 'near_customer' || raw_status === 'NEAR_CUSTOMER' || isArrived) {
+        window._customerPollIntervalMs = 1000;
+        window._customerCommIntervalMs = 1000;
+      }
 
       const arrivedKey = 'fd_arrived_alert_seen_' + oId;
       const modal = document.getElementById('riderArrivedModal');
-      const isModalOpen = modal && (modal.style.display === 'flex' || modal.classList.contains('show'));
       const isArrivalAck = (
         (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + oId) === '1') ||
-        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1') ||
-        (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_acknowledged_all') === '1') ||
-        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_acknowledged_all') === '1')
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1')
       );
 
       // Instant Modal Pop-up on Arrival: if status is arrived and not acknowledged, display immediately
@@ -6068,11 +6072,11 @@ async function pollCustomerOrdersLive() {
         dismissLiveRiderBanner();
 
         // Prominently trigger arrival popup modal immediately
-        if (modal && !isModalOpen) {
+        if (modal) {
           modal.classList.add('show', 'active');
-          modal.style.display = 'flex';
-          modal.style.visibility = 'visible';
-          modal.style.pointerEvents = 'auto';
+          modal.style.setProperty('display', 'flex', 'important');
+          modal.style.setProperty('visibility', 'visible', 'important');
+          modal.style.setProperty('pointer-events', 'auto', 'important');
         }
         if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
           FoodDashCall.triggerArrivalAlarm(oId, ord.rider_name || 'Rider');
@@ -6136,11 +6140,25 @@ async function pollCustomerOrdersLive() {
 }
 window.pollCustomerOrdersLive = pollCustomerOrdersLive;
 
-// Continuous 500ms ultra-responsive polling loop for instant telemetry sync
-_pollCustomerOrdersTimer = setInterval(pollCustomerOrdersLive, 500);
+// Adaptive 1 to 2 seconds status polling loop (1000ms when close to destination, 2000ms when idle)
+window._customerPollIntervalMs = 1200;
+
+function scheduleNextCustomerOrderPoll() {
+  if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
+  if (_pollCustomerOrdersTimer) {
+    clearTimeout(_pollCustomerOrdersTimer);
+    clearInterval(_pollCustomerOrdersTimer);
+  }
+  _pollCustomerOrdersTimer = setTimeout(async () => {
+    try { await pollCustomerOrdersLive(); } catch (e) {}
+    scheduleNextCustomerOrderPoll();
+  }, window._customerPollIntervalMs || 1200);
+}
+
+scheduleNextCustomerOrderPoll();
 
 document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(pollCustomerOrdersLive, 500);
+  setTimeout(pollCustomerOrdersLive, 300);
 });
 
 function accountNotice(section) {
@@ -6783,10 +6801,12 @@ let _loadNotificationsTimer = null;
 
 function clearAllOrderPolling() {
   if (typeof _pollCustomerOrdersTimer !== 'undefined' && _pollCustomerOrdersTimer) {
+    clearTimeout(_pollCustomerOrdersTimer);
     clearInterval(_pollCustomerOrdersTimer);
     _pollCustomerOrdersTimer = null;
   }
   if (typeof _pollCustomerCommTimer !== 'undefined' && _pollCustomerCommTimer) {
+    clearTimeout(_pollCustomerCommTimer);
     clearInterval(_pollCustomerCommTimer);
     _pollCustomerCommTimer = null;
   }
@@ -6821,11 +6841,15 @@ function clearAllOrderPolling() {
 
 function restartOrderPolling() {
   if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
-  if (!_pollCustomerOrdersTimer && typeof pollCustomerOrdersLive === 'function') {
-    _pollCustomerOrdersTimer = setInterval(pollCustomerOrdersLive, 500);
+  if (!_pollCustomerOrdersTimer && typeof scheduleNextCustomerOrderPoll === 'function') {
+    scheduleNextCustomerOrderPoll();
+  } else if (!_pollCustomerOrdersTimer && typeof pollCustomerOrdersLive === 'function') {
+    _pollCustomerOrdersTimer = setInterval(pollCustomerOrdersLive, 1000);
   }
-  if (!_pollCustomerCommTimer && typeof pollCustomerCommunicationUpdates === 'function') {
-    _pollCustomerCommTimer = setInterval(pollCustomerCommunicationUpdates, 500);
+  if (!_pollCustomerCommTimer && typeof scheduleNextCustomerCommPoll === 'function') {
+    scheduleNextCustomerCommPoll();
+  } else if (!_pollCustomerCommTimer && typeof pollCustomerCommunicationUpdates === 'function') {
+    _pollCustomerCommTimer = setInterval(pollCustomerCommunicationUpdates, 1000);
   }
   if (!_loadNotificationsTimer && typeof loadNotifications === 'function') {
     _loadNotificationsTimer = setInterval(loadNotifications, 6000);
@@ -7142,7 +7166,7 @@ function openCustomerTrackingModal(orderId, meta) {
     if (activeCustomerTrackingOrderId) {
       fetchCustomerLiveTracking(activeCustomerTrackingOrderId, false);
     }
-  }, 500); // 500ms ultra-responsive real-time tracking loop
+  }, 1000); // 1000ms (1s) ultra-responsive real-time tracking loop
 }
 
 function closeCustomerTrackingModal() {
@@ -7512,9 +7536,9 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
 
     const isTrackTransitionToArrived = isLiveArrived && !wasTrackArrived;
     const arrivedAlertKey = 'fd_arrived_alert_seen_' + orderId;
-    const isAck = (sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1') || (sessionStorage.getItem('fd_arrival_acknowledged_all') === '1');
+    const isAck = (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1') 
+               || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
     const modal = document.getElementById('riderArrivedModal');
-    const isModalOpen = modal && (modal.style.display === 'flex' || modal.classList.contains('show'));
 
     // Instant Modal Pop-up on Arrival: if status is arrived and not acknowledged, display immediately
     if (isLiveArrived && !isAck) {
@@ -7525,11 +7549,11 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
       dismissLiveRiderBanner();
 
       // Prominently trigger arrival popup modal immediately
-      if (modal && !isModalOpen) {
+      if (modal) {
         modal.classList.add('show', 'active');
-        modal.style.display = 'flex';
-        modal.style.visibility = 'visible';
-        modal.style.pointerEvents = 'auto';
+        modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('visibility', 'visible', 'important');
+        modal.style.setProperty('pointer-events', 'auto', 'important');
       }
       if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
         FoodDashCall.triggerArrivalAlarm(orderId, currentTrackingRiderName || 'Rider');
@@ -7552,6 +7576,12 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
       dKm = calculateHaversineKm(riderLat, riderLng, destLat, destLng);
     }
     updateCustomerEtaBadge(dKm);
+
+    // If close to destination (dist <= 0.8km or near/arrived), maintain fast 1000ms polling rate
+    if ((dKm !== null && dKm <= 0.8) || isLiveArrived) {
+      window._customerPollIntervalMs = 1000;
+      window._customerCommIntervalMs = 1000;
+    }
 
     // Check for active incoming call from rider
     if (data.active_call && (data.active_call.status === 'ringing' || data.active_call.call_status === 'ringing') && (data.active_call.caller === 'rider' || data.active_call.caller_role === 'rider')) {
@@ -8777,10 +8807,8 @@ function handleRiderArrivedEvent(data) {
       (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) return;
   const oId = data.order_id || activeCustomerTrackingOrderId || 0;
   const isAck = Boolean(data.arrival_acknowledged) 
-    || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + oId) === '1')
-    || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1')
-    || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_acknowledged_all') === '1')
-    || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_acknowledged_all') === '1');
+    || (oId && typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + oId) === '1')
+    || (oId && typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1');
   if (isAck) {
     if (window.FoodDashCall) {
       FoodDashCall.stopArrivalAlarm();
@@ -8791,25 +8819,21 @@ function handleRiderArrivedEvent(data) {
   }
 
   const modal = document.getElementById('riderArrivedModal');
-  const isModalOpen = modal && (modal.style.display === 'flex' || modal.classList.contains('show'));
+  // Instant Modal Pop-up on Arrival: bypass lagging checks and immediately invoke modal & sound
+  if (modal) {
+    modal.classList.add('show', 'active');
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.setProperty('visibility', 'visible', 'important');
+    modal.style.setProperty('pointer-events', 'auto', 'important');
+  }
+  const rName = (data.rider_name || currentTrackingRiderName || 'Rider');
+  // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
+  dismissLiveRiderBanner();
 
-  // Instant Modal Pop-up on Arrival: immediately display modal if not currently open
-  if (!isModalOpen) {
-    if (modal) {
-      modal.classList.add('show', 'active');
-      modal.style.display = 'flex';
-      modal.style.visibility = 'visible';
-      modal.style.pointerEvents = 'auto';
-    }
-    const rName = (data.rider_name || currentTrackingRiderName || 'Waiting for Rider Assignment');
-    // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
-    dismissLiveRiderBanner();
-
-    if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
-      FoodDashCall.triggerArrivalAlarm(oId, rName);
-    } else if (typeof playArrivalAlertSound === 'function') {
-      playArrivalAlertSound();
-    }
+  if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
+    FoodDashCall.triggerArrivalAlarm(oId, rName);
+  } else if (typeof playArrivalAlertSound === 'function') {
+    playArrivalAlertSound();
   }
 
   updateOrderStatusToArrived(oId);
@@ -9022,9 +9046,22 @@ async function pollCustomerCommunicationUpdates() {
   }
 }
 
-// Continuously execute every 500ms on ALL screens for instant real-time telemetry sync
-pollCustomerCommunicationUpdates();
-_pollCustomerCommTimer = setInterval(pollCustomerCommunicationUpdates, 500);
+// Dynamic adaptive polling: 1000ms when close to destination or in transit, 1500-2000ms otherwise
+window._customerCommIntervalMs = 1200;
+
+function scheduleNextCustomerCommPoll() {
+  if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
+  if (_pollCustomerCommTimer) {
+    clearTimeout(_pollCustomerCommTimer);
+    clearInterval(_pollCustomerCommTimer);
+  }
+  _pollCustomerCommTimer = setTimeout(async () => {
+    try { await pollCustomerCommunicationUpdates(); } catch (e) {}
+    scheduleNextCustomerCommPoll();
+  }, window._customerCommIntervalMs || 1200);
+}
+
+scheduleNextCustomerCommPoll();
 
 // Check if navigating to a specific screen via hash (e.g. #orders, #cart)
 if (window.location.hash) {

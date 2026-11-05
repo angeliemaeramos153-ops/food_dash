@@ -21,6 +21,9 @@ if (!isset($_SESSION['user_id'], $_SESSION['role'])) {
 $user_id = (int)$_SESSION['user_id'];
 $role = strtolower(trim((string)$_SESSION['role']));
 $user_name = trim((string)($_SESSION['full_name'] ?? $_SESSION['username'] ?? 'User'));
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 
 // Ensure order_calls table exists
 try {

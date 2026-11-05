@@ -445,8 +445,20 @@
       return;
     }
 
-    // Completely halt any existing tracks or synthesizer intervals before starting a new loop
-    stopArrivalAlarm();
+    // Completely halt any existing synthesizer intervals and audio nodes before starting a fresh cycle
+    stopSynthLoop();
+    if (arrivalAudio) {
+      try {
+        arrivalAudio.pause();
+        arrivalAudio.currentTime = 0;
+      } catch (e) {}
+    }
+    if (window.arrivalAlertAudio) {
+      try {
+        window.arrivalAlertAudio.pause();
+        window.arrivalAlertAudio.currentTime = 0;
+      } catch (e) {}
+    }
     arrivalAlarmActive = true;
     arrivalAcknowledged = false;
 
@@ -1158,26 +1170,30 @@
         (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
       return;
     }
-    if (orderId && (
-      (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1') ||
-      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1')
-    )) {
-      arrivalAcknowledged = true;
-      return;
+    const oId = orderId || activeOrderId;
+    if (oId) {
+      if (
+        (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + oId) === '1') ||
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1')
+      ) {
+        arrivalAcknowledged = true;
+        return;
+      }
+    } else {
+      if (
+        (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_acknowledged_all') === '1') ||
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_acknowledged_all') === '1')
+      ) {
+        arrivalAcknowledged = true;
+        return;
+      }
     }
-    if (
-      (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_acknowledged_all') === '1') ||
-      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_acknowledged_all') === '1')
-    ) {
-      arrivalAcknowledged = true;
-      return;
-    }
-    if (arrivalAcknowledged && activeOrderId === orderId) return;
-    if (orderId && orderId !== activeOrderId) {
+    if (arrivalAcknowledged && activeOrderId === oId) return;
+    if (oId && oId !== activeOrderId) {
       arrivalAcknowledged = false;
     }
     initAudioContext();
-    activeOrderId = orderId;
+    activeOrderId = oId;
 
     const modal = document.getElementById('riderArrivedModal');
     const msgEl = document.getElementById('riderArrivedModalMsg');

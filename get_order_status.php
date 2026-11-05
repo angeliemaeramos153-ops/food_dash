@@ -24,6 +24,9 @@ function status_json_out(bool $success, string $message = '', array $extra = [],
 $user_id = (int)($_SESSION['user_id'] ?? 0);
 $user_name = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Customer';
 $role = strtolower(trim((string)($_SESSION['role'] ?? 'customer')));
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 
 $raw_input = file_get_contents('php://input');
 $json_input = json_decode($raw_input, true);

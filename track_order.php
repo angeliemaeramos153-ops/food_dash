@@ -1252,6 +1252,37 @@ async function pollRiderLocation() {
     }
     updateEtaBadge(distKm);
 
+    // SPEED UP ARRIVAL & IMMEDIATE MODAL TRIGGER
+    const sNorm = String(ord.status || data.status || '').toUpperCase().trim();
+    const dNorm = String(ord.delivery_status || data.delivery_status || '').toLowerCase().trim();
+    const isArrivedPayload = Boolean(data.is_arrived) || Boolean(ord.is_arrived)
+      || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(sNorm)
+      || ['arrived', 'arrived_destination'].includes(dNorm)
+      || (distKm !== null && distKm <= 0.035 && ['near_customer', 'on_delivery', 'on_the_way'].includes(dNorm));
+
+    // Dynamic adaptive polling rate: 1000ms when close to destination or in transit, 2000ms when far
+    if (isArrivedPayload || (distKm !== null && distKm <= 0.8) || ['near_customer', 'on_delivery', 'arrived'].includes(dNorm)) {
+      window._trackPollingIntervalMs = 1000;
+    } else {
+      window._trackPollingIntervalMs = 2000;
+    }
+
+    if (isArrivedPayload) {
+      const isAck = Boolean(data.arrival_acknowledged) || Boolean(ord.arrival_acknowledged)
+        || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
+        || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
+      if (isAck) {
+        if (window.FoodDashCall) {
+          FoodDashCall.stopArrivalAlarm();
+          FoodDashCall.stopAllTones();
+        }
+        stopArrivalAlertSound();
+      } else {
+        // Bypass any lagging checks: immediately trigger arrival modal and sound
+        handleRiderArrivedEvent(data.order || data);
+      }
+    }
+
     // Check for active incoming call from rider
     if (data.active_call && (data.active_call.status === 'ringing' || data.active_call.call_status === 'ringing') && (data.active_call.caller === 'rider' || data.active_call.caller_role === 'rider')) {
       handleIncomingCallAlert(data.active_call);
@@ -1959,9 +1990,7 @@ function handleRiderArrivedEvent(data) {
       (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) return;
   const isAck = Boolean(data.arrival_acknowledged) 
     || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
-    || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1')
-    || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_acknowledged_all') === '1')
-    || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_acknowledged_all') === '1');
+    || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
   if (isAck) {
     if (window.FoodDashCall) {
       FoodDashCall.stopArrivalAlarm();
@@ -1972,33 +2001,29 @@ function handleRiderArrivedEvent(data) {
   }
 
   const modal = document.getElementById('riderArrivedModal');
-  const isModalOpen = modal && (modal.style.display === 'flex' || modal.classList.contains('show'));
+  // Instant Modal Pop-up on Arrival: immediately bypass any lagging checks and trigger!
+  if (modal) {
+    modal.classList.add('show', 'active');
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.setProperty('visibility', 'visible', 'important');
+    modal.style.setProperty('pointer-events', 'auto', 'important');
+  }
+  // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
+  const banner = document.getElementById('liveRiderMessageBanner');
+  if (banner) {
+    banner.style.display = 'none';
+    banner.classList.remove('slide-down', 'show');
+  }
+  if (msgBannerTimeout) {
+    clearTimeout(msgBannerTimeout);
+    msgBannerTimeout = null;
+  }
 
-  // Instant Modal Pop-up on Arrival: immediately display modal if not currently open
-  if (!isModalOpen) {
-    if (modal) {
-      modal.classList.add('show', 'active');
-      modal.style.display = 'flex';
-      modal.style.visibility = 'visible';
-      modal.style.pointerEvents = 'auto';
-    }
-    // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
-    const banner = document.getElementById('liveRiderMessageBanner');
-    if (banner) {
-      banner.style.display = 'none';
-      banner.classList.remove('slide-down', 'show');
-    }
-    if (msgBannerTimeout) {
-      clearTimeout(msgBannerTimeout);
-      msgBannerTimeout = null;
-    }
-
-    const rName = data.rider_name || 'Alex';
-    if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
-      FoodDashCall.triggerArrivalAlarm(orderId, rName);
-    } else if (typeof playArrivalAlertSound === 'function') {
-      playArrivalAlertSound();
-    }
+  const rName = data.rider_name || 'Alex';
+  if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
+    FoodDashCall.triggerArrivalAlarm(orderId, rName);
+  } else if (typeof playArrivalAlertSound === 'function') {
+    playArrivalAlertSound();
   }
 
   // Update status badge on page to Arrived
@@ -2075,15 +2100,23 @@ async function pollOrderCommunication() {
   } catch (e) {}
 }
 
+window._trackPollingIntervalMs = 1000;
+let _trackPollTimer = null;
+
+async function executeTrackPollingCycle() {
+  if (window.isLoggingOut) return;
+  try {
+    await Promise.allSettled([pollRiderLocation(), pollOrderCommunication()]);
+  } catch (e) {}
+  if (!window.isLoggingOut) {
+    const delay = window._trackPollingIntervalMs || 1000;
+    _trackPollTimer = setTimeout(executeTrackPollingCycle, delay);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
-  pollRiderLocation();
-  pollOrderCommunication();
-  // Continuous 500ms ultra-responsive polling loop
-  pollTimer = setInterval(() => {
-    pollRiderLocation();
-    pollOrderCommunication();
-  }, 500);
+  executeTrackPollingCycle();
 });
 </script>
 </body>

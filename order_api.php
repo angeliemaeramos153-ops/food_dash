@@ -29,6 +29,9 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = (int)$_SESSION['user_id'];
 $user_name = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Customer';
 $role = strtolower(trim((string)($_SESSION['role'] ?? 'customer')));
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? '';

@@ -20,6 +20,10 @@ if (!isset($_SESSION['user_id'], $_SESSION['role'])) {
 
 $role = strtolower((string)$_SESSION['role']);
 $uid  = (int)$_SESSION['user_id'];
+$uname = trim((string)($_SESSION['full_name'] ?? $_SESSION['username'] ?? ''));
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 
 function distance_km($lat1, $lon1, $lat2, $lon2): float {
     $r = 6371.0088;
