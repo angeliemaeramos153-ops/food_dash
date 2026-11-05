@@ -13,6 +13,7 @@
   let ringtoneAudio = null;
   let arrivalAudio = null;
   let synthLoopInterval = null;
+  let arrivalMasterGain = null;
   let activeSynthNodes = [];
   let isMuted = false;
   let localMediaStream = null;
@@ -181,8 +182,11 @@
   let isChimePlaying = false;
 
   function playSynthArrivalAlarm() {
-    // If the arpeggio loop is already running, prevent duplicate restarts
-    if (synthLoopInterval && arrivalAlarmActive && !arrivalAcknowledged) {
+    // If arrival was already acknowledged, do not play
+    if (arrivalAcknowledged) return;
+
+    // If the arpeggio loop is already running, prevent duplicate restarts / stuttering
+    if (synthLoopInterval && arrivalAlarmActive) {
       return;
     }
     stopSynthLoop();
@@ -210,17 +214,28 @@
       }
 
       isChimePlaying = true;
-      setTimeout(() => { isChimePlaying = false; }, 2200);
+      setTimeout(() => { isChimePlaying = false; }, 2100);
 
       try {
         const now = audioCtx.currentTime;
-        // Calm, peaceful 4-note arpeggio phrase (C5 -> E5 -> G5 -> C6)
-        // Generously spaced at 380ms intervals: 0ms, 380ms, 760ms, 1140ms
+
+        // Dedicated arrival master gain node for instantaneous, clean cutoff on dismissal
+        if (!arrivalMasterGain) {
+          arrivalMasterGain = audioCtx.createGain();
+          arrivalMasterGain.gain.setValueAtTime(1.0, now);
+          arrivalMasterGain.connect(audioCtx.destination);
+        } else {
+          arrivalMasterGain.gain.cancelScheduledValues(now);
+          arrivalMasterGain.gain.setValueAtTime(1.0, now);
+        }
+
+        // Calm, unhurried 4-note music-box arpeggio phrase (C5 -> E5 -> G5 -> C6)
+        // Generously spaced at 350ms per note: Note 1 at 0ms, Note 2 at 350ms, Note 3 at 700ms, Note 4 at 1050ms
         const notes = [
           { freq: 523.25, time: 0.000, dur: 0.48, vol: 0.16 }, // Note 1: C5 at 0ms (480ms duration)
-          { freq: 659.25, time: 0.380, dur: 0.48, vol: 0.16 }, // Note 2: E5 at 380ms (480ms duration)
-          { freq: 783.99, time: 0.760, dur: 0.48, vol: 0.16 }, // Note 3: G5 at 760ms (480ms duration)
-          { freq: 1046.50, time: 1.140, dur: 0.85, vol: 0.18 }  // Note 4: C6 at 1140ms (rings out cleanly to ~2.0s)
+          { freq: 659.25, time: 0.350, dur: 0.48, vol: 0.16 }, // Note 2: E5 at 350ms (480ms duration)
+          { freq: 783.99, time: 0.700, dur: 0.48, vol: 0.16 }, // Note 3: G5 at 700ms (480ms duration)
+          { freq: 1046.50, time: 1.050, dur: 0.95, vol: 0.18 }  // Note 4: C6 at 1050ms (rings out cleanly to 2.0s)
         ];
 
         notes.forEach(n => {
@@ -242,11 +257,11 @@
           gain.gain.exponentialRampToValueAtTime(0.0001, decayEnd);
 
           osc.connect(gain);
-          gain.connect(audioCtx.destination);
+          gain.connect(arrivalMasterGain);
           osc.start(noteStart);
-          osc.stop(decayEnd + 0.03);
+          osc.stop(decayEnd + 0.05);
 
-          const nodeItem = { osc, gain };
+          const nodeItem = { osc, gain, noteStart, decayEnd };
           activeSynthNodes.push(nodeItem);
           osc.onended = () => {
             const idx = activeSynthNodes.indexOf(nodeItem);
@@ -263,9 +278,9 @@
     }
 
     playAlarmChime();
-    // Repeating interval set to peaceful 5000ms (5 seconds):
-    // Full 4-note melody phrase rings out (~2.0s), pauses in silence (~3.0s), then replays calmly
-    synthLoopInterval = setInterval(playAlarmChime, 5000);
+    // Repeating interval set to 6000ms (6 seconds):
+    // Full 4-note melody phrase rings out (~2.0s), pauses in total silence for 4 seconds (~4.0s), then replays calmly
+    synthLoopInterval = setInterval(playAlarmChime, 6000);
   }
 
   function stopSynthLoop() {
@@ -274,28 +289,46 @@
       synthLoopInterval = null;
     }
     isChimePlaying = false;
+
+    // Immediately ramp master gain down and disconnect
+    if (arrivalMasterGain && audioCtx) {
+      try {
+        const now = audioCtx.currentTime;
+        arrivalMasterGain.gain.cancelScheduledValues(now);
+        arrivalMasterGain.gain.setValueAtTime(arrivalMasterGain.gain.value, now);
+        arrivalMasterGain.gain.linearRampToValueAtTime(0.0001, now + 0.012);
+        const mg = arrivalMasterGain;
+        arrivalMasterGain = null;
+        setTimeout(() => {
+          try { mg.disconnect(); } catch (e) {}
+        }, 20);
+      } catch (e) {
+        try { arrivalMasterGain.disconnect(); } catch (e2) {}
+        arrivalMasterGain = null;
+      }
+    }
+
     if (activeSynthNodes && activeSynthNodes.length > 0) {
       const now = audioCtx ? audioCtx.currentTime : 0;
       activeSynthNodes.forEach(item => {
         try {
-          // Smoothly ramp gain down to 0 to prevent audio pops/clicks/static upon clearing
           if (item.gain && audioCtx) {
             item.gain.gain.cancelScheduledValues(now);
-            item.gain.gain.setValueAtTime(item.gain.gain.value, now);
-            item.gain.gain.linearRampToValueAtTime(0.0001, now + 0.015);
+            item.gain.gain.setValueAtTime(0.0001, now);
+            item.gain.disconnect();
           }
+        } catch (e) {}
+        try {
           if (item.osc) {
-            item.osc.stop(now + 0.02);
-            setTimeout(() => {
-              try {
-                item.osc.disconnect();
-                if (item.gain) item.gain.disconnect();
-              } catch (e) {}
-            }, 30);
+            item.osc.onended = null;
+            if (item.noteStart && item.noteStart > now) {
+              try { item.osc.stop(item.noteStart); } catch (e1) { try { item.osc.stop(); } catch (e2) {} }
+            } else {
+              try { item.osc.stop(now + 0.01); } catch (e1) { try { item.osc.stop(); } catch (e2) {} }
+            }
+            item.osc.disconnect();
           }
-        } catch (e) {
-          try { item.osc.stop(); item.osc.disconnect(); } catch (e2) {}
-        }
+        } catch (e) {}
       });
       activeSynthNodes = [];
     }
@@ -341,6 +374,8 @@
   }
 
   function stopArrivalAlarm() {
+    arrivalAcknowledged = true;
+    arrivalAlarmActive = false;
     stopSynthLoop();
     if (arrivalAudio) {
       try {
@@ -354,13 +389,15 @@
         window.arrivalAlertAudio.currentTime = 0;
       } catch (e) {}
     }
-    arrivalAlarmActive = false;
   }
   const stopArrivalAlarmAudio = stopArrivalAlarm;
 
   function playArrivalAlarmAudio() {
+    // If the arrival has already been acknowledged, do not play
+    if (arrivalAcknowledged) return;
+
     // If the persistent arrival alarm is already playing cleanly, do not duplicate or stack
-    if (arrivalAlarmActive && !arrivalAcknowledged && synthLoopInterval) {
+    if (arrivalAlarmActive && synthLoopInterval) {
       return;
     }
 
@@ -369,7 +406,7 @@
     arrivalAlarmActive = true;
     arrivalAcknowledged = false;
 
-    // Trigger exactly ONE clean, peaceful arpeggio chime per 5000ms cycle
+    // Trigger exactly ONE clean, peaceful arpeggio chime per 6000ms cycle
     playSynthArrivalAlarm();
 
     if ('vibrate' in navigator) {
@@ -1050,16 +1087,24 @@
       if (btn.dataset.arrivalAudioBound === 'true') return;
       btn.dataset.arrivalAudioBound = 'true';
       btn.addEventListener('click', function() {
-        stopArrivalAlarmAudio();
+        stopArrivalAlarm();
         stopAllTones();
         if (typeof window.stopArrivalAlertSound === 'function') {
-          window.stopArrivalAlertSound();
+          try { window.stopArrivalAlertSound(); } catch (e) {}
         }
-      });
+      }, true);
     });
   }
 
   function triggerArrivalAlarm(orderId, riderName) {
+    if (orderId && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1') {
+      arrivalAcknowledged = true;
+      return;
+    }
+    if (sessionStorage.getItem('fd_arrival_acknowledged_all') === '1') {
+      arrivalAcknowledged = true;
+      return;
+    }
     if (arrivalAcknowledged && activeOrderId === orderId) return;
     if (orderId && orderId !== activeOrderId) {
       arrivalAcknowledged = false;
@@ -1102,8 +1147,10 @@
       bindArrivalModalListeners(modal);
     }
 
-    // Play persistent looping arrival alarm audio
-    playArrivalAlarmAudio();
+    // Play persistent looping arrival alarm audio if not already running
+    if (!arrivalAlarmActive || !synthLoopInterval) {
+      playArrivalAlarmAudio();
+    }
   }
 
   function injectArrivalButtons(orderId) {
@@ -1112,25 +1159,26 @@
     const box = modal.querySelector('.fd-modal-box') || modal;
     let actionsWrap = box.querySelector('#riderArrivedActionButtons');
 
-    if (!actionsWrap) {
-      // Find old button container and replace
-      const oldButtons = box.querySelectorAll('button');
-      oldButtons.forEach(b => b.style.display = 'none');
+    const effectiveId = orderId || activeOrderId || 0;
+    const buttonsHtml = `
+      <button type="button" class="btn-arrival-action minute" onclick="FoodDashCall.acknowledgeArrival(${effectiveId}, 'Be there in a minute!')">
+        <i class="fa-solid fa-person-running"></i> Be there in a minute!
+      </button>
+      <button type="button" class="btn-arrival-action outside" onclick="FoodDashCall.acknowledgeArrival(${effectiveId}, 'Okay, Going outside!')">
+        <i class="fa-solid fa-door-open"></i> Okay, Going outside!
+      </button>
+      <a href="javascript:void(0)" onclick="FoodDashCall.viewTrackingMap(${effectiveId})" style="display:inline-block; margin-top:4px; font-size:11px; color:#15803d; font-weight:700; text-decoration:underline;">
+        View Live Tracking Map
+      </a>
+    `;
 
+    if (actionsWrap) {
+      actionsWrap.innerHTML = buttonsHtml;
+    } else {
       actionsWrap = document.createElement('div');
       actionsWrap.id = 'riderArrivedActionButtons';
       actionsWrap.style.cssText = 'display:flex; flex-direction:column; gap:10px; margin-top:14px;';
-      actionsWrap.innerHTML = `
-        <button type="button" class="btn-arrival-action minute" onclick="FoodDashCall.acknowledgeArrival(${orderId}, 'Be there in a minute!')">
-          <i class="fa-solid fa-person-running"></i> Be there in a minute!
-        </button>
-        <button type="button" class="btn-arrival-action outside" onclick="FoodDashCall.acknowledgeArrival(${orderId}, 'Okay, Going outside!')">
-          <i class="fa-solid fa-door-open"></i> Okay, Going outside!
-        </button>
-        <a href="javascript:void(0)" onclick="FoodDashCall.viewTrackingMap(${orderId})" style="display:inline-block; margin-top:4px; font-size:11px; color:#15803d; font-weight:700; text-decoration:underline;">
-          View Live Tracking Map
-        </a>
-      `;
+      actionsWrap.innerHTML = buttonsHtml;
       box.appendChild(actionsWrap);
     }
 
@@ -1138,38 +1186,49 @@
   }
 
   async function acknowledgeArrival(orderId, responseText) {
-    // 1. Immediately stop, pause and reset the looping arrival audio
-    if (orderId) {
-      sessionStorage.setItem('fd_arrival_ack_' + orderId, '1');
+    const resolvedOrderId = orderId || activeOrderId || (typeof window !== 'undefined' && (window.activeCustomerTrackingOrderId || window.orderId)) || 0;
+
+    // Immediately mark acknowledged in session storage to prevent poller loops from re-opening
+    if (resolvedOrderId) {
+      try { sessionStorage.setItem('fd_arrival_ack_' + resolvedOrderId, '1'); } catch (e) {}
     }
-    stopArrivalAlarmAudio();
-    stopAllTones();
-    if (typeof window.stopArrivalAlertSound === 'function') {
-      window.stopArrivalAlertSound();
-    }
+    try { sessionStorage.setItem('fd_arrival_acknowledged_all', '1'); } catch (e) {}
+
+    // 1. Immediately execute full audio engine cleanup
     arrivalAcknowledged = true;
     arrivalAlarmActive = false;
+    stopArrivalAlarm();
+    stopAllTones();
+    if (typeof window.stopArrivalAlertSound === 'function') {
+      try { window.stopArrivalAlertSound(); } catch (e) {}
+    }
 
-    // 2. Hide modal
+    // 2. Cleanly dismiss modal immediately without leaving state hanging
     const modal = document.getElementById('riderArrivedModal');
     if (modal) {
       modal.style.display = 'none';
+      modal.style.visibility = 'hidden';
+      modal.style.pointerEvents = 'none';
       modal.classList.remove('show', 'active');
+      const btns = modal.querySelectorAll('.btn-arrival-action, #riderArrivedActionButtons button');
+      btns.forEach(b => { b.disabled = true; });
     }
 
     // 3. Send live automatic response message into chat
-    try {
-      await fetch('order_communication_api.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'acknowledge_arrival',
-          order_id: orderId,
-          response: responseText
-        })
-      });
-    } catch (e) {
-      console.warn('Arrival acknowledge error:', e);
+    if (resolvedOrderId) {
+      try {
+        await fetch('order_communication_api.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'acknowledge_arrival',
+            order_id: resolvedOrderId,
+            response: responseText
+          })
+        });
+      } catch (e) {
+        console.warn('Arrival acknowledge error:', e);
+      }
     }
 
     // 4. Show friendly customer confirmation
@@ -1223,6 +1282,7 @@
     viewTrackingMap,
     stopAllTones,
     bindArrivalModalListeners,
+    getActiveOrderId: () => activeOrderId,
     setRole: (r) => { myRole = r; },
     getCallState: () => currentCallState
   };

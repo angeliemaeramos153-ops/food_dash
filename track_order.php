@@ -1704,13 +1704,13 @@ function playSynthArrivalAlarm() {
           trackSynthAudioCtx.resume().catch(() => {});
         }
         const now = trackSynthAudioCtx.currentTime;
-        // Calm, peaceful 4-note arpeggio phrase (C5 -> E5 -> G5 -> C6)
-        // Generously spaced at 380ms intervals: 0ms, 380ms, 760ms, 1140ms
+        // Calm, unhurried 4-note music-box arpeggio phrase (C5 -> E5 -> G5 -> C6)
+        // Generously spaced at 350ms per note: Note 1 at 0ms, Note 2 at 350ms, Note 3 at 700ms, Note 4 at 1050ms
         const notes = [
           { freq: 523.25, time: 0.000, dur: 0.48, vol: 0.16 }, // Note 1: C5 at 0ms (480ms duration)
-          { freq: 659.25, time: 0.380, dur: 0.48, vol: 0.16 }, // Note 2: E5 at 380ms (480ms duration)
-          { freq: 783.99, time: 0.760, dur: 0.48, vol: 0.16 }, // Note 3: G5 at 760ms (480ms duration)
-          { freq: 1046.50, time: 1.140, dur: 0.85, vol: 0.18 }  // Note 4: C6 at 1140ms (rings out cleanly to ~2.0s)
+          { freq: 659.25, time: 0.350, dur: 0.48, vol: 0.16 }, // Note 2: E5 at 350ms (480ms duration)
+          { freq: 783.99, time: 0.700, dur: 0.48, vol: 0.16 }, // Note 3: G5 at 700ms (480ms duration)
+          { freq: 1046.50, time: 1.050, dur: 0.95, vol: 0.18 }  // Note 4: C6 at 1050ms (rings out cleanly to 2.0s)
         ];
         notes.forEach(n => {
           const osc = trackSynthAudioCtx.createOscillator();
@@ -1729,22 +1729,23 @@ function playSynthArrivalAlarm() {
           osc.connect(gain);
           gain.connect(trackSynthAudioCtx.destination);
           osc.start(noteStart);
-          osc.stop(decayEnd + 0.03);
+          osc.stop(decayEnd + 0.05);
 
-          trackActiveOscillators.push(osc);
+          const nodeItem = { osc, gain, noteStart };
+          trackActiveOscillators.push(nodeItem);
           osc.onended = () => {
-            const idx = trackActiveOscillators.indexOf(osc);
+            const idx = trackActiveOscillators.indexOf(nodeItem);
             if (idx > -1) trackActiveOscillators.splice(idx, 1);
-            try { osc.disconnect(); } catch (e) {}
+            try { osc.disconnect(); gain.disconnect(); } catch (e) {}
           };
         });
       } catch (err) {}
     }
 
     chimeTick();
-    // Repeating interval set to peaceful 5000ms (5 seconds):
-    // Full 4-note melody phrase rings out (~2.0s), pauses in silence (~3.0s), then replays calmly
-    trackSynthLoopInterval = setInterval(chimeTick, 5000);
+    // Repeating interval set to 6000ms (6 seconds):
+    // Full 4-note melody phrase rings out (~2.0s), pauses in total silence for 4 seconds (~4.0s), then replays calmly
+    trackSynthLoopInterval = setInterval(chimeTick, 6000);
   } catch (e) {
     console.warn('Track synth chime error:', e);
   }
@@ -1757,8 +1758,26 @@ function stopArrivalAlertSound() {
     trackSynthLoopInterval = null;
   }
   if (trackActiveOscillators && trackActiveOscillators.length > 0) {
-    trackActiveOscillators.forEach(osc => {
-      try { osc.stop(); osc.disconnect(); } catch (e) {}
+    const now = trackSynthAudioCtx ? trackSynthAudioCtx.currentTime : 0;
+    trackActiveOscillators.forEach(item => {
+      try {
+        if (item.gain) {
+          item.gain.gain.cancelScheduledValues(now);
+          item.gain.gain.setValueAtTime(0.0001, now);
+          item.gain.disconnect();
+        }
+      } catch (e) {}
+      try {
+        if (item.osc) {
+          item.osc.onended = null;
+          if (item.noteStart && item.noteStart > now) {
+            try { item.osc.stop(item.noteStart); } catch (e1) { try { item.osc.stop(); } catch (e2) {} }
+          } else {
+            try { item.osc.stop(now + 0.01); } catch (e1) { try { item.osc.stop(); } catch (e2) {} }
+          }
+          item.osc.disconnect();
+        }
+      } catch (e) {}
     });
     trackActiveOscillators = [];
   }
@@ -1788,38 +1807,57 @@ window.stopArrivalAlertSound = stopArrivalAlertSound;
 window.stopArrivalAlarm = stopArrivalAlertSound;
 
 function closeRiderArrivedModal() {
+  if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
+    window.FoodDashCall.stopArrivalAlarm();
+  }
   stopArrivalAlertSound();
   const modal = document.getElementById('riderArrivedModal');
   if (modal) {
     modal.style.display = 'none';
+    modal.style.visibility = 'hidden';
+    modal.style.pointerEvents = 'none';
     modal.classList.remove('show', 'active');
   }
-  if (window.FoodDashCall) {
+  if (window.FoodDashCall && typeof window.FoodDashCall.stopAllTones === 'function') {
     FoodDashCall.stopAllTones();
   }
 }
 
 function respondToRiderArrival(responseOption) {
+  // Immediately invoke stopArrivalAlarm() for full cleanup
+  if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
+    window.FoodDashCall.stopArrivalAlarm();
+  }
   stopArrivalAlertSound();
-  if (orderId) {
-    sessionStorage.setItem('fd_arrival_ack_' + orderId, '1');
+
+  const oId = (typeof orderId !== 'undefined' ? orderId : 0)
+    || (window.FoodDashCall && typeof window.FoodDashCall.getActiveOrderId === 'function' ? window.FoodDashCall.getActiveOrderId() : 0);
+
+  if (oId) {
+    try { sessionStorage.setItem('fd_arrival_ack_' + oId, '1'); } catch (e) {}
   }
-  if (window.FoodDashCall) {
-    FoodDashCall.acknowledgeArrival(orderId, responseOption);
-  }
+  try { sessionStorage.setItem('fd_arrival_acknowledged_all', '1'); } catch (e) {}
+
   closeRiderArrivedModal();
+
+  if (window.FoodDashCall && typeof window.FoodDashCall.acknowledgeArrival === 'function') {
+    FoodDashCall.acknowledgeArrival(oId, responseOption);
+  }
 }
 
 function attachTrackArrivalModalListeners() {
   const modal = document.getElementById('riderArrivedModal');
   if (!modal) return;
-  const buttons = modal.querySelectorAll('.btn-arrival-action');
+  const buttons = modal.querySelectorAll('.btn-arrival-action, #riderArrivedActionButtons button');
   buttons.forEach(btn => {
     if (btn.dataset.arrivalAudioBound === 'true') return;
     btn.dataset.arrivalAudioBound = 'true';
     btn.addEventListener('click', function() {
+      if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
+        window.FoodDashCall.stopArrivalAlarm();
+      }
       stopArrivalAlertSound();
-    });
+    }, true);
   });
 }
 
@@ -1849,7 +1887,7 @@ function playArrivalAlertSound() {
 window.playArrivalAlertSound = playArrivalAlertSound;
 
 function handleRiderArrivedEvent(data) {
-  const isAck = Boolean(data.arrival_acknowledged) || (sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
+  const isAck = Boolean(data.arrival_acknowledged) || (sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1') || (sessionStorage.getItem('fd_arrival_acknowledged_all') === '1');
   if (isAck) {
     if (window.FoodDashCall) FoodDashCall.stopAllTones();
     stopArrivalAlertSound();
