@@ -3260,6 +3260,16 @@ async function initDeliveryMap(data) {
   deliveryMap.invalidateSize(true);
   if (window.riderMap) riderMap.invalidateSize(true);
   setupRiderMapObservers();
+  setupMapVisibilityMutationObserver();
+
+  // Fallback Container Initialization check if map is initialized while container is hidden
+  const mapElemInit = document.getElementById('delivery-map');
+  const parentCardInit = mapElemInit ? (mapElemInit.closest('.card') || mapElemInit.closest('#delivery') || mapElemInit.parentElement) : null;
+  const isHiddenInit = (mapElemInit && (window.getComputedStyle(mapElemInit).display === 'none' || mapElemInit.offsetParent === null)) ||
+                       (parentCardInit && window.getComputedStyle(parentCardInit).display === 'none');
+  if (isHiddenInit) {
+    setupMapVisibilityMutationObserver();
+  }
   setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(true); }, 250);
   setTimeout(() => {
     if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') {
@@ -3577,6 +3587,59 @@ function triggerMapResize(animate = true) {
   }
 }
 
+// 2. Fallback Container Initialization: If riderMap is initialized while the container is hidden,
+// add a MutationObserver on #delivery-map or the parent card so that as soon as display changes from none to block/flex, invalidateSize() fires automatically.
+function setupMapVisibilityMutationObserver() {
+  const mapElem = document.getElementById('delivery-map');
+  const parentCard = mapElem ? (mapElem.closest('.card') || mapElem.closest('#delivery') || mapElem.parentElement) : null;
+  const mapContainer = document.getElementById('rider-map-container') || (mapElem ? mapElem.parentElement : null);
+
+  const targets = [mapElem, parentCard, mapContainer].filter(Boolean);
+
+  if (typeof MutationObserver !== 'undefined') {
+    if (!window._mapDisplayMutationObserver) {
+      window._mapDisplayMutationObserver = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          const target = m.target;
+          if (target) {
+            const currentDisplay = window.getComputedStyle(target).display;
+            const prevDisplay = target._prevDisplay || (m.oldValue && m.oldValue.includes('display: none') ? 'none' : 'none');
+            target._prevDisplay = currentDisplay;
+
+            // As soon as display changes from 'none' to block/flex, invalidateSize() fires automatically
+            if (prevDisplay === 'none' && (currentDisplay === 'block' || currentDisplay === 'flex' || currentDisplay !== 'none')) {
+              if (typeof activeDeliveryData !== 'undefined' && activeDeliveryData && !window.riderMap && document.getElementById('delivery-map')) {
+                initDeliveryMap(activeDeliveryData);
+              }
+              if (window.riderMap && typeof window.riderMap.invalidateSize === 'function') {
+                window.riderMap.invalidateSize();
+              } else if (typeof riderMap !== 'undefined' && riderMap && typeof riderMap.invalidateSize === 'function') {
+                riderMap.invalidateSize();
+              }
+            } else if (currentDisplay === 'block' || currentDisplay === 'flex') {
+              if (window.riderMap && typeof window.riderMap.invalidateSize === 'function') {
+                window.riderMap.invalidateSize();
+              }
+            }
+          }
+        }
+      });
+    }
+
+    targets.forEach(el => {
+      if (el && !el._hasDisplayMutationObserved) {
+        el._hasDisplayMutationObserved = true;
+        el._prevDisplay = window.getComputedStyle(el).display;
+        window._mapDisplayMutationObserver.observe(el, {
+          attributes: true,
+          attributeFilter: ['style', 'class'],
+          attributeOldValue: true
+        });
+      }
+    });
+  }
+}
+
 // 1. Observer-Triggered Invalidation: Synchronously triggers riderMap.invalidateSize(true) the exact millisecond the panel becomes visible
 function setupRiderMapObservers() {
   const mapContainer = document.getElementById('rider-map-container') || document.querySelector('.rider-map-container') || document.getElementById('delivery-map');
@@ -3611,11 +3674,27 @@ function setupRiderMapObservers() {
     if (deliveryPanel) window._riderMapResizeObserver.observe(deliveryPanel);
   }
 
-  // Tab-click and pointerdown event listeners: exact millisecond invalidation
-  document.querySelectorAll('nav.bottom a, [href="#delivery"], .nav-item, .tab-btn, a[href^="#"]').forEach(el => {
+  // 1. Tab-click and pointerdown event listeners: exact millisecond invalidation & available-tab handling
+  document.querySelectorAll('nav.bottom a, [href*="available"], [href="#delivery"], .nav-item, .tab-btn, a[href^="#"]').forEach(el => {
     if (!el._hasRiderMapTabListener) {
       el._hasRiderMapTabListener = true;
-      const onTabSelect = () => {
+      const onTabSelect = function(e) {
+        const targetHref = (el.getAttribute('href') || '').toLowerCase();
+        const targetId = (el.id || '').toLowerCase();
+        const targetClass = (el.className || '').toLowerCase();
+
+        // Whenever the active tab or hash changes to include 'available'
+        if (targetHref.includes('available') || targetId.includes('available') || targetClass.includes('available')) {
+          setTimeout(function() {
+            if (typeof activeDeliveryData !== 'undefined' && activeDeliveryData && !window.riderMap && document.getElementById('delivery-map')) {
+              initDeliveryMap(activeDeliveryData);
+            }
+            if (window.riderMap) {
+              window.riderMap.invalidateSize();
+            }
+          }, 100);
+        }
+
         // Automatically triggered the exact millisecond user clicks the tab
         invalidateImmediate();
         requestAnimationFrame(invalidateImmediate);
@@ -3641,6 +3720,9 @@ function setupRiderMapObservers() {
     if (mapContainer) window._riderMapIntersectionObserver.observe(mapContainer);
     if (mapElem && mapElem !== mapContainer) window._riderMapIntersectionObserver.observe(mapElem);
   }
+
+  // Fallback display mutation observer for hidden container initialization
+  setupMapVisibilityMutationObserver();
 }
 
 if (document.readyState === 'loading') {
@@ -3650,6 +3732,20 @@ if (document.readyState === 'loading') {
     }
     initSimulator();
     setupRiderMapObservers();
+    setupMapVisibilityMutationObserver();
+
+    // Check if initial hash already includes available
+    if ((window.location.hash || '').toLowerCase().includes('available')) {
+      setTimeout(function() {
+        if (typeof activeDeliveryData !== 'undefined' && activeDeliveryData && !window.riderMap && document.getElementById('delivery-map')) {
+          initDeliveryMap(activeDeliveryData);
+        }
+        if (window.riderMap) {
+          window.riderMap.invalidateSize();
+        }
+      }, 100);
+    }
+
     // Ensure map invalidation runs after the DOM is fully interactive
     setTimeout(function() {
         if (typeof riderMap !== 'undefined' && riderMap !== null) {
@@ -3665,6 +3761,20 @@ if (document.readyState === 'loading') {
   }
   initSimulator();
   setupRiderMapObservers();
+  setupMapVisibilityMutationObserver();
+
+  // Check if initial hash already includes available
+  if ((window.location.hash || '').toLowerCase().includes('available')) {
+    setTimeout(function() {
+      if (typeof activeDeliveryData !== 'undefined' && activeDeliveryData && !window.riderMap && document.getElementById('delivery-map')) {
+        initDeliveryMap(activeDeliveryData);
+      }
+      if (window.riderMap) {
+        window.riderMap.invalidateSize();
+      }
+    }, 100);
+  }
+
   // Ensure map invalidation runs after the DOM is fully interactive
   setTimeout(function() {
       if (typeof riderMap !== 'undefined' && riderMap !== null) {
@@ -3677,6 +3787,7 @@ if (document.readyState === 'loading') {
 
 window.addEventListener('load', () => {
   setupRiderMapObservers();
+  setupMapVisibilityMutationObserver();
   [50, 200, 250, 500, 1000].forEach(delay => setTimeout(() => triggerMapResize(true), delay));
   setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(true); }, 250);
 });
@@ -3695,7 +3806,22 @@ window.addEventListener('orientationchange', () => {
     if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize(true);
   }, 200);
 });
-window.addEventListener('hashchange', () => {
+window.addEventListener('hashchange', (e) => {
+  const currentHash = (window.location.hash || '').toLowerCase();
+  const newUrl = (e && e.newURL ? e.newURL : '').toLowerCase();
+
+  // 1. Tab-Change & Hash Change Listener: Whenever active tab or hash changes to include 'available'
+  if (currentHash.includes('available') || newUrl.includes('available')) {
+    setTimeout(function() {
+      if (typeof activeDeliveryData !== 'undefined' && activeDeliveryData && !window.riderMap && document.getElementById('delivery-map')) {
+        initDeliveryMap(activeDeliveryData);
+      }
+      if (window.riderMap) {
+        window.riderMap.invalidateSize();
+      }
+    }, 100);
+  }
+
   if (window.riderMap && typeof window.riderMap.invalidateSize === 'function') {
     try { window.riderMap.invalidateSize(true); } catch(e) {}
   }
