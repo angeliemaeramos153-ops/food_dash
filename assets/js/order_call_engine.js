@@ -534,7 +534,7 @@
       topBanner.classList.remove('show', 'slide-down');
     }
     if (typeof window.dismissLiveRiderBanner === 'function') {
-      try { window.dismissLiveRiderBanner(); } catch (e) {}
+      try { window.dismissLiveRiderBanner(true); } catch (e) {}
     }
   }
   const resetArrivalState = clearArrivalState;
@@ -1341,6 +1341,16 @@
       textEl.textContent = `📍 Your rider has arrived outside with your order! Please meet outside to receive your order.`;
       topBanner.classList.add('slide-down', 'show');
       topBanner.style.display = 'flex';
+      if (typeof window !== 'undefined') {
+        window._bannerActiveUntil = Date.now() + 6500;
+        if (typeof window.dismissLiveRiderBanner === 'function') {
+          if (window._callEngineBannerTimer) clearTimeout(window._callEngineBannerTimer);
+          window._callEngineBannerTimer = setTimeout(() => {
+            window._bannerActiveUntil = 0;
+            window.dismissLiveRiderBanner(true);
+          }, 6500);
+        }
+      }
     }
 
     // Immediately chains directly into triggering the arrival alert modal

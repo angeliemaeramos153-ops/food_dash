@@ -746,8 +746,9 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
       </div>
       <div class="msg-banner-body" id="liveMsgBannerText">I'm outside with your order! 🛵</div>
     </div>
-    <div class="msg-banner-action">
-      <span class="tap-reply-pill">Reply <i class="fa-solid fa-chevron-right"></i></span>
+    <div class="msg-banner-action" style="display:flex; align-items:center; gap:8px;">
+      <span class="tap-reply-pill" id="liveMsgBannerActionPill">Reply <i class="fa-solid fa-chevron-right"></i></span>
+      <button type="button" class="btn-banner-close" onclick="event.stopPropagation(); dismissLiveRiderBanner(true);" aria-label="Close" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; width:26px; height:26px; border-radius:50%; font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; transition:background 0.2s;">&times;</button>
     </div>
   </div>
 
@@ -1256,6 +1257,7 @@ async function pollRiderLocation() {
     window._trackPollingIntervalMs = 2000;
 
     if (isArrivedPayload) {
+      window._wasTrackArrived = true;
       // 1. Instantly force-snap the rider marker to the destination coordinates
       if (riderMarker) {
         if (riderMarker._animFrameId) {
@@ -1316,44 +1318,42 @@ async function pollRiderLocation() {
         }
       }
     } else {
-      window._hasTriggeredArrivalModal = false;
-      // 1. Rider reset to store or changed status away from arrived (e.g. back to on_delivery)
-      // Clear any lingering arrival acknowledgment flags
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem('fd_arrival_ack_' + orderId);
-        localStorage.removeItem('fd_arrival_acknowledged_all');
-      }
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.removeItem('fd_arrival_ack_' + orderId);
-        sessionStorage.removeItem('fd_arrival_acknowledged_all');
-        sessionStorage.removeItem('fd_arrived_alert_seen_' + orderId);
-      }
-      hasShownArrivedAlert = false;
-      if (window.FoodDashCall && typeof window.FoodDashCall.clearArrivalState === 'function') {
-        window.FoodDashCall.clearArrivalState(orderId);
-      }
-
-      // 2. Remove stuck arrival banner & toasts
-      const banner = document.getElementById('liveRiderMessageBanner');
-      if (banner && (banner.textContent || '').includes('ARRIVED')) {
-        banner.style.display = 'none';
-        banner.classList.remove('slide-down', 'show');
-        if (msgBannerTimeout) {
-          clearTimeout(msgBannerTimeout);
-          msgBannerTimeout = null;
+      const wasArrived = Boolean(window._wasTrackArrived || hasShownArrivedAlert || window._hasTriggeredArrivalModal);
+      if (wasArrived) {
+        window._wasTrackArrived = false;
+        window._hasTriggeredArrivalModal = false;
+        // 1. Rider reset to store or changed status away from arrived (e.g. back to on_delivery)
+        // Clear any lingering arrival acknowledgment flags
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('fd_arrival_ack_' + orderId);
+          localStorage.removeItem('fd_arrival_acknowledged_all');
         }
-      }
-      document.querySelectorAll('.live-toast-banner, .cust-toast').forEach(el => el.remove());
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem('fd_arrival_ack_' + orderId);
+          sessionStorage.removeItem('fd_arrival_acknowledged_all');
+          sessionStorage.removeItem('fd_arrived_alert_seen_' + orderId);
+        }
+        hasShownArrivedAlert = false;
+        if (window.FoodDashCall && typeof window.FoodDashCall.clearArrivalState === 'function') {
+          window.FoodDashCall.clearArrivalState(orderId);
+        }
 
-      // 3. Close arrival modal & stop alarm
-      const modal = document.getElementById('riderArrivedModal');
-      if (modal) {
-        modal.classList.remove('show', 'active');
-        modal.style.setProperty('display', 'none', 'important');
-        modal.style.setProperty('visibility', 'hidden', 'important');
-        modal.style.setProperty('pointer-events', 'none', 'important');
+        // 2. Remove stuck arrival banner
+        const banner = document.getElementById('liveRiderMessageBanner');
+        if (banner && (banner.textContent || '').includes('ARRIVED')) {
+          dismissLiveRiderBanner(true);
+        }
+
+        // 3. Close arrival modal & stop alarm
+        const modal = document.getElementById('riderArrivedModal');
+        if (modal) {
+          modal.classList.remove('show', 'active');
+          modal.style.setProperty('display', 'none', 'important');
+          modal.style.setProperty('visibility', 'hidden', 'important');
+          modal.style.setProperty('pointer-events', 'none', 'important');
+        }
+        stopArrivalAlertSound();
       }
-      stopArrivalAlertSound();
 
       // 4. Instantly reset telemetry state on customer tracking map/UI
       if (riderMarker && !isNaN(rLat) && !isNaN(rLng) && rLat !== 0) {
@@ -1378,6 +1378,23 @@ async function pollRiderLocation() {
         else if (normDeliveryStatus === 'on_the_way') pillText = 'On The Way';
         pill.innerHTML = `<i class="fa-solid fa-motorcycle"></i> <span>${pillText}</span>`;
       });
+
+      // Stable Notification: Order Picked Up Detection
+      const isPickupStatus = ['ON_DELIVERY', 'OUT_FOR_DELIVERY', 'ON_THE_WAY'].includes(sNorm)
+                          || ['on_delivery', 'out_for_delivery', 'on_the_way', 'picked_up'].includes(dNorm);
+      const pickupKey = 'fd_track_pickup_seen_' + orderId;
+      if (isPickupStatus && sessionStorage.getItem(pickupKey) !== '1') {
+        sessionStorage.setItem(pickupKey, '1');
+        const rName = ord.rider_name || data.rider_name || 'Rider';
+        const cleanRef = '#' + String(ord.order_ref || ('FD-' + orderId)).replace(/^#+/, '');
+        const totalNum = parseFloat(ord.total_amount || ord.total_price || data.total_amount || 0).toFixed(2);
+        const formattedTotal = (totalNum > 0) ? ('₱' + Number(totalNum).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})) : '';
+        const pickupMsg = formattedTotal 
+          ? `Order ${cleanRef} has been picked up by ${rName}! Total due: ${formattedTotal}` 
+          : `Order ${cleanRef} has been picked up by ${rName}! On the way to you.`;
+
+        showTrackNotificationBanner('ORDER PICKED UP - READY FOR DELIVERY', pickupMsg, 6500);
+      }
     }
 
     // Check for active incoming call from rider
@@ -1755,6 +1772,104 @@ function playCustomerChime() {
 window.playMessageChime = playCustomerChime;
 window.playCustomerChime = playCustomerChime;
 
+let msgBannerTimeout = null;
+window._bannerActiveUntil = 0;
+
+function dismissLiveRiderBanner(force = false) {
+  if (!force && window._bannerActiveUntil && Date.now() < window._bannerActiveUntil) {
+    return;
+  }
+  const banner = document.getElementById('liveRiderMessageBanner');
+  if (banner) {
+    banner.classList.remove('slide-down', 'show');
+    banner.style.display = 'none';
+  }
+  if (msgBannerTimeout) {
+    clearTimeout(msgBannerTimeout);
+    msgBannerTimeout = null;
+  }
+  window._bannerActiveUntil = 0;
+}
+window.dismissLiveRiderBanner = dismissLiveRiderBanner;
+
+function showTrackNotificationBanner(title, text, durationMs = 6500, onClick = null) {
+  if (!text) return;
+  const banner = document.getElementById('liveRiderMessageBanner');
+  const titleEl = document.getElementById('liveMsgBannerTitle');
+  const textEl = document.getElementById('liveMsgBannerText');
+  const avatarEl = banner ? banner.querySelector('.msg-banner-avatar i') : null;
+  const actionPill = document.getElementById('liveMsgBannerActionPill');
+  if (!banner || !textEl) return;
+
+  const bTitle = (title || 'NOTIFICATION').toUpperCase();
+  const bText = String(text).trim();
+
+  // Dismiss any existing toast DOM elements
+  document.querySelectorAll('.live-toast-banner, .cust-toast').forEach(el => el.remove());
+
+  if (titleEl) titleEl.textContent = bTitle;
+  textEl.textContent = bText;
+
+  if (avatarEl) {
+    if (bTitle.includes('PICKED UP') || bTitle.includes('DELIVERY') || bTitle.includes('WAY')) {
+      avatarEl.className = 'fa-solid fa-motorcycle';
+    } else if (bTitle.includes('ARRIVED') || bTitle.includes('OUTSIDE') || bTitle.includes('LOCATION')) {
+      avatarEl.className = 'fa-solid fa-location-dot';
+    } else if (bTitle.includes('MESSAGE') || bTitle.includes('CHAT') || bTitle.includes('RIDER')) {
+      avatarEl.className = 'fa-solid fa-comment-dots';
+    } else {
+      avatarEl.className = 'fa-solid fa-bell';
+    }
+  }
+
+  if (actionPill) {
+    if (bTitle.includes('MESSAGE')) {
+      actionPill.innerHTML = `Reply <i class="fa-solid fa-chevron-right"></i>`;
+      actionPill.style.display = 'inline-flex';
+    } else if (bTitle.includes('ARRIVED')) {
+      actionPill.innerHTML = `View <i class="fa-solid fa-chevron-right"></i>`;
+      actionPill.style.display = 'inline-flex';
+    } else {
+      actionPill.style.display = 'none';
+    }
+  }
+
+  banner.onclick = (e) => {
+    if (e.target.closest('.btn-banner-close')) {
+      dismissLiveRiderBanner(true);
+      return;
+    }
+    if (typeof onClick === 'function') {
+      onClick();
+    } else if (bTitle.includes('MESSAGE') || bTitle.includes('CHAT')) {
+      openTrackChat();
+    } else if (bTitle.includes('ARRIVED')) {
+      const modal = document.getElementById('riderArrivedModal');
+      if (modal) {
+        modal.classList.add('show', 'active');
+        modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('visibility', 'visible', 'important');
+        modal.style.setProperty('pointer-events', 'auto', 'important');
+      }
+    }
+  };
+
+  banner.style.display = 'flex';
+  banner.classList.add('slide-down', 'show');
+
+  // Protect banner display duration against incoming 2-second polls
+  window._bannerActiveUntil = Date.now() + durationMs;
+
+  if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
+  msgBannerTimeout = setTimeout(() => {
+    window._bannerActiveUntil = 0;
+    dismissLiveRiderBanner(true);
+  }, durationMs);
+
+  playCustomerChime();
+}
+window.showTrackNotificationBanner = showTrackNotificationBanner;
+
 function handleLiveRiderMessage(msg) {
   if (!msg || !msg.message_id) return;
   const msgKey = 'msg_' + msg.message_id;
@@ -1766,27 +1881,7 @@ function handleLiveRiderMessage(msg) {
   }
 
   const senderName = msg.sender_name || 'Alex';
-
-  // Dismiss any existing toast / banner (strict single-toast queue)
-  document.querySelectorAll('.live-toast-banner, .cust-toast').forEach(el => el.remove());
-
-  // Show top floating push banner below header
-  const banner = document.getElementById('liveRiderMessageBanner');
-  const titleEl = document.getElementById('liveMsgBannerTitle');
-  const textEl = document.getElementById('liveMsgBannerText');
-  if (banner && textEl) {
-    if (titleEl) titleEl.textContent = `MESSAGE FROM RIDER (${senderName})`;
-    textEl.textContent = msg.message_text;
-    banner.style.display = 'flex';
-
-    if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
-    msgBannerTimeout = setTimeout(() => {
-      banner.style.display = 'none';
-    }, 4000);
-  }
-
-  // Play an alert notification sound
-  playCustomerChime();
+  showTrackNotificationBanner(`MESSAGE FROM RIDER (${senderName})`, msg.message_text, 6500, openTrackChat);
 
   // Update the unread badge counter in real time and append to chat drawer
   unreadChatCount++;
@@ -1987,11 +2082,7 @@ function closeRiderArrivedModal() {
     modal.style.setProperty('pointer-events', 'none', 'important');
     modal.classList.remove('show', 'active');
   }
-  const banner = document.getElementById('liveRiderMessageBanner');
-  if (banner) {
-    banner.style.display = 'none';
-    banner.classList.remove('slide-down', 'show');
-  }
+  dismissLiveRiderBanner(true);
   if (window.FoodDashCall && typeof window.FoodDashCall.stopAllTones === 'function') {
     FoodDashCall.stopAllTones();
   }
@@ -2186,15 +2277,7 @@ function handleRiderArrivedEvent(data = {}) {
 
   // 1. Sequential Execution: Toast notification banner renders first,
   // and its callback or immediate sequence explicitly triggers triggerArrivalModal() right after
-  const banner = document.getElementById('liveRiderMessageBanner');
-  const titleEl = document.getElementById('liveMsgBannerTitle');
-  const textEl = document.getElementById('liveMsgBannerText');
-  if (banner && textEl) {
-    if (titleEl) titleEl.textContent = `RIDER ARRIVED (${rName})`;
-    textEl.textContent = `📍 Your rider has arrived outside with your order! Please meet outside to receive your order.`;
-    banner.classList.add('slide-down', 'show');
-    banner.style.display = 'flex';
-  }
+  showTrackNotificationBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside to receive your order.`, 7000);
 
   const triggerModalSequence = () => {
     triggerArrivalModal(data);
@@ -2253,6 +2336,7 @@ async function pollOrderCommunication() {
     const isArrivedNow = Boolean(data.is_arrived) || ['arrived', 'arrived_destination'].includes(dNorm) || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(sNorm);
 
     if (isArrivedNow) {
+      window._wasTrackArrived = true;
       if (!window._hasTriggeredArrivalModal) {
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem('fd_arrival_ack_' + orderId);
@@ -2273,30 +2357,33 @@ async function pollOrderCommunication() {
         handleRiderArrivedEvent(data);
       }
     } else {
-      window._hasTriggeredArrivalModal = false;
-      // Clear lingering arrival flags if status moved away from arrived
-      try {
-        localStorage.removeItem('fd_arrival_ack_' + orderId);
-        sessionStorage.removeItem('fd_arrival_ack_' + orderId);
-        localStorage.removeItem('fd_arrival_acknowledged_all');
-        sessionStorage.removeItem('fd_arrival_acknowledged_all');
-      } catch (e) {}
-      if (window.FoodDashCall && typeof window.FoodDashCall.clearArrivalState === 'function') {
-        window.FoodDashCall.clearArrivalState(orderId);
-      }
-      hasShownArrivedAlert = false;
-      const modal = document.getElementById('riderArrivedModal');
-      if (modal) {
-        modal.classList.remove('show', 'active');
-        modal.style.setProperty('display', 'none', 'important');
-        modal.style.setProperty('visibility', 'hidden', 'important');
-        modal.style.setProperty('pointer-events', 'none', 'important');
-      }
-      stopArrivalAlertSound();
-      const banner = document.getElementById('liveRiderMessageBanner');
-      if (banner && (banner.textContent || '').includes('ARRIVED')) {
-        banner.style.display = 'none';
-        banner.classList.remove('slide-down', 'show');
+      const wasCommArrived = Boolean(window._wasTrackArrived || hasShownArrivedAlert || window._hasTriggeredArrivalModal);
+      if (wasCommArrived) {
+        window._wasTrackArrived = false;
+        window._hasTriggeredArrivalModal = false;
+        // Clear lingering arrival flags if status moved away from arrived
+        try {
+          localStorage.removeItem('fd_arrival_ack_' + orderId);
+          sessionStorage.removeItem('fd_arrival_ack_' + orderId);
+          localStorage.removeItem('fd_arrival_acknowledged_all');
+          sessionStorage.removeItem('fd_arrival_acknowledged_all');
+        } catch (e) {}
+        if (window.FoodDashCall && typeof window.FoodDashCall.clearArrivalState === 'function') {
+          window.FoodDashCall.clearArrivalState(orderId);
+        }
+        hasShownArrivedAlert = false;
+        const modal = document.getElementById('riderArrivedModal');
+        if (modal) {
+          modal.classList.remove('show', 'active');
+          modal.style.setProperty('display', 'none', 'important');
+          modal.style.setProperty('visibility', 'hidden', 'important');
+          modal.style.setProperty('pointer-events', 'none', 'important');
+        }
+        stopArrivalAlertSound();
+        const banner = document.getElementById('liveRiderMessageBanner');
+        if (banner && (banner.textContent || '').includes('ARRIVED')) {
+          dismissLiveRiderBanner(true);
+        }
       }
     }
     window._trackOrderPrevStatus = data.delivery_status || data.status;

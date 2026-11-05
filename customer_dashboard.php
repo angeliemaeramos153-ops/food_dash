@@ -6047,6 +6047,7 @@ async function pollCustomerOrdersLive() {
                   || ['arrived', 'arrived_destination'].includes(del_status)
                   || ['arrived', 'arrived_destination'].includes(status_lower)
                   || Boolean(ord.is_arrived);
+      const wasArrived = prevStatus && ['ARRIVED', 'ARRIVED_DESTINATION'].includes(prevStatus);
 
       // Consistent 2-second polling interval aligned with rider telemetry
       window._customerPollIntervalMs = 2000;
@@ -6087,7 +6088,7 @@ async function pollCustomerOrdersLive() {
         // Step 1: Lightweight notification banner appears first
         const rName = ord.rider_name || 'Rider';
         const cleanRef = '#' + String(ord.order_ref || ('FD-' + oId)).replace(/^#+/, '');
-        showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with order ${cleanRef}! Please meet outside.`);
+        showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with order ${cleanRef}! Please meet outside.`, null, 7000);
 
         // Step 2: Immediately chain directly into triggering the arrival alert modal and playing singleton music-box arpeggio without delay
         const triggerSequence = () => {
@@ -6100,7 +6101,7 @@ async function pollCustomerOrdersLive() {
         }
 
         if (typeof loadNotifications === 'function') loadNotifications();
-      } else if (!isArrived) {
+      } else if (wasArrived && !isArrived) {
         window._hasTriggeredArrivalModal = false;
         // Rider reset to store or changed status away from arrived (e.g. back to on_delivery)
         // Clear lingering arrival acknowledgment flags
@@ -6115,7 +6116,10 @@ async function pollCustomerOrdersLive() {
           FoodDashCall.clearArrivalState(oId);
         }
         // Remove stuck arrival banner
-        dismissLiveRiderBanner();
+        const banner = document.getElementById('liveRiderMessageBanner');
+        if (banner && (banner.textContent || '').includes('ARRIVED')) {
+          dismissLiveRiderBanner(true);
+        }
         // Hide arrival modal if open
         if (modal) {
           modal.classList.remove('show', 'active');
@@ -6138,7 +6142,7 @@ async function pollCustomerOrdersLive() {
           } else if (typeof showScreen === 'function') {
             showScreen('orders');
           }
-        });
+        }, 6500);
 
         // Dynamically update notification badge on header
         if (typeof loadNotifications === 'function') loadNotifications();
@@ -7623,7 +7627,7 @@ window.triggerArrivalModal = triggerArrivalModal;
 
       // Step 1: Lightweight notification banner appears first
       const rName = currentTrackingRiderName || ord.rider_name || 'Rider';
-      showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside.`);
+      showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside.`, null, 7000);
 
       // Step 2: Immediate sequence explicitly triggers triggerArrivalModal() right after
       const triggerSequence = () => {
@@ -7634,7 +7638,7 @@ window.triggerArrivalModal = triggerArrivalModal;
       } else {
         setTimeout(triggerSequence, 0);
       }
-    } else if (!isLiveArrived) {
+    } else if (wasTrackArrived && !isLiveArrived) {
       window._hasTriggeredArrivalModal = false;
       // Rider reset to store or changed status away from arrived
       try {
@@ -7647,7 +7651,10 @@ window.triggerArrivalModal = triggerArrivalModal;
       if (window.FoodDashCall && typeof window.FoodDashCall.clearArrivalState === 'function') {
         window.FoodDashCall.clearArrivalState(orderId);
       }
-      dismissLiveRiderBanner();
+      const banner = document.getElementById('liveRiderMessageBanner');
+      if (banner && (banner.textContent || '').includes('ARRIVED')) {
+        dismissLiveRiderBanner(true);
+      }
       if (modal) {
         modal.classList.remove('show', 'active');
         modal.style.setProperty('display', 'none', 'important');
@@ -8291,8 +8298,12 @@ window.stopArrivalAlarm = stopArrivalAlertSound;
 
 let msgBannerTimeout = null;
 const _customerRecentBanners = new Map();
+window._bannerActiveUntil = 0;
 
-function dismissLiveRiderBanner() {
+function dismissLiveRiderBanner(force = false) {
+  if (!force && window._bannerActiveUntil && Date.now() < window._bannerActiveUntil) {
+    return;
+  }
   const banner = document.getElementById('liveRiderMessageBanner');
   if (banner) {
     banner.classList.remove('show');
@@ -8303,9 +8314,10 @@ function dismissLiveRiderBanner() {
     clearTimeout(msgBannerTimeout);
     msgBannerTimeout = null;
   }
+  window._bannerActiveUntil = 0;
 }
 
-function showCustomerFloatingBanner(title, text, onClick = null) {
+function showCustomerFloatingBanner(title, text, onClick = null, durationMs = 6500) {
   if (!text) return;
   const banner = document.getElementById('liveRiderMessageBanner');
   const titleEl = document.getElementById('liveMsgBannerTitle');
@@ -8356,9 +8368,11 @@ function showCustomerFloatingBanner(title, text, onClick = null) {
 
   banner.onclick = (e) => {
     if (e.target.closest('.rct-close')) {
-      dismissLiveRiderBanner();
+      window._bannerActiveUntil = 0;
+      dismissLiveRiderBanner(true);
       return;
     }
+    window._bannerActiveUntil = 0;
     if (typeof onClick === 'function') onClick();
     else if (bannerTitle.includes('MESSAGE') || bannerTitle.includes('CHAT')) openChatFromBanner();
     else if (bannerTitle.includes('ORDER') || bannerTitle.includes('DELIVERY') || bannerTitle.includes('ARRIVED')) {
@@ -8372,10 +8386,14 @@ function showCustomerFloatingBanner(title, text, onClick = null) {
   banner.classList.add('slide-down');
   banner.classList.add('show');
 
+  // Protect banner display duration against incoming 2-second polls
+  window._bannerActiveUntil = now + durationMs;
+
   if (msgBannerTimeout) clearTimeout(msgBannerTimeout);
   msgBannerTimeout = setTimeout(() => {
-    dismissLiveRiderBanner();
-  }, 5500);
+    window._bannerActiveUntil = 0;
+    dismissLiveRiderBanner(true);
+  }, durationMs);
 
   playCustomerChime();
 }
@@ -8730,7 +8748,7 @@ function handleLiveRiderMessage(msg) {
 }
 
 function openChatFromBanner() {
-  dismissLiveRiderBanner();
+  dismissLiveRiderBanner(true);
   openCustomerChat();
 }
 
@@ -8766,7 +8784,7 @@ function closeRiderArrivedModal() {
     modal.style.setProperty('pointer-events', 'none', 'important');
     modal.classList.remove('show', 'active');
   }
-  dismissLiveRiderBanner();
+  dismissLiveRiderBanner(true);
   if (window.FoodDashCall && typeof window.FoodDashCall.stopAllTones === 'function') {
     FoodDashCall.stopAllTones();
   }
@@ -8965,8 +8983,8 @@ function handleRiderArrivedEvent(data) {
     modal.style.setProperty('pointer-events', 'auto', 'important');
   }
   const rName = (data.rider_name || currentTrackingRiderName || 'Rider');
-  // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
-  dismissLiveRiderBanner();
+  // Persistent arrival notification banner alongside center arrival modal
+  showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside.`, null, 7000);
 
   if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
     FoodDashCall.triggerArrivalAlarm(oId, rName);
