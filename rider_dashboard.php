@@ -36,8 +36,7 @@ if (!function_exists('normalize_delivery_coordinates')) {
             abs($fLat - 5.0) < 0.0001 ||
             $fLat < 10.95 || $fLat > 11.15 ||
             $fLng < 124.50 || $fLng > 124.75 ||
-            (abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001) ||
-            (abs($fLat - 11.01039) < 0.001)
+            (abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001)
         );
 
         if ($is_wlc_target || $is_corrupt) {
@@ -2883,7 +2882,6 @@ function isValidOrmocCoordinate(lat, lng) {
   if (isNaN(nLat) || isNaN(nLng)) return false;
   if (nLat < 10.95 || nLat > 11.15 || nLng < 124.50 || nLng > 124.75) return false;
   if (Math.abs(nLat - 11.0138) < 0.001 && Math.abs(nLng - 124.6040) < 0.001) return false;
-  if (Math.abs(nLat - 11.01039) < 0.001) return false;
   return true;
 }
 
@@ -3082,13 +3080,12 @@ function resolveDestinationCoordinates(orderData) {
     orderData?.lng
   );
 
-  // If destination coordinates are missing, corrupted (like 5.0, 11.01039), or Alta Vista default (~11.0138, 124.6040)
+  // If destination coordinates are missing, corrupted (like 5.0), or invalid
   const isInvalidCoordinate =
     isNaN(rawDestLat) ||
     isNaN(rawDestLng) ||
     !isValidOrmocCoordinate(rawDestLat, rawDestLng) ||
-    (Math.abs(rawDestLat - 11.0138) < 0.001 && Math.abs(rawDestLng - 124.6040) < 0.001) ||
-    (Math.abs(rawDestLat - 11.01039) < 0.001);
+    (Math.abs(rawDestLat - 11.0138) < 0.001 && Math.abs(rawDestLng - 124.6040) < 0.001);
 
   if (isInvalidCoordinate) {
     return {
@@ -3194,7 +3191,10 @@ async function initDeliveryMap(data) {
 
   // Default center: Ormoc City center (ensures map never stays unrendered/blank)
   const defaultOrmocCenter = [11.0050, 124.6075];
-  const initialCenter = hasCustomerCoord ? [cLat, cLng] : (hasStoreCoord ? [sLat, sLng] : (hasRiderCoord ? [rLat, rLng] : defaultOrmocCenter));
+  const activeOriginCoord = (hasRiderCoord && !data.is_initial_shop_origin) ? [rLat, rLng] : (hasStoreCoord ? [sLat, sLng] : null);
+  const initialCenter = (hasCustomerCoord && activeOriginCoord)
+    ? [(cLat + activeOriginCoord[0]) / 2, (cLng + activeOriginCoord[1]) / 2]
+    : (hasCustomerCoord ? [cLat, cLng] : (activeOriginCoord ? activeOriginCoord : defaultOrmocCenter));
   const initialZoom = (hasCustomerCoord || hasStoreCoord || hasRiderCoord) ? 15 : 14;
 
   // Initialize Leaflet Map with explicit center and zoom
@@ -3272,6 +3272,8 @@ async function initDeliveryMap(data) {
 
   if (hasCustomerCoord && activeOriginCoord) {
     const customerCoord = [cLat, cLng];
+    const initialBounds = L.latLngBounds([activeOriginCoord, customerCoord]);
+    deliveryMap.fitBounds(initialBounds, { padding: [50, 50], maxZoom: 16 });
     // Asynchronously fetch and render real-street OSRM road geometry
     loadAndDrawRoadRoute(activeOriginCoord[0], activeOriginCoord[1], customerCoord[0], customerCoord[1], true);
   } else if (hasCustomerCoord) {

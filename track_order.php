@@ -48,6 +48,10 @@ if ($order_id > 0) {
         COALESCE(o.store_lng, s.lng, s.lng, 124.6068) AS store_lng,
         COALESCE(o.delivery_lat, o.customer_lat, 11.0076) AS destination_lat,
         COALESCE(o.delivery_lng, o.customer_lng, 124.6089) AS destination_lng,
+        COALESCE(o.delivery_lat, o.customer_lat) AS delivery_lat,
+        COALESCE(o.delivery_lng, o.customer_lng) AS delivery_lng,
+        COALESCE(o.delivery_lat, o.customer_lat) AS customer_lat,
+        COALESCE(o.delivery_lng, o.customer_lng) AS customer_lng,
         COALESCE(o.rider_lat, r.current_lat) AS rider_lat,
         COALESCE(o.rider_lng, r.current_lng) AS rider_lng,
         COALESCE(r.rider_name, ru.full_name, o.rider_name, o.rider_fullname) AS rider_name,
@@ -988,8 +992,8 @@ if (window.FoodDashCall) {
 const orderId = <?= (int)$order_id ?>;
 const initStoreLat = <?= (float)($order['store_lat'] ?? 11.0062) ?>;
 const initStoreLng = <?= (float)($order['store_lng'] ?? 124.6068) ?>;
-const initDestLat = <?= (float)($order['destination_lat'] ?? 11.00762) ?>;
-const initDestLng = <?= (float)($order['destination_lng'] ?? 124.60749) ?>;
+const initDestLat = <?= (float)($order['destination_lat'] ?? $order['delivery_lat'] ?? $order['customer_lat'] ?? 11.00762) ?>;
+const initDestLng = <?= (float)($order['destination_lng'] ?? $order['delivery_lng'] ?? $order['customer_lng'] ?? 124.60749) ?>;
 const initRiderLat = <?= !empty($order['rider_lat']) ? (float)$order['rider_lat'] : 'null' ?>;
 const initRiderLng = <?= !empty($order['rider_lng']) ? (float)$order['rider_lng'] : 'null' ?>;
 
@@ -1243,7 +1247,13 @@ function initMap() {
   const startRiderLng = initRiderLng || initStoreLng;
 
   // Requirement 4: Center map on active rider coordinates if available
-  const defaultCenter = initRiderLat ? [initRiderLat, initRiderLng] : (initStoreLat ? [initStoreLat, initStoreLng] : [initDestLat, initDestLng]);
+  const validRider = !isNaN(startRiderLat) && !isNaN(startRiderLng) && startRiderLat !== 0;
+  const validDest = !isNaN(initDestLat) && !isNaN(initDestLng) && initDestLat !== 0;
+
+  // Requirement: Dynamically center between rider live telemetry and destination pin
+  const defaultCenter = (validRider && validDest)
+    ? [(startRiderLat + initDestLat) / 2, (startRiderLng + initDestLng) / 2]
+    : (validRider ? [startRiderLat, startRiderLng] : (validDest ? [initDestLat, initDestLng] : [initStoreLat, initStoreLng]));
   trackingMap = L.map('map', {
     zoomControl: true,
     attributionControl: false
@@ -1297,7 +1307,10 @@ function initMap() {
 
   fetchOsrmRoadPolyline(startRiderLat, startRiderLng, initDestLat, initDestLng);
 
-  if (initRiderLat) {
+  if (validRider && validDest) {
+    const bounds = L.latLngBounds([ [startRiderLat, startRiderLng], [initDestLat, initDestLng] ]);
+    trackingMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+  } else if (initRiderLat) {
     trackingMap.setView([initRiderLat, initRiderLng], 16);
   } else {
     const bounds = L.latLngBounds([ [startRiderLat, startRiderLng], [initDestLat, initDestLng] ]);
@@ -1342,8 +1355,11 @@ async function pollRiderLocation() {
     const ord = data.order;
     const rLat = parseFloat(data.lat ?? data.lat ?? data.rider_lat ?? ord.rider_lat);
     const rLng = parseFloat(data.lng ?? data.lng ?? data.rider_lng ?? ord.rider_lng);
-    const dLat = parseFloat(data.destination_lat || ord.destination_lat || initDestLat);
-    const dLng = parseFloat(data.destination_lng || ord.destination_lng || initDestLng);
+    const dLat = parseFloat(data.destination_lat || data.delivery_lat || ord.destination_lat || ord.delivery_lat || data.customer_lat || ord.customer_lat || initDestLat);
+    const dLng = parseFloat(data.destination_lng || data.delivery_lng || ord.destination_lng || ord.delivery_lng || data.customer_lng || ord.customer_lng || initDestLng);
+    if (destMarker && !isNaN(dLat) && !isNaN(dLng) && dLat !== 0) {
+      destMarker.setLatLng([dLat, dLng]);
+    }
 
     // Distance & ETA calculation matching rider dashboard
     let distKm = (typeof data.distance_km === 'number') ? data.distance_km : null;
@@ -1499,6 +1515,11 @@ async function pollRiderLocation() {
         animateMarkerTo(riderMarker, rLat, rLng, 1800);
         // Snap route polyline via OSRM roads
         fetchOsrmRoadPolyline(rLat, rLng, dLat, dLng);
+        if (isInitialPoll && trackingMap && !window._hasSyncedInitialBounds && !isNaN(dLat) && !isNaN(dLng) && dLat !== 0) {
+          window._hasSyncedInitialBounds = true;
+          const initBounds = L.latLngBounds([[rLat, rLng], [dLat, dLng]]);
+          trackingMap.fitBounds(initBounds, { padding: [50, 50], maxZoom: 16 });
+        }
       }
       updateEtaBadge(distKm);
 

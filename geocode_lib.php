@@ -371,14 +371,13 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
         $fLat = (isset($raw_lat) && is_numeric($raw_lat)) ? (float)$raw_lat : null;
         $fLng = (isset($raw_lng) && is_numeric($raw_lng)) ? (float)$raw_lng : null;
 
-        // Discard corrupted coordinates (like 5.0, 11.01039, or Alta Vista default 11.0138)
+        // Discard corrupted coordinates (like 5.0 or out-of-bounds)
         $is_invalid = (
             $fLat === null ||
             $fLng === null ||
             !is_valid_ormoc_coord($fLat, $fLng) ||
             abs($fLat - 5.0) < 0.0001 ||
-            (abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001) ||
-            (abs($fLat - 11.01039) < 0.001)
+            (abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001)
         );
 
         if ($is_invalid) {
@@ -460,18 +459,10 @@ if (!function_exists('apply_dynamic_geocoding_to_order')) {
         $order['customer_lat'] = $d_lat;
         $order['customer_lng'] = $d_lng;
 
-        if (isset($order['destination_lat']) || array_key_exists('destination_lat', $order)) {
-            $order['destination_lat'] = $d_lat;
-        }
-        if (isset($order['destination_lng']) || array_key_exists('destination_lng', $order)) {
-            $order['destination_lng'] = $d_lng;
-        }
-        if (isset($order['dest_lat']) || array_key_exists('dest_lat', $order)) {
-            $order['dest_lat'] = $d_lat;
-        }
-        if (isset($order['dest_lng']) || array_key_exists('dest_lng', $order)) {
-            $order['dest_lng'] = $d_lng;
-        }
+        $order['destination_lat'] = $d_lat;
+        $order['destination_lng'] = $d_lng;
+        $order['dest_lat'] = $d_lat;
+        $order['dest_lng'] = $d_lng;
 
         // 2. Dynamic Store Location: Query database (`stores` or `restaurants` table) based on the order's selected store ID
         if (!isset($conn) || !$conn) {

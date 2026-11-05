@@ -485,8 +485,10 @@ try {
                 COALESCE(fo.delivery_status, o.status, 'waiting') AS delivery_status,
                 'delivery' AS order_type,
                 COALESCE(fo.delivery_address, o.delivery_address, '') AS delivery_address,
-                COALESCE(fo.delivery_lat, o.delivery_lat) AS delivery_lat,
-                COALESCE(fo.delivery_lng, o.delivery_lng) AS delivery_lng,
+                COALESCE(fo.delivery_lat, fo.customer_lat, o.delivery_lat, o.customer_lat) AS delivery_lat,
+                COALESCE(fo.delivery_lng, fo.customer_lng, o.delivery_lng, o.customer_lng) AS delivery_lng,
+                COALESCE(fo.delivery_lat, fo.customer_lat, o.delivery_lat, o.customer_lat) AS destination_lat,
+                COALESCE(fo.delivery_lng, fo.customer_lng, o.delivery_lng, o.customer_lng) AS destination_lng,
                 COALESCE(r.rider_name, ru.full_name, o.rider_name, '') AS rider_name,
                 COALESCE(r.phone, ru.phone, fo.rider_phone, o.rider_phone, '') AS rider_phone,
                 COALESCE(fo.rider_lat, o.current_lat) AS current_lat,
@@ -520,8 +522,10 @@ try {
                     COALESCE(o.status, 'Pending') AS delivery_status,
                     'delivery' AS order_type,
                     COALESCE(o.delivery_address, '') AS delivery_address,
-                    o.delivery_lat,
-                    o.delivery_lng,
+                    COALESCE(o.delivery_lat, o.customer_lat) AS delivery_lat,
+                    COALESCE(o.delivery_lng, o.customer_lng) AS delivery_lng,
+                    COALESCE(o.delivery_lat, o.customer_lat) AS destination_lat,
+                    COALESCE(o.delivery_lng, o.customer_lng) AS destination_lng,
                     o.rider_name,
                     o.rider_phone,
                     o.current_lat,
@@ -7234,6 +7238,9 @@ function openCustomerTrackingModal(orderId, meta) {
     return;
   }
   activeCustomerTrackingOrderId = targetId;
+  if (meta) {
+    window._activeTrackingMeta = meta;
+  }
 
   const modal = document.getElementById('customerTrackingModal') || document.getElementById('trackingModal');
   if (modal) {
@@ -7575,8 +7582,18 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     // Dynamic Store Location: Fetched dynamically from database row via order_api
     const storeLat = parseFloat(data.store_lat || ord.store_lat);
     const storeLng = parseFloat(data.store_lng || ord.store_lng);
-    const destLat = parseFloat(data.destination_lat || data.dest_lat || ord.destination_lat || ord.customer_lat);
-    const destLng = parseFloat(data.destination_lng || data.dest_lng || ord.destination_lng || ord.customer_lng);
+    const destLat = parseFloat(
+      data.destination_lat ?? data.delivery_lat ?? data.dest_lat ?? data.customer_lat ??
+      ord.destination_lat ?? ord.delivery_lat ?? ord.dest_lat ?? ord.customer_lat ??
+      (window._activeTrackingMeta?.deliveryLat || window._activeTrackingMeta?.destLat) ??
+      (document.getElementById('order-card-' + orderId)?.getAttribute('data-delivery-lat') || undefined)
+    );
+    const destLng = parseFloat(
+      data.destination_lng ?? data.delivery_lng ?? data.dest_lng ?? data.customer_lng ??
+      ord.destination_lng ?? ord.delivery_lng ?? ord.dest_lng ?? ord.customer_lng ??
+      (window._activeTrackingMeta?.deliveryLng || window._activeTrackingMeta?.destLng) ??
+      (document.getElementById('order-card-' + orderId)?.getAttribute('data-delivery-lng') || undefined)
+    );
 
     // Read high-precision coordinates with fallback aliases
     const riderLat = parseFloat(data.rider_lat ?? data.lat ?? data.lat ?? ord.rider_lat);
@@ -7823,7 +7840,7 @@ function renderCustomerMap(opts) {
   const validRider = !isNaN(opts.riderLat) && !isNaN(opts.riderLng) && opts.riderLat !== 0;
 
   // Requirement: Ensure map initializes and centers on rider's active coordinates or Ormoc City
-  const center = validRider ? [opts.riderLat, opts.riderLng] : (validDest ? [opts.destLat, opts.destLng] : (validStore ? [opts.storeLat, opts.storeLng] : defaultCenter));
+  const center = (validRider && validDest) ? [(opts.riderLat + opts.destLat) / 2, (opts.riderLng + opts.destLng) / 2] : (validRider ? [opts.riderLat, opts.riderLng] : (validDest ? [opts.destLat, opts.destLng] : (validStore ? [opts.storeLat, opts.storeLng] : defaultCenter)));
 
   if (!custTrackingMap) {
     custTrackingMap = L.map('cust-tracking-map', {
@@ -7941,7 +7958,10 @@ function renderCustomerMap(opts) {
   if (opts.isInitial) {
     setTimeout(() => {
       custTrackingMap.invalidateSize();
-      if (validRider) {
+      if (validRider && validDest) {
+        const bounds = L.latLngBounds([[opts.riderLat, opts.riderLng], [opts.destLat, opts.destLng]]);
+        custTrackingMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+      } else if (validRider) {
         custTrackingMap.setView([opts.riderLat, opts.riderLng], 16);
       } else {
         const pointsToFit = [];
