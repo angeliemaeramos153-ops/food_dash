@@ -349,9 +349,30 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
         $clean = trim((string)($address ?? ''));
         $norm = strtolower($clean);
 
-        // 1. ABSOLUTE PRIORITY: Case-insensitive text-matching override
-        // If delivery address contains "western", "leyte", "college", "wlc", or "bonifacio",
-        // strictly override destination to WLC's exact campus center (11.0076, 124.6089), completely discarding corrupted values (e.g. 5.00000).
+        // 1. ABSOLUTE PRIORITY: Precise coordinates from database order record
+        // If valid latitude and longitude exist in the order record, strictly use them
+        // instead of overriding with hardcoded string keyword matches (e.g. Bonifacio street).
+        $fLat = (isset($raw_lat) && is_numeric($raw_lat)) ? (float)$raw_lat : null;
+        $fLng = (isset($raw_lng) && is_numeric($raw_lng)) ? (float)$raw_lng : null;
+
+        $has_valid_coords = (
+            $fLat !== null &&
+            $fLng !== null &&
+            is_valid_ormoc_coord($fLat, $fLng) &&
+            abs($fLat - 5.0) >= 0.0001 &&
+            !(abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001)
+        );
+
+        if ($has_valid_coords) {
+            return [
+                'lat' => $fLat,
+                'lng' => $fLng,
+                'name' => !empty($clean) ? $clean : 'Customer Destination',
+                'source' => 'db_verified'
+            ];
+        }
+
+        // 2. Keyword-based matching fallback (ONLY when valid coordinates are absent or corrupted)
         $is_wlc_or_bonifacio = (
             strpos($norm, 'western') !== false ||
             strpos($norm, 'college') !== false ||
@@ -368,41 +389,22 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
             ];
         }
 
-        $fLat = (isset($raw_lat) && is_numeric($raw_lat)) ? (float)$raw_lat : null;
-        $fLng = (isset($raw_lng) && is_numeric($raw_lng)) ? (float)$raw_lng : null;
-
-        // Discard corrupted coordinates (like 5.0 or out-of-bounds)
-        $is_invalid = (
-            $fLat === null ||
-            $fLng === null ||
-            !is_valid_ormoc_coord($fLat, $fLng) ||
-            abs($fLat - 5.0) < 0.0001 ||
-            (abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001)
-        );
-
-        if ($is_invalid) {
-            $fallback = geocode_address_fallback($clean);
-            if ($fallback && !empty($fallback['lat']) && !empty($fallback['lng'])) {
-                return [
-                    'lat' => (float)$fallback['lat'],
-                    'lng' => (float)$fallback['lng'],
-                    'name' => !empty($clean) ? $clean : 'Customer Destination',
-                    'source' => 'ormoc_fallback'
-                ];
-            }
+        // 3. Address geocoding fallback
+        $fallback = geocode_address_fallback($clean);
+        if ($fallback && !empty($fallback['lat']) && !empty($fallback['lng'])) {
             return [
-                'lat' => 11.0076,
-                'lng' => 124.6089,
-                'name' => !empty($clean) ? $clean : 'Western Leyte College (A. Bonifacio St.)',
-                'source' => 'wlc_campus_override'
+                'lat' => (float)$fallback['lat'],
+                'lng' => (float)$fallback['lng'],
+                'name' => !empty($clean) ? $clean : 'Customer Destination',
+                'source' => 'ormoc_fallback'
             ];
         }
 
         return [
-            'lat' => $fLat,
-            'lng' => $fLng,
-            'name' => !empty($clean) ? $clean : 'Customer Destination',
-            'source' => 'db_verified'
+            'lat' => 11.0076,
+            'lng' => 124.6089,
+            'name' => !empty($clean) ? $clean : 'Western Leyte College (A. Bonifacio St.)',
+            'source' => 'wlc_campus_override'
         ];
     }
 }
