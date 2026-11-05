@@ -7826,34 +7826,32 @@ function playSynthArrivalAlarm() {
           customerSynthAudioCtx.resume().catch(() => {});
         }
         const now = customerSynthAudioCtx.currentTime;
-        // Calm, unhurried 4-note music-box arpeggio phrase (C5 -> E5 -> G5 -> C6)
-        // Generously spaced at 350ms per note: Note 1 at 0ms, Note 2 at 350ms, Note 3 at 700ms, Note 4 at 1050ms
+        // 4-note ascending chord sequence: C5 (523.25Hz) -> E5 (659.25Hz) -> G5 (783.99Hz) -> C6 (1046.50Hz)
         const notes = [
-          { freq: 523.25, time: 0.000, dur: 0.48, vol: 0.16 }, // Note 1: C5 at 0ms (480ms duration)
-          { freq: 659.25, time: 0.350, dur: 0.48, vol: 0.16 }, // Note 2: E5 at 350ms (480ms duration)
-          { freq: 783.99, time: 0.700, dur: 0.48, vol: 0.16 }, // Note 3: G5 at 700ms (480ms duration)
-          { freq: 1046.50, time: 1.050, dur: 0.95, vol: 0.18 }  // Note 4: C6 at 1050ms (rings out cleanly to 2.0s)
+          { freq: 523.25, time: 0.0, dur: 0.6 }, // Note 1: 523.25 Hz (C5) at t = 0.0s, duration 0.6s
+          { freq: 659.25, time: 0.3, dur: 0.6 }, // Note 2: 659.25 Hz (E5) at t = 0.3s, duration 0.6s
+          { freq: 783.99, time: 0.6, dur: 0.6 }, // Note 3: 783.99 Hz (G5) at t = 0.6s, duration 0.6s
+          { freq: 1046.50, time: 0.9, dur: 0.8 }  // Note 4: 1046.50 Hz (C6) at t = 0.9s, duration 0.8s (final ringing note)
         ];
         notes.forEach(n => {
           const osc = customerSynthAudioCtx.createOscillator();
           const gain = customerSynthAudioCtx.createGain();
-          osc.type = 'triangle'; // Clean, sparkling music-box bell voice
-          osc.frequency.setValueAtTime(n.freq, now + n.time);
+          osc.type = 'sine'; // Soft, warm sine wave tone
+          const noteTime = now + n.time;
+          const noteEnd = noteTime + n.dur;
 
-          gain.gain.value = 0.0001;
-          const noteStart = now + n.time;
-          const decayEnd = noteStart + n.dur;
+          osc.frequency.setValueAtTime(n.freq, noteTime);
 
-          gain.gain.setValueAtTime(0.0001, noteStart);
-          gain.gain.linearRampToValueAtTime(n.vol, noteStart + 0.025);
-          gain.gain.exponentialRampToValueAtTime(0.0001, decayEnd);
+          // Connect to individual gain node: 0.15 at noteTime, smoothly ramps down exponentially
+          gain.gain.setValueAtTime(0.15, noteTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
 
           osc.connect(gain);
           gain.connect(customerSynthAudioCtx.destination);
-          osc.start(noteStart);
-          osc.stop(decayEnd + 0.05);
+          osc.start(noteTime);
+          osc.stop(noteEnd + 0.05);
 
-          const nodeItem = { osc, gain, noteStart };
+          const nodeItem = { osc, gain, noteStart: noteTime };
           customerActiveOscillators.push(nodeItem);
           osc.onended = () => {
             const idx = customerActiveOscillators.indexOf(nodeItem);
@@ -7865,9 +7863,9 @@ function playSynthArrivalAlarm() {
     }
 
     chimeTick();
-    // Repeating interval set to 6000ms (6 seconds):
-    // Full 4-note melody phrase rings out (~2.0s), pauses in total silence for 4 seconds (~4.0s), then replays calmly
-    customerSynthLoopInterval = setInterval(chimeTick, 6000);
+    // Repeating interval set to exactly 5000ms (5 seconds):
+    // Full 1.7-second melody plays out fully, rests in total silence for over 3 seconds, then repeats cleanly
+    customerSynthLoopInterval = setInterval(chimeTick, 5000);
   } catch (e) {
     console.warn('Customer synth chime error:', e);
   }
