@@ -830,6 +830,17 @@ a:active,
   opacity: 1 !important;
 }
 
+.sim-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
+.sim-modal[style*="display: none"],
+.sim-modal[style*="display:none"],
+#customerTrackingModal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
+#customerTrackingModal[style*="display: none"],
+#customerTrackingModal[style*="display:none"] {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
 .app {
   width: 100% !important;
   max-width: 440px;
@@ -6140,7 +6151,6 @@ async function pollCustomerOrdersLive() {
         }
         if (typeof stopArrivalAlertSound === 'function') stopArrivalAlertSound();
         _customerLastOrderStates[oId] = raw_status;
-      }
       } else if (isDelivering && (!alreadyAlerted || (prevStatus && !wasDelivering))) {
         sessionStorage.setItem(pickupKey, '1');
         const cleanRef = '#' + String(ord.order_ref || ('FD-' + oId)).replace(/^#+/, '');
@@ -6208,9 +6218,13 @@ function scheduleNextCustomerOrderPoll() {
 
 scheduleNextCustomerOrderPoll();
 
-document.addEventListener('DOMContentLoaded', () => {
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(pollCustomerOrdersLive, 300);
+  });
+} else {
   setTimeout(pollCustomerOrdersLive, 300);
-});
+}
 
 function accountNotice(section) {
   toast(section + ' clicked');
@@ -7191,8 +7205,10 @@ function openCustomerTrackingModal(orderId, meta) {
 
   const modal = document.getElementById('customerTrackingModal') || document.getElementById('trackingModal');
   if (modal) {
-    modal.classList.add('show');
-    modal.style.display = 'flex';
+    modal.classList.add('show', 'active');
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.setProperty('pointer-events', 'auto', 'important');
+    modal.style.setProperty('visibility', 'visible', 'important');
   }
 
   fetchCustomerLiveTracking(targetId, true);
@@ -7223,8 +7239,10 @@ function openCustomerTrackingModal(orderId, meta) {
 function closeCustomerTrackingModal() {
   const modal = document.getElementById('customerTrackingModal') || document.getElementById('trackingModal');
   if (modal) {
-    modal.classList.remove('show');
-    modal.style.display = 'none';
+    modal.classList.remove('show', 'active');
+    modal.style.setProperty('display', 'none', 'important');
+    modal.style.setProperty('pointer-events', 'none', 'important');
+    modal.style.setProperty('visibility', 'hidden', 'important');
   }
   if (custTrackingTimer) {
     clearInterval(custTrackingTimer);
@@ -10109,109 +10127,7 @@ function handlePayAction(e) {
 })();
 </script>
 
-<!-- Global Event Delegation for Mobile Webviews: All buttons, .card elements, and .add-to-cart-btn elements -->
-<script id="global-event-delegation-script">
-(function() {
-  var DELEGATION_SELECTOR = 'button, .card, .add-to-cart-btn';
 
-  function findDelegatedTarget(node) {
-    if (!node || node === document || node === document.body) return null;
-    return typeof node.closest === 'function' ? node.closest(DELEGATION_SELECTOR) : null;
-  }
-
-  function handleDelegatedAction(target, event) {
-    if (!target || target.disabled || target.getAttribute('disabled')) return;
-
-    // Avoid double-firing on quantity and add-to-cart buttons already handled by primary delegation
-    if (target.matches('.btn-qty-minus, .btn-qty-plus, .add, .add-to-cart-btn') || target.closest('.qty, .add, .add-to-cart-btn')) {
-      return;
-    }
-
-    // Execute inline or assigned onclick handler
-    if (typeof target.onclick === 'function') {
-      try {
-        target.onclick.call(target, event);
-        return;
-      } catch (err) {
-        console.error('Error in target onclick:', err);
-      }
-    }
-
-    // Programmatic click dispatch if not synthetic
-    if (!event.__isSyntheticTouchClick && typeof target.click === 'function') {
-      try {
-        var synClick = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
-        synClick.__isSyntheticTouchClick = true;
-        target.dispatchEvent(synClick);
-      } catch (e) {
-        target.click();
-      }
-    }
-  }
-
-  // Mobile Webview Touch Delegation
-  var touchTarget = null;
-  var touchMoved = false;
-  var startX = 0;
-  var startY = 0;
-  var lastHandled = 0;
-
-  document.addEventListener('touchstart', function(e) {
-    if (!e.touches || e.touches.length !== 1) return;
-    touchMoved = false;
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-    var target = document.elementFromPoint(startX, startY) || e.target;
-    touchTarget = findDelegatedTarget(target);
-  }, { passive: true, capture: true });
-
-  document.addEventListener('touchmove', function(e) {
-    if (!e.touches || e.touches.length !== 1) return;
-    var dx = Math.abs(e.touches[0].clientX - startX);
-    var dy = Math.abs(e.touches[0].clientY - startY);
-    if (dx > 10 || dy > 10) {
-      touchMoved = true;
-      touchTarget = null;
-    }
-  }, { passive: true, capture: true });
-
-  document.addEventListener('touchend', function(e) {
-    if (touchMoved || !touchTarget) {
-      touchTarget = null;
-      return;
-    }
-
-    var el = touchTarget;
-    touchTarget = null;
-
-    var now = Date.now();
-    if (now - lastHandled < 280) return;
-    lastHandled = now;
-
-    if (e.cancelable) {
-      e.preventDefault();
-    }
-
-    handleDelegatedAction(el, e);
-  }, { passive: false, capture: true });
-
-  // Click Delegation Fallback for Webview and Desktop
-  document.addEventListener('click', function(e) {
-    if (e.__isSyntheticTouchClick) return;
-
-    var now = Date.now();
-    if (now - lastHandled < 400) return;
-
-    var target = findDelegatedTarget(e.target);
-    if (!target) return;
-
-    // Avoid double-firing: add buttons and quantity buttons are handled by primary delegation and native/inline onclick
-    if (target.matches('.btn-qty-minus, .btn-qty-plus, .add, .add-to-cart-btn') || target.closest('.qty, .add, .add-to-cart-btn')) {
-      return;
-    }
-  }, { capture: true });
-})();
-</script>
 
 </body>
 </html>

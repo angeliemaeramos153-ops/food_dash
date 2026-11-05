@@ -660,7 +660,7 @@
     if (document.getElementById('synchronizedCallModal')) return;
 
     const modalHtml = `
-    <div id="synchronizedCallModal" class="fd-call-modal-overlay" style="display:none;">
+    <div id="synchronizedCallModal" class="fd-call-modal-overlay" style="display:none; pointer-events:none; visibility:hidden;">
       <div class="fd-call-card">
         <!-- Close button (only available if ended) -->
         <button type="button" class="fd-call-close-btn" id="fdCallCloseBtn" onclick="FoodDashCall.endCall()" style="display:none;">
@@ -740,6 +740,21 @@
         -webkit-backdrop-filter: blur(8px);
         padding: 16px;
         animation: fdFadeIn 0.25s ease;
+      }
+      .fd-call-modal-overlay:not(.active):not(.show),
+      .fd-call-modal-overlay[style*="display: none"],
+      .fd-call-modal-overlay[style*="display:none"] {
+        display: none !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
+        z-index: -9999 !important;
+      }
+      .fd-call-modal-overlay.active,
+      .fd-call-modal-overlay.show {
+        display: flex !important;
+        pointer-events: auto !important;
+        visibility: visible !important;
+        z-index: 99999999 !important;
       }
       .fd-call-card {
         background: #0f172a;
@@ -1001,11 +1016,17 @@
       stopAllTones();
       stopCallTimer();
       stopMicrophone();
-      modal.style.display = 'none';
+      modal.classList.remove('show', 'active');
+      modal.style.setProperty('display', 'none', 'important');
+      modal.style.setProperty('pointer-events', 'none', 'important');
+      modal.style.setProperty('visibility', 'hidden', 'important');
       return;
     }
 
-    modal.style.display = 'flex';
+    modal.classList.add('show', 'active');
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.setProperty('pointer-events', 'auto', 'important');
+    modal.style.setProperty('visibility', 'visible', 'important');
 
     if (state === 'calling') {
       const isOutgoing = (info.isOutgoing !== false);
@@ -1634,8 +1655,17 @@
 
   function init(role = 'customer') {
     myRole = role;
-    ensureCallModalDOM();
-    bindArrivalModalListeners();
+    if (typeof document !== 'undefined') {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+          ensureCallModalDOM();
+          bindArrivalModalListeners();
+        });
+      } else {
+        ensureCallModalDOM();
+        bindArrivalModalListeners();
+      }
+    }
   }
 
   // Expose global interface
