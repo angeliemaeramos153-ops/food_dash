@@ -6060,9 +6060,27 @@ async function pollCustomerOrdersLive() {
       );
 
       // Sequential Arrival Notification & Modal Chain
-      if (isArrived && !isArrivalAck && !window.isLoggingOut && 
+      if (isArrived && !window.isLoggingOut && 
           !(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') &&
           !(typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
+
+        // Remove premature flags on initial arrival detection so they never block modal execution
+        if (!window._hasTriggeredArrivalModal) {
+          try {
+            localStorage.removeItem('fd_arrival_ack_' + oId);
+            sessionStorage.removeItem('fd_arrival_ack_' + oId);
+            localStorage.removeItem('fd_arrival_acknowledged_all');
+            sessionStorage.removeItem('fd_arrival_acknowledged_all');
+          } catch (e) {}
+          if (window.FoodDashCall) {
+            window.FoodDashCall.arrivalAcknowledged = false;
+          }
+        } else if (isArrivalAck) {
+          if (typeof stopArrivalAlertSound === 'function') stopArrivalAlertSound();
+          _customerLastOrderStates[oId] = raw_status;
+          return;
+        }
+
         sessionStorage.setItem(arrivedKey, '1');
         window.displayedNotificationIds.add('arrived_' + oId);
 
@@ -6072,27 +6090,18 @@ async function pollCustomerOrdersLive() {
         showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with order ${cleanRef}! Please meet outside.`);
 
         // Step 2: Immediately chain directly into triggering the arrival alert modal and playing singleton music-box arpeggio without delay
-        if (modal) {
-          modal.classList.add('show', 'active');
-          modal.style.setProperty('display', 'flex', 'important');
-          modal.style.setProperty('visibility', 'visible', 'important');
-          modal.style.setProperty('pointer-events', 'auto', 'important');
-        }
-        if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
-          FoodDashCall.triggerArrivalAlarm(oId, rName);
-        } else if (typeof playSynthArrivalAlarm === 'function') {
-          playSynthArrivalAlarm();
-        } else if (typeof playArrivalAlertSound === 'function') {
-          playArrivalAlertSound();
-        }
-
-        // Update UI badges and cards to Arrived
-        if (typeof updateOrderStatusToArrived === 'function') {
-          updateOrderStatusToArrived(oId);
+        const triggerSequence = () => {
+          triggerArrivalModal({ order_id: oId, rider_name: rName, order: ord });
+        };
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(triggerSequence);
+        } else {
+          setTimeout(triggerSequence, 0);
         }
 
         if (typeof loadNotifications === 'function') loadNotifications();
-      } else if (!isArrived && (prevStatus === 'ARRIVED' || prevStatus === 'arrived' || !isDelivering)) {
+      } else if (!isArrived) {
+        window._hasTriggeredArrivalModal = false;
         // Rider reset to store or changed status away from arrived (e.g. back to on_delivery)
         // Clear lingering arrival acknowledgment flags
         try {
@@ -7565,8 +7574,50 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
                || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
     const modal = document.getElementById('riderArrivedModal');
 
+function triggerArrivalModal(data = {}) {
+  const oId = (data && data.order_id) || activeCustomerTrackingOrderId || (typeof orders !== 'undefined' && orders[0] ? (orders[0].order_id || orders[0].id) : 0);
+  const rName = (data && data.rider_name) || (data && data.order && data.order.rider_name) || currentTrackingRiderName || 'Rider';
+  const modal = document.getElementById('riderArrivedModal');
+  if (modal) {
+    modal.classList.add('show', 'active');
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.setProperty('visibility', 'visible', 'important');
+    modal.style.setProperty('pointer-events', 'auto', 'important');
+  }
+  if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
+    FoodDashCall.triggerArrivalAlarm(oId, rName);
+  } else if (typeof playSynthArrivalAlarm === 'function') {
+    playSynthArrivalAlarm();
+  } else if (typeof playArrivalAlertSound === 'function') {
+    playArrivalAlertSound();
+  }
+  if (typeof updateOrderStatusToArrived === 'function') {
+    updateOrderStatusToArrived(oId);
+  }
+  window._hasTriggeredArrivalModal = true;
+}
+window.triggerArrivalModal = triggerArrivalModal;
+
     // Sequential Arrival Notification & Modal Chain
-    if (isLiveArrived && !isAck) {
+    if (isLiveArrived) {
+      // Remove premature flags on initial arrival detection so they never block modal execution
+      if (!window._hasTriggeredArrivalModal) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('fd_arrival_ack_' + orderId);
+          localStorage.removeItem('fd_arrival_acknowledged_all');
+        }
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem('fd_arrival_ack_' + orderId);
+          sessionStorage.removeItem('fd_arrival_acknowledged_all');
+        }
+        if (window.FoodDashCall) {
+          window.FoodDashCall.arrivalAcknowledged = false;
+        }
+      } else if (isAck) {
+        if (typeof stopArrivalAlertSound === 'function') stopArrivalAlertSound();
+        return;
+      }
+
       sessionStorage.setItem(arrivedAlertKey, '1');
       window.displayedNotificationIds.add('arrived_' + orderId);
 
@@ -7574,23 +7625,17 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
       const rName = currentTrackingRiderName || ord.rider_name || 'Rider';
       showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside.`);
 
-      // Step 2: Immediately chain directly into triggering arrival alert modal and playing singleton music-box arpeggio without delay
-      if (modal) {
-        modal.classList.add('show', 'active');
-        modal.style.setProperty('display', 'flex', 'important');
-        modal.style.setProperty('visibility', 'visible', 'important');
-        modal.style.setProperty('pointer-events', 'auto', 'important');
+      // Step 2: Immediate sequence explicitly triggers triggerArrivalModal() right after
+      const triggerSequence = () => {
+        triggerArrivalModal({ order_id: orderId, rider_name: rName, order: ord });
+      };
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(triggerSequence);
+      } else {
+        setTimeout(triggerSequence, 0);
       }
-      if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
-        FoodDashCall.triggerArrivalAlarm(orderId, rName);
-      } else if (typeof playSynthArrivalAlarm === 'function') {
-        playSynthArrivalAlarm();
-      } else if (typeof playArrivalAlertSound === 'function') {
-        playArrivalAlertSound();
-      }
-
-      updateOrderStatusToArrived(orderId);
     } else if (!isLiveArrived) {
+      window._hasTriggeredArrivalModal = false;
       // Rider reset to store or changed status away from arrived
       try {
         localStorage.removeItem('fd_arrival_ack_' + orderId);

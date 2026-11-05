@@ -1284,16 +1284,33 @@
         (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + oId) === '1') ||
         (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1')
       ) {
-        arrivalAcknowledged = true;
-        return;
+        // Ensure premature localStorage arrival acknowledgment flags do not prevent modal execution on initial arrival
+        if (typeof window !== 'undefined' && !window._hasTriggeredArrivalModal) {
+          try {
+            localStorage.removeItem('fd_arrival_ack_' + oId);
+            sessionStorage.removeItem('fd_arrival_ack_' + oId);
+          } catch (e) {}
+          arrivalAcknowledged = false;
+        } else {
+          arrivalAcknowledged = true;
+          return;
+        }
       }
     } else {
       if (
         (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_acknowledged_all') === '1') ||
         (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_acknowledged_all') === '1')
       ) {
-        arrivalAcknowledged = true;
-        return;
+        if (typeof window !== 'undefined' && !window._hasTriggeredArrivalModal) {
+          try {
+            localStorage.removeItem('fd_arrival_acknowledged_all');
+            sessionStorage.removeItem('fd_arrival_acknowledged_all');
+          } catch (e) {}
+          arrivalAcknowledged = false;
+        } else {
+          arrivalAcknowledged = true;
+          return;
+        }
       }
     }
     if (arrivalAcknowledged && activeOrderId === oId) return;
@@ -1538,6 +1555,14 @@
     toggleMute,
     syncCallStatus,
     triggerArrivalAlarm,
+    triggerArrivalModal: (data) => {
+      if (typeof window !== 'undefined' && typeof window.triggerArrivalModal === 'function') {
+        return window.triggerArrivalModal(data);
+      }
+      const oId = (data && data.order_id) || activeOrderId;
+      const rName = (data && data.rider_name) || 'Rider';
+      return triggerArrivalAlarm(oId, rName);
+    },
     playArrivalAlarmAudio,
     playSynthArrivalAlarm,
     stopArrivalAlarm,

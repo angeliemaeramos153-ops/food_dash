@@ -1287,20 +1287,36 @@ async function pollRiderLocation() {
       }
       currentTrackOsrmPath = [];
 
-      const isAck = Boolean(data.arrival_acknowledged) || Boolean(ord.arrival_acknowledged)
-        || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
-        || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
-      if (isAck) {
-        if (window.FoodDashCall) {
-          FoodDashCall.stopArrivalAlarm();
-          FoodDashCall.stopAllTones();
+      // Remove premature flags on initial arrival detection so they never block modal execution
+      if (!window._hasTriggeredArrivalModal) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('fd_arrival_ack_' + orderId);
+          localStorage.removeItem('fd_arrival_acknowledged_all');
         }
-        stopArrivalAlertSound();
-      } else {
-        // Sequential Arrival Notification & Modal Chain
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem('fd_arrival_ack_' + orderId);
+          sessionStorage.removeItem('fd_arrival_acknowledged_all');
+        }
+        if (window.FoodDashCall) {
+          window.FoodDashCall.arrivalAcknowledged = false;
+        }
         handleRiderArrivedEvent(data.order || data);
+      } else {
+        const isAck = Boolean(data.arrival_acknowledged) || Boolean(ord.arrival_acknowledged)
+          || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
+          || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
+        if (isAck) {
+          if (window.FoodDashCall) {
+            FoodDashCall.stopArrivalAlarm();
+            FoodDashCall.stopAllTones();
+          }
+          stopArrivalAlertSound();
+        } else {
+          handleRiderArrivedEvent(data.order || data);
+        }
       }
     } else {
+      window._hasTriggeredArrivalModal = false;
       // 1. Rider reset to store or changed status away from arrived (e.g. back to on_delivery)
       // Clear any lingering arrival acknowledgment flags
       if (typeof localStorage !== 'undefined') {
@@ -2070,37 +2086,7 @@ function playArrivalAlertSound() {
 }
 window.playArrivalAlertSound = playArrivalAlertSound;
 
-function handleRiderArrivedEvent(data) {
-  if (window.isLoggingOut || 
-      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
-      (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) return;
-  const isAck = Boolean(data.arrival_acknowledged) 
-    || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
-    || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
-  if (isAck) {
-    if (window.FoodDashCall) {
-      FoodDashCall.stopArrivalAlarm();
-      FoodDashCall.stopAllTones();
-    }
-    stopArrivalAlertSound();
-    return;
-  }
-
-  const rName = data.rider_name || (data.order && data.order.rider_name) || 'Alex';
-
-  // Requirement 2: Sequential Arrival Notification & Modal Chain
-  // Step 1: Lightweight notification banner appears first
-  const banner = document.getElementById('liveRiderMessageBanner');
-  const titleEl = document.getElementById('liveMsgBannerTitle');
-  const textEl = document.getElementById('liveMsgBannerText');
-  if (banner && textEl) {
-    if (titleEl) titleEl.textContent = `RIDER ARRIVED (${rName})`;
-    textEl.textContent = `📍 Your rider has arrived outside with your order! Please meet outside to receive your order.`;
-    banner.classList.add('slide-down', 'show');
-    banner.style.display = 'flex';
-  }
-
-  // Step 2: Immediately chains directly into triggering the arrival alert modal and playing singleton music-box arpeggio without delay
+function triggerArrivalModal(data = {}) {
   const modal = document.getElementById('riderArrivedModal');
   if (modal) {
     modal.classList.add('show', 'active');
@@ -2108,6 +2094,8 @@ function handleRiderArrivedEvent(data) {
     modal.style.setProperty('visibility', 'visible', 'important');
     modal.style.setProperty('pointer-events', 'auto', 'important');
   }
+
+  const rName = (data && data.rider_name) || (data && data.order && data.order.rider_name) || document.getElementById('riderNameDisplay')?.textContent?.trim() || 'Alex';
 
   if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
     FoodDashCall.triggerArrivalAlarm(orderId, rName);
@@ -2118,8 +2106,8 @@ function handleRiderArrivedEvent(data) {
   }
 
   // Force-snap rider marker directly to destination coordinates & center map
-  const targetDestLat = (typeof initDestLat !== 'undefined' && initDestLat) ? initDestLat : (data.destination_lat || data.dest_lat || (data.order && data.order.destination_lat));
-  const targetDestLng = (typeof initDestLng !== 'undefined' && initDestLng) ? initDestLng : (data.destination_lng || data.dest_lng || (data.order && data.order.destination_lng));
+  const targetDestLat = (typeof initDestLat !== 'undefined' && initDestLat) ? initDestLat : ((data && data.destination_lat) || (data && data.dest_lat) || (data && data.order && data.order.destination_lat));
+  const targetDestLng = (typeof initDestLng !== 'undefined' && initDestLng) ? initDestLng : ((data && data.destination_lng) || (data && data.dest_lng) || (data && data.order && data.order.destination_lng));
   if (riderMarker && targetDestLat && targetDestLng) {
     if (riderMarker._animFrameId) {
       cancelAnimationFrame(riderMarker._animFrameId);
@@ -2155,7 +2143,71 @@ function handleRiderArrivedEvent(data) {
   if (distPillText) {
     distPillText.textContent = 'Road Distance: Arrived!';
   }
+
+  window._hasTriggeredArrivalModal = true;
 }
+window.triggerArrivalModal = triggerArrivalModal;
+
+function handleRiderArrivedEvent(data = {}) {
+  if (window.isLoggingOut || 
+      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) return;
+
+  // 2. Remove Premature Flags: Ensure localStorage arrival acknowledgment flags do not prevent
+  // the modal function from executing on initial arrival detection.
+  if (!window._hasTriggeredArrivalModal) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('fd_arrival_ack_' + orderId);
+      localStorage.removeItem('fd_arrival_acknowledged_all');
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('fd_arrival_ack_' + orderId);
+      sessionStorage.removeItem('fd_arrival_acknowledged_all');
+    }
+    if (window.FoodDashCall) {
+      window.FoodDashCall.arrivalAcknowledged = false;
+    }
+  } else {
+    // If already triggered in this arrival cycle, respect customer's actual acknowledgment
+    const isAck = Boolean(data.arrival_acknowledged) 
+      || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
+      || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
+    if (isAck) {
+      if (window.FoodDashCall) {
+        FoodDashCall.stopArrivalAlarm();
+        FoodDashCall.stopAllTones();
+      }
+      stopArrivalAlertSound();
+      return;
+    }
+  }
+
+  const rName = (data && data.rider_name) || (data && data.order && data.order.rider_name) || document.getElementById('riderNameDisplay')?.textContent?.trim() || 'Alex';
+
+  // 1. Sequential Execution: Toast notification banner renders first,
+  // and its callback or immediate sequence explicitly triggers triggerArrivalModal() right after
+  const banner = document.getElementById('liveRiderMessageBanner');
+  const titleEl = document.getElementById('liveMsgBannerTitle');
+  const textEl = document.getElementById('liveMsgBannerText');
+  if (banner && textEl) {
+    if (titleEl) titleEl.textContent = `RIDER ARRIVED (${rName})`;
+    textEl.textContent = `📍 Your rider has arrived outside with your order! Please meet outside to receive your order.`;
+    banner.classList.add('slide-down', 'show');
+    banner.style.display = 'flex';
+  }
+
+  const triggerModalSequence = () => {
+    triggerArrivalModal(data);
+  };
+
+  // Immediate sequence callback ensures the banner renders first, then explicitly triggers triggerArrivalModal()
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(triggerModalSequence);
+  } else {
+    setTimeout(triggerModalSequence, 0);
+  }
+}
+window.handleRiderArrivedEvent = handleRiderArrivedEvent;
 
 // 500ms background polling loop checking order_communication_api.php
 async function pollOrderCommunication() {
@@ -2201,13 +2253,27 @@ async function pollOrderCommunication() {
     const isArrivedNow = Boolean(data.is_arrived) || ['arrived', 'arrived_destination'].includes(dNorm) || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(sNorm);
 
     if (isArrivedNow) {
-      if (data.arrival_acknowledged) {
+      if (!window._hasTriggeredArrivalModal) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('fd_arrival_ack_' + orderId);
+          localStorage.removeItem('fd_arrival_acknowledged_all');
+        }
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem('fd_arrival_ack_' + orderId);
+          sessionStorage.removeItem('fd_arrival_acknowledged_all');
+        }
+        if (window.FoodDashCall) {
+          window.FoodDashCall.arrivalAcknowledged = false;
+        }
+        handleRiderArrivedEvent(data);
+      } else if (data.arrival_acknowledged || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')) {
         if (window.FoodDashCall) FoodDashCall.stopAllTones();
         stopArrivalAlertSound();
       } else {
         handleRiderArrivedEvent(data);
       }
     } else {
+      window._hasTriggeredArrivalModal = false;
       // Clear lingering arrival flags if status moved away from arrived
       try {
         localStorage.removeItem('fd_arrival_ack_' + orderId);
