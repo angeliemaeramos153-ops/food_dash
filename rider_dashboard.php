@@ -1023,9 +1023,9 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
 .order:last-child{margin-bottom:0}
 .order-ref{font-weight:700;font-size:.98rem;color:var(--olive-shadow)}
 .meta{font-size:.7rem;color:#555;margin-top:3px;line-height:1.55}
-.actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px;position:relative !important;z-index:20 !important;pointer-events:auto !important}
-.actions, .actions *, [id^="riderOrderActions_"], [id^="riderOrderActions_"] *, .rider-action-buttons, .rider-action-buttons *, .delivery-complete-summary, .delivery-complete-summary *, .rider-contact-actions, .rider-contact-actions *, .order, .card, #delivery { pointer-events: auto !important; touch-action: manipulation; }
-.btn{border:0;border-radius:10px;padding:10px;background:var(--olive-shadow);color:#fff;font-family:inherit;font-size:.72rem;font-weight:700;cursor:pointer;transition:.2s;position:relative !important;z-index:20 !important;pointer-events:auto !important;touch-action:manipulation}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px;position:relative !important;z-index:20 !important;pointer-events:auto !important;height:auto !important;min-height:fit-content !important;overflow:visible !important}
+.actions, .actions *, [id^="riderOrderActions_"], [id^="riderOrderActions_"] *, .rider-action-buttons, .rider-action-buttons *, .delivery-complete-summary, .delivery-complete-summary *, .rider-contact-actions, .rider-contact-actions *, .order, .card, #delivery, .btn, button { pointer-events: auto !important; touch-action: manipulation; height: auto; }
+.btn{border:0;border-radius:10px;padding:10px;background:var(--olive-shadow);color:#fff;font-family:inherit;font-size:.72rem;font-weight:700;cursor:pointer;transition:.2s;position:relative !important;z-index:20 !important;pointer-events:auto !important;touch-action:manipulation;height:auto !important;min-height:38px !important;overflow:visible !important}
 .btn:hover{filter:brightness(1.1)}
 .btn.secondary{background:#ece8d7;color:var(--olive-shadow)}
 .btn.warn{background:var(--harvest-sun);color:#fff}
@@ -1081,20 +1081,20 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
 /* Embedded Delivery Map & Custom Markers */
 #rider-map-container,
 .rider-map-container {
-  height: 320px !important;
-  min-height: 320px !important;
+  height: 300px !important;
+  min-height: 300px !important;
   width: 100% !important;
   position: relative;
   display: block;
   border-radius: 12px;
-  margin-bottom: 15px;
+  margin: 10px 0;
   overflow: hidden;
-  z-index: 1;
+  z-index: 5;
 }
 #delivery-map {
   width: 100% !important;
   height: 100% !important;
-  min-height: 320px !important;
+  min-height: 300px !important;
   border-radius: 12px;
   border: 1.5px solid #d4c5a5;
   box-shadow: inset 0 2px 6px rgba(0,0,0,0.06);
@@ -1900,7 +1900,7 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   $c_dial = preg_replace('/[^\+0-9]/', '', $c_phone_val);
   if (empty($c_dial)) $c_dial = '+639171234567';
   $c_name_val = !empty($o['customer_name']) ? trim($o['customer_name']) : 'Customer';
-?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div id="rider-map-container" class="rider-map-container" style="position: relative; width: 100%; height: 320px; margin-bottom: 15px; z-index: 1;">
+?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div id="rider-map-container" style="width: 100%; height: 300px; position: relative; margin: 10px 0; z-index: 5;">
     <div id="delivery-map" style="width: 100%; height: 100%;"></div>
 </div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div class="actions" id="riderOrderActions_<?=(int)$o['order_id']?>" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;position:relative !important;z-index:20 !important;pointer-events:auto !important;"><?php if($is_delivered_state): ?><div class="delivery-complete-summary" id="deliveryCompleteSummary_<?=(int)$o['order_id']?>" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;"><div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;"><i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i><span>Delivery Handover Completed!</span></div><div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">Delivery handover is confirmed. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:</div><button type="button" class="btn success full btn-open-clear" id="btnFinishClearTrigger_<?=(int)$o['order_id']?>" data-action="open-clear-modal" data-order-id="<?=(int)$o['order_id']?>" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(<?=(int)$o['order_id']?>)"><i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order</button></div><?php else: ?><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'near_customer'): ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'arrived'): ?><div style="background:#ecfdf5; border:1.5px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:10px; font-size:0.82rem; font-weight:700; text-align:center;"><i class="fa-solid fa-circle-check"></i> Arrived at Destination • Customer notified outside</div><?php else: ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full btn-open-handover" id="btnPromptHandover_<?=(int)$o['order_id']?>" data-action="prompt-handover" data-order-id="<?=(int)$o['order_id']?>" onclick="promptCompleteDelivery(<?=$o['order_id']?>)"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
@@ -3243,11 +3243,6 @@ async function initDeliveryMap(data) {
     attributionControl: false
   }).setView([targetCustLat, targetCustLng], 16);
 
-  window.deliveryMap = deliveryMap;
-  window.riderMap = deliveryMap;
-  riderMap = deliveryMap;
-  window.map = deliveryMap;
-
   // OpenStreetMap Tile Layer with reliable subdomains
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -3256,7 +3251,14 @@ async function initDeliveryMap(data) {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(deliveryMap);
 
-  // Immediately call invalidateSize right after map is created and attached to DOM
+  window.deliveryMap = deliveryMap;
+  window.riderMap = deliveryMap;
+  riderMap = deliveryMap;
+  window.map = deliveryMap;
+  var map = deliveryMap;
+
+  // Immediately followed instantly by map.invalidateSize()
+  map.invalidateSize();
   deliveryMap.invalidateSize(true);
   if (window.riderMap) riderMap.invalidateSize(true);
   setupRiderMapObservers();
@@ -3725,11 +3727,20 @@ function setupRiderMapObservers() {
   setupMapVisibilityMutationObserver();
 }
 
+// Ensure that L.map('delivery-map') runs immediately when the page loads, followed instantly by map.invalidateSize()
+function runImmediatePageMapInit() {
+  if (document.getElementById('delivery-map') && !window.riderMap && !deliveryMap) {
+    initDeliveryMap(activeDeliveryData || {});
+  } else if (deliveryMap || window.riderMap) {
+    if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
+    if (window.riderMap && typeof window.riderMap.invalidateSize === 'function') window.riderMap.invalidateSize();
+    if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
+  }
+}
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    if (activeDeliveryData && document.getElementById('delivery-map')) {
-      initDeliveryMap(activeDeliveryData);
-    }
+    runImmediatePageMapInit();
     initSimulator();
     setupRiderMapObservers();
     setupMapVisibilityMutationObserver();
@@ -3737,8 +3748,8 @@ if (document.readyState === 'loading') {
     // Check if initial hash already includes available
     if ((window.location.hash || '').toLowerCase().includes('available')) {
       setTimeout(function() {
-        if (typeof activeDeliveryData !== 'undefined' && activeDeliveryData && !window.riderMap && document.getElementById('delivery-map')) {
-          initDeliveryMap(activeDeliveryData);
+        if (!window.riderMap && document.getElementById('delivery-map')) {
+          initDeliveryMap(activeDeliveryData || {});
         }
         if (window.riderMap) {
           window.riderMap.invalidateSize();
@@ -3756,9 +3767,7 @@ if (document.readyState === 'loading') {
     setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(true); }, 250);
   });
 } else {
-  if (activeDeliveryData && document.getElementById('delivery-map')) {
-    initDeliveryMap(activeDeliveryData);
-  }
+  runImmediatePageMapInit();
   initSimulator();
   setupRiderMapObservers();
   setupMapVisibilityMutationObserver();
@@ -3766,8 +3775,8 @@ if (document.readyState === 'loading') {
   // Check if initial hash already includes available
   if ((window.location.hash || '').toLowerCase().includes('available')) {
     setTimeout(function() {
-      if (typeof activeDeliveryData !== 'undefined' && activeDeliveryData && !window.riderMap && document.getElementById('delivery-map')) {
-        initDeliveryMap(activeDeliveryData);
+      if (!window.riderMap && document.getElementById('delivery-map')) {
+        initDeliveryMap(activeDeliveryData || {});
       }
       if (window.riderMap) {
         window.riderMap.invalidateSize();
@@ -3786,6 +3795,7 @@ if (document.readyState === 'loading') {
 }
 
 window.addEventListener('load', () => {
+  runImmediatePageMapInit();
   setupRiderMapObservers();
   setupMapVisibilityMutationObserver();
   [50, 200, 250, 500, 1000].forEach(delay => setTimeout(() => triggerMapResize(true), delay));
