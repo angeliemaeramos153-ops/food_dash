@@ -1007,7 +1007,7 @@ html, body {
 .status{display:inline-flex;align-items:center;gap:7px;background:#ffffff1b;padding:7px 10px;border-radius:99px;font-size:.7rem;margin-top:8px}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--sandstone)}
 .dot.live{background:#a9d26a}
-main{padding:16px;flex:1;overflow-x:hidden}
+main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
 .alert{padding:11px 13px;background:#edf3d8;color:#43531b;border-radius:12px;margin-bottom:12px;font-size:.8rem}
 .alert.err{background:#fff0ed;color:var(--earth-clay)}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
@@ -1023,8 +1023,8 @@ main{padding:16px;flex:1;overflow-x:hidden}
 .order:last-child{margin-bottom:0}
 .order-ref{font-weight:700;font-size:.98rem;color:var(--olive-shadow)}
 .meta{font-size:.7rem;color:#555;margin-top:3px;line-height:1.55}
-.actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
-.btn{border:0;border-radius:10px;padding:10px;background:var(--olive-shadow);color:#fff;font-family:inherit;font-size:.72rem;font-weight:700;cursor:pointer;transition:.2s}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px;position:relative !important;z-index:20 !important;pointer-events:auto !important}
+.btn{border:0;border-radius:10px;padding:10px;background:var(--olive-shadow);color:#fff;font-family:inherit;font-size:.72rem;font-weight:700;cursor:pointer;transition:.2s;position:relative !important;z-index:20 !important;pointer-events:auto !important;touch-action:manipulation}
 .btn:hover{filter:brightness(1.1)}
 .btn.secondary{background:#ece8d7;color:var(--olive-shadow)}
 .btn.warn{background:var(--harvest-sun);color:#fff}
@@ -1079,8 +1079,8 @@ main{padding:16px;flex:1;overflow-x:hidden}
 }
 /* Embedded Delivery Map & Custom Markers */
 .rider-map-container {
-  height: 350px !important;
-  min-height: 350px !important;
+  height: 320px !important;
+  min-height: 320px !important;
   width: 100% !important;
   position: relative;
   display: block;
@@ -1089,9 +1089,9 @@ main{padding:16px;flex:1;overflow-x:hidden}
   overflow: hidden;
 }
 #delivery-map {
-  height: 350px !important;
-  min-height: 350px !important;
   width: 100% !important;
+  height: 320px !important;
+  min-height: 320px !important;
   border-radius: 12px;
   border: 1.5px solid #d4c5a5;
   box-shadow: inset 0 2px 6px rgba(0,0,0,0.06);
@@ -1103,7 +1103,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
 .leaflet-container {
   height: 100% !important;
   width: 100% !important;
-  min-height: 350px !important;
+  min-height: 320px !important;
   background-color: #f4f0df !important;
 }
 .leaflet-control-zoom {
@@ -1177,8 +1177,9 @@ main{padding:16px;flex:1;overflow-x:hidden}
 }
 .bottom i { font-size: 15px; margin-bottom: 0; }
 .bottom a.active { color: var(--olive-shadow); font-weight: 700; }
-.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:18px;z-index:1000}
-.modal.show{display:flex}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:18px;z-index:1000;pointer-events:none}
+.modal:not(.show){display:none !important;pointer-events:none !important;visibility:hidden !important}
+.modal.show{display:flex !important;pointer-events:auto !important;visibility:visible !important}
 #riderConfirmModal, #clearDeliveryModal{z-index:99999 !important}
 #riderCompletedOrdersModal{z-index:99998 !important}
 #gpsNoticeBanner, .gps-notice-banner, .gps-warning-box, .gps-floating-toast{display:none !important}
@@ -1896,7 +1897,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $c_dial = preg_replace('/[^\+0-9]/', '', $c_phone_val);
   if (empty($c_dial)) $c_dial = '+639171234567';
   $c_name_val = !empty($o['customer_name']) ? trim($o['customer_name']) : 'Customer';
-?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div class="rider-map-container" style="position: relative; width: 100%; height: 350px; min-height: 350px; margin-top: 12px; border-radius: 12px;"><div id="delivery-map" style="height: 350px; min-height: 350px; width: 100%; border-radius: 12px; display: block; position: relative;"></div></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div class="actions" id="riderOrderActions_<?=(int)$o['order_id']?>" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_delivered_state): ?><div class="delivery-complete-summary" id="deliveryCompleteSummary_<?=(int)$o['order_id']?>" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;"><div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;"><i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i><span>Delivery Handover Completed!</span></div><div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">Delivery handover is confirmed. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:</div><button type="button" class="btn success full btn-open-clear" id="btnFinishClearTrigger_<?=(int)$o['order_id']?>" data-action="open-clear-modal" data-order-id="<?=(int)$o['order_id']?>" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(<?=(int)$o['order_id']?>)"><i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order</button></div><?php else: ?><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'near_customer'): ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'arrived'): ?><div style="background:#ecfdf5; border:1.5px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:10px; font-size:0.82rem; font-weight:700; text-align:center;"><i class="fa-solid fa-circle-check"></i> Arrived at Destination • Customer notified outside</div><?php else: ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full btn-open-handover" id="btnPromptHandover_<?=(int)$o['order_id']?>" data-action="prompt-handover" data-order-id="<?=(int)$o['order_id']?>" onclick="promptCompleteDelivery(<?=$o['order_id']?>)"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
+?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div class="rider-map-container" style="position: relative; width: 100%; height: 320px; min-height: 320px; margin-top: 12px; border-radius: 12px; overflow: hidden;"><div id="delivery-map" style="width: 100%; height: 320px; display: block; position: relative;"></div></div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div class="actions" id="riderOrderActions_<?=(int)$o['order_id']?>" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"><?php if($is_delivered_state): ?><div class="delivery-complete-summary" id="deliveryCompleteSummary_<?=(int)$o['order_id']?>" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;"><div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;"><i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i><span>Delivery Handover Completed!</span></div><div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">Delivery handover is confirmed. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:</div><button type="button" class="btn success full btn-open-clear" id="btnFinishClearTrigger_<?=(int)$o['order_id']?>" data-action="open-clear-modal" data-order-id="<?=(int)$o['order_id']?>" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(<?=(int)$o['order_id']?>)"><i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order</button></div><?php else: ?><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'near_customer'): ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'arrived'): ?><div style="background:#ecfdf5; border:1.5px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:10px; font-size:0.82rem; font-weight:700; text-align:center;"><i class="fa-solid fa-circle-check"></i> Arrived at Destination • Customer notified outside</div><?php else: ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full btn-open-handover" id="btnPromptHandover_<?=(int)$o['order_id']?>" data-action="prompt-handover" data-order-id="<?=(int)$o['order_id']?>" onclick="promptCompleteDelivery(<?=$o['order_id']?>)"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
   $addr = trim((string)($o['delivery_address'] ?? ''));
   $coord_norm = normalize_delivery_coordinates($addr, $o['customer_lat'] ?? ($o['delivery_lat'] ?? null), $o['customer_lng'] ?? ($o['delivery_lng'] ?? null));
@@ -1906,11 +1907,11 @@ main{padding:16px;flex:1;overflow-x:hidden}
   $disp_ready_ref = '#' . ltrim(!empty($o['order_ref']) ? $o['order_ref'] : ('FD-' . $o['order_id']), '#');
 ?><div class="order"><div class="order-ref"><?=htmlspecialchars($disp_ready_ref)?></div><div class="meta"><b><?=htmlspecialchars($o['store_name'])?></b> • <?=htmlspecialchars($o['customer_name'])?><br><?=htmlspecialchars($o['items_summary'])?></div><div style="margin:5px 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><?=render_payment_badge($o['payment_method'] ?? 'Cash on Delivery (COD)')?><span style="font-weight:800;color:#0f172a;font-size:0.82rem;">₱<?=number_format((float)$o['total_amount'],2)?></span></div><div class="rider-address-card" style="margin:8px 0 10px;"><div class="rider-address-title"><i class="fa-solid fa-location-dot"></i> Delivery Address</div><div class="rider-address-text"><?=htmlspecialchars(!empty($addr) ? $addr : 'No delivery address provided')?></div><?php if($has_coords): ?><div class="rider-gps-pill"><i class="fa-solid fa-crosshairs"></i> GPS: <?=htmlspecialchars(number_format((float)$lat, 5))?>, <?=htmlspecialchars(number_format((float)$lng, 5))?></div><?php endif; ?></div><div style="margin-top:8px;"><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'claim')"><i class="fa-solid fa-motorcycle"></i> Accept / Pick Up Order</button></div></div><?php endforeach; else: ?><div class="empty">No unassigned ready orders.</div><?php endif; ?></div></section>
 <section class="section" id="live"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">📡 Live Location</h2><div id="gpsStatus" class="meta">Live location is off. Tap Share Live Location after starting a delivery.</div><button type="button" class="btn full" style="margin-top:10px" onclick="stopLiveLocation()">Stop Sharing</button></div></section><section class="section" id="guide"><div class="card"><h2 style="font-size:1rem;margin:0 0 8px">Customer Notification Flow</h2><div class="meta">When you accept an order, the customer is notified. When you start the trip, they receive an <b>On the Way</b> notification. When you tap <b>I'm Near Customer</b>, they receive the near-arrival notification. When delivered, the customer receives a final delivery notice.</div></div></section></main><nav class="bottom"><a class="active" href="#delivery"><i class="fa-solid fa-box"></i>Delivery</a><a href="#available"><i class="fa-solid fa-motorcycle"></i>Pickup</a><a href="#live"><i class="fa-solid fa-location-crosshairs"></i>Live</a><a href="#guide"><i class="fa-solid fa-circle-info"></i>Guide</a><a href="javascript:void(0)" onclick="openLogout()"><i class="fa-solid fa-right-from-bracket"></i>Logout</a></nav></div>
-<div class="modal" id="noteModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Notifications</h3><div id="notificationList" class="notification-list"><div class="empty">Loading...</div></div><div class="box-actions"><button class="close" onclick="markAllRead()">Mark all read</button><button class="close" onclick="closeNotifications()">Close</button></div></div></div>
-<div class="modal" id="logoutModal"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out.</p><div class="box-actions"><button class="close" onclick="closeLogout()">Cancel</button><a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
-<div class="modal" id="riderConfirmModal" style="display: none; z-index: 99999 !important;"><div class="box" style="text-align:center; max-width: 360px;"><div style="font-size: 2.2rem; margin-bottom: 6px;">🤝</div><h3 id="riderConfirmTitle" style="margin: 0 0 6px; color: var(--olive-shadow); font-size: 1.15rem;">Delivery Handover</h3><p id="riderConfirmMsg" style="font-size: 0.8rem; color: var(--muted); line-height: 1.45; margin: 0 0 16px;">Confirm delivery handover with customer?</p><div class="box-actions"><button type="button" class="close" id="cancelHandoverBtn" data-dismiss="modal" onclick="closeRiderConfirm()" style="margin-top:0;">Cancel</button><button type="button" class="btn success btn-confirm-handover" id="confirmHandoverBtn" style="background:#16a34a; font-weight:700; flex:1.2;"><i class="fa-solid fa-circle-check"></i> Confirm Handover</button></div></div></div>
+<div class="modal" id="noteModal" style="display: none; pointer-events: none;"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Notifications</h3><div id="notificationList" class="notification-list"><div class="empty">Loading...</div></div><div class="box-actions"><button class="close" onclick="markAllRead()">Mark all read</button><button class="close" onclick="closeNotifications()">Close</button></div></div></div>
+<div class="modal" id="logoutModal" style="display: none; pointer-events: none;"><div class="box"><img src="logo.jpg" alt="Food Dash"><h3>Log out of Food Dash?</h3><p>Your current session will be signed out.</p><div class="box-actions"><button class="close" onclick="closeLogout()">Cancel</button><a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="logout.php?confirm=1">Yes, Log Out</a></div></div></div>
+<div class="modal" id="riderConfirmModal" style="display: none; pointer-events: none; z-index: 99999 !important;"><div class="box" style="text-align:center; max-width: 360px;"><div style="font-size: 2.2rem; margin-bottom: 6px;">🤝</div><h3 id="riderConfirmTitle" style="margin: 0 0 6px; color: var(--olive-shadow); font-size: 1.15rem;">Delivery Handover</h3><p id="riderConfirmMsg" style="font-size: 0.8rem; color: var(--muted); line-height: 1.45; margin: 0 0 16px;">Confirm delivery handover with customer?</p><div class="box-actions"><button type="button" class="close" id="cancelHandoverBtn" data-dismiss="modal" onclick="closeRiderConfirm()" style="margin-top:0;">Cancel</button><button type="button" class="btn success btn-confirm-handover" id="confirmHandoverBtn" style="background:#16a34a; font-weight:700; flex:1.2;"><i class="fa-solid fa-circle-check"></i> Confirm Handover</button></div></div></div>
 <!-- Dedicated Clear Delivery Modal -->
-<div class="modal" id="clearDeliveryModal" style="display: none; z-index: 99999 !important;">
+<div class="modal" id="clearDeliveryModal" style="display: none; pointer-events: none; z-index: 99999 !important;">
   <div class="box" style="text-align:center; max-width: 360px;">
     <div style="font-size: 2.2rem; margin-bottom: 8px;">🏁</div>
     <h3 style="margin: 0 0 6px; color: var(--olive-shadow); font-size: 1.15rem;">Finish &amp; Clear Delivery?</h3>
@@ -1926,7 +1927,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
   </div>
 </div>
 <!-- Completed Orders Modal / Drawer -->
-<div class="modal" id="riderCompletedOrdersModal" style="z-index: 99998;">
+<div class="modal" id="riderCompletedOrdersModal" style="display: none; pointer-events: none; z-index: 99998 !important;">
   <div class="box" style="text-align: left; width: min(440px, 100%); max-height: 85vh; display: flex; flex-direction: column; padding: 18px 20px;">
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 12px;">
       <div style="display: flex; align-items: center; gap: 8px;">
@@ -1983,9 +1984,9 @@ main{padding:16px;flex:1;overflow-x:hidden}
   </div>
 </div>
 <!-- Rider Chat / Quick Message Modal -->
-<div class="modal" id="riderChatModal"><div class="chat-modal-box"><div class="chat-modal-header"><div style="display:flex;align-items:center;gap:8px;"><div class="chat-header-avatar"><i class="fa-solid fa-user"></i></div><div><h4 id="chatCustomerName" style="margin:0;font-size:13px;color:var(--olive-shadow);">Customer</h4><small id="chatCustomerPhone" style="font-size:10px;color:var(--muted);">+63 ...</small></div></div><button class="chat-close-btn" onclick="closeOrderChat()"><i class="fa-solid fa-xmark"></i></button></div><div class="quick-status-section"><div class="quick-title"><i class="fa-solid fa-bolt"></i> Quick Delivery Updates:</div><div class="quick-pills"><button type="button" class="quick-pill" onclick="sendQuickUpdate('I\'ve arrived outside with your order! 🛵')">🛵 I've arrived outside</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Traffic delay, on my way! 🚦')">🚦 Traffic delay, on my way</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Food picked up! Heading to your address now 🍱')">🍱 Heading to your address</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Please be ready at the gate/lobby 🚪')">🚪 Please be ready at gate</button></div></div><div id="chatMessagesList" class="chat-messages-container"><div class="chat-empty-hint">Loading conversation...</div></div><div class="chat-input-bar"><input type="text" id="chatInputText" placeholder="Type delivery message..." oninput="updateChatSmsLink(this.value)" onkeydown="if(event.key==='Enter') sendChatMessage()"><button type="button" class="chat-send-btn" onclick="sendChatMessage()" title="Send in App"><i class="fa-solid fa-paper-plane"></i></button><a href="javascript:void(0)" id="chatSmsLink" class="chat-sms-btn" target="_blank" title="Send via native SMS"><i class="fa-solid fa-comment-dots"></i> SMS</a></div></div></div>
+<div class="modal" id="riderChatModal" style="display: none; pointer-events: none;"><div class="chat-modal-box"><div class="chat-modal-header"><div style="display:flex;align-items:center;gap:8px;"><div class="chat-header-avatar"><i class="fa-solid fa-user"></i></div><div><h4 id="chatCustomerName" style="margin:0;font-size:13px;color:var(--olive-shadow);">Customer</h4><small id="chatCustomerPhone" style="font-size:10px;color:var(--muted);">+63 ...</small></div></div><button class="chat-close-btn" onclick="closeOrderChat()"><i class="fa-solid fa-xmark"></i></button></div><div class="quick-status-section"><div class="quick-title"><i class="fa-solid fa-bolt"></i> Quick Delivery Updates:</div><div class="quick-pills"><button type="button" class="quick-pill" onclick="sendQuickUpdate('I\'ve arrived outside with your order! 🛵')">🛵 I've arrived outside</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Traffic delay, on my way! 🚦')">🚦 Traffic delay, on my way</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Food picked up! Heading to your address now 🍱')">🍱 Heading to your address</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Please be ready at the gate/lobby 🚪')">🚪 Please be ready at gate</button></div></div><div id="chatMessagesList" class="chat-messages-container"><div class="chat-empty-hint">Loading conversation...</div></div><div class="chat-input-bar"><input type="text" id="chatInputText" placeholder="Type delivery message..." oninput="updateChatSmsLink(this.value)" onkeydown="if(event.key==='Enter') sendChatMessage()"><button type="button" class="chat-send-btn" onclick="sendChatMessage()" title="Send in App"><i class="fa-solid fa-paper-plane"></i></button><a href="javascript:void(0)" id="chatSmsLink" class="chat-sms-btn" target="_blank" title="Send via native SMS"><i class="fa-solid fa-comment-dots"></i> SMS</a></div></div></div>
 <!-- Desktop / Simulator Outgoing Call Modal -->
-<div class="modal" id="riderCallModal" onclick="if(event.target===this)endRiderCall()"><div class="box rider-call-box"><div class="call-avatar-pulse"><div class="call-pulse-circle"></div><div class="call-avatar-icon"><i class="fa-solid fa-phone-volume"></i></div></div><div class="call-badge-live"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> IN-APP CALL ACTIVE</div><h3 id="modalCallCustName" style="margin:0 0 4px;font-size:1.25rem;">Customer</h3><div class="modal-call-phone" id="modalCallCustPhone">+63 917 123 4567</div><p id="modalCallStatusText" class="modal-call-status">Ringing customer's device in real-time... (Incoming call banner displayed on customer map)</p><div class="modal-call-timer" id="modalCallTimer" style="display:none;">00:00</div><div class="call-modal-buttons"><button type="button" class="btn call-sim-btn" id="btnSimulateConnect" onclick="simulateCallConnect()"><i class="fa-solid fa-headset"></i> Test Connected Call</button><a href="javascript:void(0)" id="modalCallNativeTelBtn" class="btn call-native-btn" title="Open native phone dialer"><i class="fa-solid fa-mobile-screen-button"></i> Open Native Dialer</a><button type="button" class="btn call-end-btn" onclick="endRiderCall()"><i class="fa-solid fa-phone-slash"></i> End Call</button></div></div></div>
+<div class="modal" id="riderCallModal" style="display: none; pointer-events: none;" onclick="if(event.target===this)endRiderCall()"><div class="box rider-call-box"><div class="call-avatar-pulse"><div class="call-pulse-circle"></div><div class="call-avatar-icon"><i class="fa-solid fa-phone-volume"></i></div></div><div class="call-badge-live"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> IN-APP CALL ACTIVE</div><h3 id="modalCallCustName" style="margin:0 0 4px;font-size:1.25rem;">Customer</h3><div class="modal-call-phone" id="modalCallCustPhone">+63 917 123 4567</div><p id="modalCallStatusText" class="modal-call-status">Ringing customer's device in real-time... (Incoming call banner displayed on customer map)</p><div class="modal-call-timer" id="modalCallTimer" style="display:none;">00:00</div><div class="call-modal-buttons"><button type="button" class="btn call-sim-btn" id="btnSimulateConnect" onclick="simulateCallConnect()"><i class="fa-solid fa-headset"></i> Test Connected Call</button><a href="javascript:void(0)" id="modalCallNativeTelBtn" class="btn call-native-btn" title="Open native phone dialer"><i class="fa-solid fa-mobile-screen-button"></i> Open Native Dialer</a><button type="button" class="btn call-end-btn" onclick="endRiderCall()"><i class="fa-solid fa-phone-slash"></i> End Call</button></div></div></div>
 <!-- PC Testing Simulator Floating Controls Bar -->
 <div id="pcSimulatorPanel" class="pc-simulator-panel" style="display:none;">
   <div class="sim-header" onclick="toggleSimulatorCollapse()">
@@ -2072,6 +2073,7 @@ function openRiderConfirm(title, msg, onConfirm, actionText = 'Confirm Handover'
     };
   }
   modal.style.display = 'flex';
+  modal.style.pointerEvents = 'auto';
   modal.classList.add('show');
 }
 
@@ -2079,6 +2081,7 @@ function closeRiderConfirm() {
   const modal = document.getElementById('riderConfirmModal');
   if (modal) {
     modal.style.display = 'none';
+    modal.style.pointerEvents = 'none';
     modal.classList.remove('show');
   }
   _riderConfirmCb = null;
@@ -2115,14 +2118,16 @@ async function loadNotifications(){try{const r=await fetch('notification_api.php
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 async function readNote(id){await fetch('notification_api.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_read',notification_id:id})});loadNotifications()}
 async function markAllRead(){await fetch('notification_api.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_all_read'})});loadNotifications()}
-function openNotifications(){document.getElementById('noteModal').classList.add('show');loadNotifications()}function closeNotifications(){document.getElementById('noteModal').classList.remove('show')}
-function openLogout(){window.isLoggingOut = true; try { localStorage.setItem('fd_logging_out', '1'); sessionStorage.setItem('fd_logging_out', '1'); localStorage.setItem('fd_arrival_acknowledged_all', '1'); } catch(e) {} if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') { window.FoodDashCall.stopArrivalAlarm(); window.FoodDashCall.stopAllTones(); } document.getElementById('logoutModal').classList.add('show')}function closeLogout(){window.isLoggingOut = false; try { localStorage.removeItem('fd_logging_out'); sessionStorage.removeItem('fd_logging_out'); } catch(e) {} document.getElementById('logoutModal').classList.remove('show')}
+function openNotifications(){const m=document.getElementById('noteModal');if(m){m.style.display='flex';m.style.pointerEvents='auto';m.classList.add('show');}loadNotifications()}function closeNotifications(){const m=document.getElementById('noteModal');if(m){m.style.display='none';m.style.pointerEvents='none';m.classList.remove('show');}}
+function openLogout(){window.isLoggingOut = true; try { localStorage.setItem('fd_logging_out', '1'); sessionStorage.setItem('fd_logging_out', '1'); localStorage.setItem('fd_arrival_acknowledged_all', '1'); } catch(e) {} if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') { window.FoodDashCall.stopArrivalAlarm(); window.FoodDashCall.stopAllTones(); } const m=document.getElementById('logoutModal');if(m){m.style.display='flex';m.style.pointerEvents='auto';m.classList.add('show');}}function closeLogout(){window.isLoggingOut = false; try { localStorage.removeItem('fd_logging_out'); sessionStorage.removeItem('fd_logging_out'); } catch(e) {} const m=document.getElementById('logoutModal');if(m){m.style.display='none';m.style.pointerEvents='none';m.classList.remove('show');}}
 loadNotifications();setInterval(loadNotifications,5000);document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNotifications();closeLogout()}});
 
 // Active Delivery Data passed from backend
 const activeDeliveryData = <?= $active_delivery_json ?>;
 
 let deliveryMap = null;
+let riderMap = null;
+window.riderMap = null;
 let customerMarker = null;
 let storeMarker = null;
 let riderMarker = null;
@@ -3234,6 +3239,8 @@ async function initDeliveryMap(data) {
   }).setView([targetCustLat, targetCustLng], 16);
 
   window.deliveryMap = deliveryMap;
+  window.riderMap = deliveryMap;
+  riderMap = deliveryMap;
   window.map = deliveryMap;
 
   // OpenStreetMap Tile Layer with reliable subdomains
@@ -3246,6 +3253,7 @@ async function initDeliveryMap(data) {
 
   // Immediately call invalidateSize right after map is created and attached to DOM
   deliveryMap.invalidateSize();
+  setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
   setTimeout(() => {
     if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') {
       map.invalidateSize();
@@ -3332,6 +3340,7 @@ async function initDeliveryMap(data) {
   if (deliveryMap) {
     deliveryMap.invalidateSize();
   }
+  setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
   setTimeout(() => {
     if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
     if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
@@ -3541,6 +3550,9 @@ function toggleLiveLocation(orderId) {
 
 // In-app map initialization on load & responsiveness
 function triggerMapResize() {
+  if (window.riderMap && typeof window.riderMap.invalidateSize === 'function') {
+    try { window.riderMap.invalidateSize(); } catch (e) {}
+  }
   if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') {
     try { map.invalidateSize(); } catch (e) {}
   }
@@ -3557,34 +3569,40 @@ if (document.readyState === 'loading') {
       initDeliveryMap(activeDeliveryData);
     }
     initSimulator();
-    [100, 200, 300, 600, 1200].forEach(delay => setTimeout(triggerMapResize, delay));
+    [100, 200, 250, 300, 600, 1200].forEach(delay => setTimeout(triggerMapResize, delay));
+    setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
   });
 } else {
   if (activeDeliveryData && document.getElementById('delivery-map')) {
     initDeliveryMap(activeDeliveryData);
   }
   initSimulator();
-  [100, 200, 300, 600, 1200].forEach(delay => setTimeout(triggerMapResize, delay));
+  [100, 200, 250, 300, 600, 1200].forEach(delay => setTimeout(triggerMapResize, delay));
+  setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
 }
 
 window.addEventListener('load', () => {
-  [50, 200, 500, 1000].forEach(delay => setTimeout(triggerMapResize, delay));
+  [50, 200, 250, 500, 1000].forEach(delay => setTimeout(triggerMapResize, delay));
+  setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
 });
 window.addEventListener('resize', () => {
   triggerMapResize();
+  setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
   setTimeout(() => {
     if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
     if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
   }, 200);
 });
 window.addEventListener('orientationchange', () => {
+  setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
   setTimeout(() => {
     if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
     if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
   }, 200);
 });
 window.addEventListener('hashchange', () => {
-  [50, 150, 200, 350, 700].forEach(delay => setTimeout(triggerMapResize, delay));
+  [50, 150, 200, 250, 350, 700].forEach(delay => setTimeout(triggerMapResize, delay));
+  setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
 });
 
 // Automatic visibility detection: triggers invalidateSize immediately whenever delivery-map enters viewport
@@ -3595,6 +3613,7 @@ if (typeof IntersectionObserver !== 'undefined') {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
           triggerMapResize();
+          setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
           setTimeout(() => {
             if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
             if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
@@ -3611,6 +3630,7 @@ if (typeof ResizeObserver !== 'undefined') {
   if (mapElem) {
     const ro = new ResizeObserver(() => {
       triggerMapResize();
+      setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
       setTimeout(() => {
         if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
         if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
@@ -3624,6 +3644,7 @@ if (typeof ResizeObserver !== 'undefined') {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     triggerMapResize();
+    setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
     setTimeout(() => {
       if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
       if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
@@ -3632,9 +3653,10 @@ document.addEventListener('visibilitychange', () => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('nav.bottom a, [href="#delivery"], .nav-item, .tab-btn').forEach(el => {
+  document.querySelectorAll('nav.bottom a, [href="#delivery"], .nav-item, .tab-btn, a[href^="#"]').forEach(el => {
     el.addEventListener('click', () => {
       setTimeout(triggerMapResize, 50);
+      setTimeout(() => { if (window.riderMap) riderMap.invalidateSize(); }, 250);
       setTimeout(() => {
         if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
         if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
@@ -3662,7 +3684,11 @@ function openOrderChat(orderId, customerName, customerPhone) {
   updateChatSmsLink('');
 
   const modal = document.getElementById('riderChatModal');
-  if (modal) modal.classList.add('show');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.style.pointerEvents = 'auto';
+    modal.classList.add('show');
+  }
 
   fetchOrderMessages(orderId, true);
 
@@ -3676,7 +3702,11 @@ function openOrderChat(orderId, customerName, customerPhone) {
 
 function closeOrderChat() {
   const modal = document.getElementById('riderChatModal');
-  if (modal) modal.classList.remove('show');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.style.pointerEvents = 'none';
+    modal.classList.remove('show');
+  }
   if (chatPollTimer) {
     clearInterval(chatPollTimer);
     chatPollTimer = null;
@@ -3890,6 +3920,7 @@ function openClearDeliveryModal(orderId) {
   const modal = document.getElementById('clearDeliveryModal');
   if (modal) {
     modal.style.display = 'flex';
+    modal.style.pointerEvents = 'auto';
     modal.classList.add('show');
   }
 }
@@ -3898,6 +3929,7 @@ function closeClearDeliveryModal() {
   const modal = document.getElementById('clearDeliveryModal');
   if (modal) {
     modal.style.display = 'none';
+    modal.style.pointerEvents = 'none';
     modal.classList.remove('show');
   }
   pendingClearOrderId = null;
@@ -3907,12 +3939,14 @@ function resetDashboardToWaiting() {
   const clearModal = document.getElementById('clearDeliveryModal');
   if (clearModal) {
     clearModal.style.display = 'none';
+    clearModal.style.pointerEvents = 'none';
     clearModal.classList.remove('show');
   }
 
   const confirmModal = document.getElementById('riderConfirmModal');
   if (confirmModal) {
     confirmModal.style.display = 'none';
+    confirmModal.style.pointerEvents = 'none';
     confirmModal.classList.remove('show');
   }
 
@@ -4064,6 +4098,7 @@ function openCompletedOrdersModal() {
   const modal = document.getElementById('riderCompletedOrdersModal');
   if (modal) {
     modal.style.display = 'flex';
+    modal.style.pointerEvents = 'auto';
     modal.classList.add('show');
     loadCompletedOrders();
   }
@@ -4073,6 +4108,7 @@ function closeCompletedOrdersModal() {
   const modal = document.getElementById('riderCompletedOrdersModal');
   if (modal) {
     modal.style.display = 'none';
+    modal.style.pointerEvents = 'none';
     modal.classList.remove('show');
   }
 }
@@ -4083,6 +4119,7 @@ document.addEventListener('click', function(e) {
   if (e.target.closest('#cancelHandoverBtn') || e.target.closest('#cancelClearBtn') || e.target.matches('[data-dismiss="modal"]') || e.target.closest('[data-dismiss="modal"]')) {
     document.querySelectorAll('.modal, .custom-modal-backdrop').forEach(m => {
       m.style.display = 'none';
+      m.style.pointerEvents = 'none';
       m.classList.remove('show');
     });
     pendingClearOrderId = null;
@@ -4246,6 +4283,24 @@ function appendCustomerMessageToRiderChat(msg) {
 function initiateCustomerCall(orderId, customerName, customerPhone) {
   if (window.FoodDashCall) {
     FoodDashCall.initiateCall(orderId, customerName || 'Customer', customerPhone || '+63 917 123 4567');
+  }
+}
+
+function endRiderCall() {
+  const modal = document.getElementById('riderCallModal');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.style.pointerEvents = 'none';
+    modal.classList.remove('show');
+  }
+  if (window.FoodDashCall && typeof window.FoodDashCall.endCall === 'function') {
+    FoodDashCall.endCall();
+  }
+}
+
+function simulateCallConnect() {
+  if (window.FoodDashCall && typeof window.FoodDashCall.acceptCall === 'function') {
+    FoodDashCall.acceptCall();
   }
 }
 
