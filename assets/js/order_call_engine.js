@@ -194,7 +194,9 @@
 
   function playSynthArrivalAlarm() {
     // If arrival was already acknowledged or user is logging out, do not play
-    if (arrivalAcknowledged || window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
+    if (arrivalAcknowledged || window.isLoggingOut || 
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
+        (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) return;
 
     // If the arpeggio loop is already running, prevent duplicate restarts / stuttering
     if (synthLoopInterval && arrivalAlarmActive) {
@@ -208,7 +210,9 @@
     arrivalAcknowledged = false;
 
     function playAlarmChime() {
-      if (!arrivalAlarmActive || arrivalAcknowledged || window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
+      if (!arrivalAlarmActive || arrivalAcknowledged || window.isLoggingOut || 
+          (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
+          (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
         stopSynthLoop();
         return;
       }
@@ -217,7 +221,9 @@
       if (!audioCtx) return;
       if (audioCtx.state === 'suspended') {
         audioCtx.resume().then(() => {
-          if (arrivalAlarmActive && !arrivalAcknowledged && !window.isLoggingOut && !(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
+          if (arrivalAlarmActive && !arrivalAcknowledged && !window.isLoggingOut && 
+              !(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') &&
+              !(typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
             playAlarmChime();
           }
         }).catch(() => {});
@@ -225,7 +231,7 @@
       }
 
       isChimePlaying = true;
-      setTimeout(() => { isChimePlaying = false; }, 2300);
+      setTimeout(() => { isChimePlaying = false; }, 2500);
 
       try {
         const now = audioCtx.currentTime;
@@ -241,12 +247,12 @@
         }
 
         // Clean, smooth, unhurried 4-note music-box arpeggio (C5 -> E5 -> G5 -> C6)
-        // Spaced ~350ms apart (0.00s, 0.35s, 0.70s, 1.05s) with pure sine waves
+        // Spaced ~350ms apart (0.00s, 0.35s, 0.70s, 1.05s) with pure, warm sine waves
         const notes = [
-          { freq: 523.25, time: 0.000, dur: 0.90, peak: 0.12 }, // Note 1: 523.25 Hz (C5) at 0ms
-          { freq: 659.25, time: 0.350, dur: 0.90, peak: 0.12 }, // Note 2: 659.25 Hz (E5) at 350ms
-          { freq: 783.99, time: 0.700, dur: 0.90, peak: 0.12 }, // Note 3: 783.99 Hz (G5) at 700ms
-          { freq: 1046.50, time: 1.050, dur: 1.20, peak: 0.14 }  // Note 4: 1046.50 Hz (C6) at 1050ms (rings out cleanly to ~2.25s)
+          { freq: 523.25, time: 0.000, dur: 1.00, peak: 0.12 }, // Note 1: 523.25 Hz (C5) at 0ms, rings warmly for 1.0s
+          { freq: 659.25, time: 0.350, dur: 1.00, peak: 0.12 }, // Note 2: 659.25 Hz (E5) at 350ms, rings warmly for 1.0s
+          { freq: 783.99, time: 0.700, dur: 1.00, peak: 0.12 }, // Note 3: 783.99 Hz (G5) at 700ms, rings warmly for 1.0s
+          { freq: 1046.50, time: 1.050, dur: 1.35, peak: 0.14 }  // Note 4: 1046.50 Hz (C6) at 1050ms (full harmonic finale ringing to ~2.40s)
         ];
 
         const attackTime = 0.015; // 15ms soft linear attack ramp to completely eliminate any start click / transient tick
@@ -271,7 +277,7 @@
           osc.connect(gain);
           gain.connect(arrivalMasterGain);
           osc.start(noteTime);
-          osc.stop(noteEnd + 0.04);
+          osc.stop(noteEnd + 0.08); // Generous tail to prevent any premature cutoff
 
           const nodeItem = { osc, gain, noteStart: noteTime, decayEnd: noteEnd };
           activeSynthNodes.push(nodeItem);
@@ -290,10 +296,10 @@
     }
 
     playAlarmChime();
-    // Repeating interval: 4-note arpeggio plays out completely in ~2.25s,
-    // rests in 4.0 seconds of complete silence, and repeats cleanly without sounding harsh.
-    // Total cycle duration: 2250ms chime + 4000ms silence rest = 6250ms
-    synthLoopInterval = setInterval(playAlarmChime, 6250);
+    // Repeating interval: 4-note arpeggio plays out completely in ~2.40s,
+    // rests in 4.0 seconds of complete silence, and repeats cleanly without sounding harsh or cutting off.
+    // Total cycle duration: 2400ms chime + 4000ms silence rest = 6400ms
+    synthLoopInterval = setInterval(playAlarmChime, 6400);
   }
 
   function stopSynthLoop() {
@@ -390,6 +396,19 @@
     arrivalAcknowledged = true;
     arrivalAlarmActive = false;
     stopSynthLoop();
+
+    const oId = activeOrderId || (typeof window !== 'undefined' && (window.activeCustomerTrackingOrderId || window.orderId)) || 0;
+    if (oId) {
+      try {
+        localStorage.setItem('fd_arrival_ack_' + oId, '1');
+        sessionStorage.setItem('fd_arrival_ack_' + oId, '1');
+      } catch (e) {}
+    }
+    try {
+      localStorage.setItem('fd_arrival_acknowledged_all', '1');
+      sessionStorage.setItem('fd_arrival_acknowledged_all', '1');
+    } catch (e) {}
+
     if (arrivalAudio) {
       try {
         arrivalAudio.pause();
@@ -413,7 +432,9 @@
   const stopArrivalAlarmAudio = stopArrivalAlarm;
 
   function playArrivalAlarmAudio() {
-    if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
+    if (window.isLoggingOut || 
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
+        (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
       return;
     }
     // If the arrival has already been acknowledged, do not play
@@ -429,7 +450,7 @@
     arrivalAlarmActive = true;
     arrivalAcknowledged = false;
 
-    // Trigger exactly ONE clean, peaceful arpeggio chime per 6250ms cycle
+    // Trigger exactly ONE clean, peaceful arpeggio chime per 6400ms cycle
     playSynthArrivalAlarm();
 
     if ('vibrate' in navigator) {
@@ -1105,11 +1126,23 @@
   function bindArrivalModalListeners(modalEl) {
     const root = modalEl || document.getElementById('riderArrivedModal');
     if (!root) return;
-    const buttons = root.querySelectorAll('.btn-arrival-action, #riderArrivedActionButtons button');
+    const buttons = root.querySelectorAll('.btn-arrival-action, #riderArrivedActionButtons button, .btn-arrival-close, #riderArrivedModalCloseX, .fd-modal-backdrop, [onclick*="closeRiderArrivedModal"]');
     buttons.forEach(btn => {
       if (btn.dataset.arrivalAudioBound === 'true') return;
       btn.dataset.arrivalAudioBound = 'true';
       btn.addEventListener('click', function() {
+        const oId = activeOrderId || (typeof window !== 'undefined' && (window.activeCustomerTrackingOrderId || window.orderId)) || 0;
+        if (oId) {
+          try {
+            localStorage.setItem('fd_arrival_ack_' + oId, '1');
+            sessionStorage.setItem('fd_arrival_ack_' + oId, '1');
+          } catch (e) {}
+        }
+        try {
+          localStorage.setItem('fd_arrival_acknowledged_all', '1');
+          sessionStorage.setItem('fd_arrival_acknowledged_all', '1');
+        } catch (e) {}
+
         stopArrivalAlarm();
         stopAllTones();
         if (typeof window.stopArrivalAlertSound === 'function') {
@@ -1120,14 +1153,22 @@
   }
 
   function triggerArrivalAlarm(orderId, riderName) {
-    if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) {
+    if (window.isLoggingOut || 
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
+        (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
       return;
     }
-    if (orderId && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1') {
+    if (orderId && (
+      (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1') ||
+      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1')
+    )) {
       arrivalAcknowledged = true;
       return;
     }
-    if (sessionStorage.getItem('fd_arrival_acknowledged_all') === '1') {
+    if (
+      (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_acknowledged_all') === '1') ||
+      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_acknowledged_all') === '1')
+    ) {
       arrivalAcknowledged = true;
       return;
     }
@@ -1147,7 +1188,7 @@
       msgEl.innerHTML = `📍 <b>Your rider has arrived outside with your order!</b><br>Please select a quick response so ${rFirst} knows you are coming:`;
     }
 
-    // Ensure buttons have the exact required responses
+    // Ensure buttons and close controls are injected
     injectArrivalButtons(orderId);
 
     // Hide/dismiss top notification banner completely upon arrival to keep ONLY the center arrival modal
@@ -1162,13 +1203,20 @@
 
     if (modal) {
       modal.classList.add('show', 'active');
-      modal.style.display = 'flex';
-      modal.style.visibility = 'visible';
-      modal.style.pointerEvents = 'auto';
-      // Disable backdrop closing so customer MUST click one of the two explicit buttons
+      modal.style.setProperty('display', 'flex', 'important');
+      modal.style.setProperty('visibility', 'visible', 'important');
+      modal.style.setProperty('pointer-events', 'auto', 'important');
       const backdrop = modal.querySelector('.fd-modal-backdrop') || modal.querySelector('[onclick*="closeRiderArrivedModal"]');
       if (backdrop) {
-        backdrop.onclick = (e) => { e.stopPropagation(); };
+        backdrop.onclick = (e) => {
+          stopArrivalAlarm();
+          if (typeof window.closeRiderArrivedModal === 'function') {
+            window.closeRiderArrivedModal();
+          } else {
+            modal.style.setProperty('display', 'none', 'important');
+            modal.classList.remove('show', 'active');
+          }
+        };
       }
       bindArrivalModalListeners(modal);
     }
@@ -1183,6 +1231,28 @@
     const modal = document.getElementById('riderArrivedModal');
     if (!modal) return;
     const box = modal.querySelector('.fd-modal-box') || modal;
+
+    // Ensure close X button exists inside modal box
+    if (!box.querySelector('.btn-arrival-close, #riderArrivedModalCloseX')) {
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'btn-arrival-close';
+      closeBtn.id = 'riderArrivedModalCloseX';
+      closeBtn.setAttribute('aria-label', 'Close');
+      closeBtn.innerHTML = '&times;';
+      closeBtn.style.cssText = 'position:absolute; top:12px; right:12px; width:30px; height:30px; border-radius:50%; background:#f3f4f6; border:none; font-size:18px; line-height:1; color:#6b7280; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2; transition:background 0.2s;';
+      closeBtn.onclick = function() {
+        stopArrivalAlarm();
+        if (typeof window.closeRiderArrivedModal === 'function') {
+          window.closeRiderArrivedModal();
+        } else {
+          modal.style.setProperty('display', 'none', 'important');
+          modal.classList.remove('show', 'active');
+        }
+      };
+      box.appendChild(closeBtn);
+    }
+
     let actionsWrap = box.querySelector('#riderArrivedActionButtons');
 
     const effectiveId = orderId || activeOrderId || 0;
@@ -1214,11 +1284,17 @@
   async function acknowledgeArrival(orderId, responseText) {
     const resolvedOrderId = orderId || activeOrderId || (typeof window !== 'undefined' && (window.activeCustomerTrackingOrderId || window.orderId)) || 0;
 
-    // Immediately mark acknowledged in session storage to prevent poller loops from re-opening
+    // Immediately mark acknowledged in both localStorage & sessionStorage to guard against any re-triggering
     if (resolvedOrderId) {
-      try { sessionStorage.setItem('fd_arrival_ack_' + resolvedOrderId, '1'); } catch (e) {}
+      try {
+        localStorage.setItem('fd_arrival_ack_' + resolvedOrderId, '1');
+        sessionStorage.setItem('fd_arrival_ack_' + resolvedOrderId, '1');
+      } catch (e) {}
     }
-    try { sessionStorage.setItem('fd_arrival_acknowledged_all', '1'); } catch (e) {}
+    try {
+      localStorage.setItem('fd_arrival_acknowledged_all', '1');
+      sessionStorage.setItem('fd_arrival_acknowledged_all', '1');
+    } catch (e) {}
 
     // 1. Immediately execute full audio engine cleanup
     arrivalAcknowledged = true;
@@ -1232,9 +1308,9 @@
     // 2. Cleanly dismiss modal immediately without leaving state hanging
     const modal = document.getElementById('riderArrivedModal');
     if (modal) {
-      modal.style.display = 'none';
-      modal.style.visibility = 'hidden';
-      modal.style.pointerEvents = 'none';
+      modal.style.setProperty('display', 'none', 'important');
+      modal.style.setProperty('visibility', 'hidden', 'important');
+      modal.style.setProperty('pointer-events', 'none', 'important');
       modal.classList.remove('show', 'active');
       const btns = modal.querySelectorAll('.btn-arrival-action, #riderArrivedActionButtons button');
       btns.forEach(b => { b.disabled = true; });
@@ -1266,11 +1342,24 @@
   }
 
   function viewTrackingMap(orderId) {
+    const resolvedOrderId = orderId || activeOrderId || (typeof window !== 'undefined' && (window.activeCustomerTrackingOrderId || window.orderId)) || 0;
+    if (resolvedOrderId) {
+      try {
+        localStorage.setItem('fd_arrival_ack_' + resolvedOrderId, '1');
+        sessionStorage.setItem('fd_arrival_ack_' + resolvedOrderId, '1');
+      } catch (e) {}
+    }
+    try {
+      localStorage.setItem('fd_arrival_acknowledged_all', '1');
+      sessionStorage.setItem('fd_arrival_acknowledged_all', '1');
+    } catch (e) {}
+
+    stopArrivalAlarm();
     stopArrivalAlarmAudio();
     stopAllTones();
     const modal = document.getElementById('riderArrivedModal');
     if (modal) {
-      modal.style.display = 'none';
+      modal.style.setProperty('display', 'none', 'important');
       modal.classList.remove('show', 'active');
     }
     if (typeof window.openTrackingFromArrived === 'function') {

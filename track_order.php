@@ -753,8 +753,9 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
 
   <!-- Prominent Rider Arrived Live Notification Modal -->
   <div id="riderArrivedModal" style="display:none; position:fixed; inset:0; z-index:9999999; align-items:center; justify-content:center;">
-    <div onclick="/* Persistent alarm: must select an action button below */" style="position:absolute; inset:0; background:rgba(15,23,42,0.65); backdrop-filter:blur(4px);"></div>
+    <div onclick="closeRiderArrivedModal()" style="position:absolute; inset:0; background:rgba(15,23,42,0.65); backdrop-filter:blur(4px);"></div>
     <div style="text-align:center; padding:28px 22px 24px; width:calc(100% - 32px); max-width:350px; border-radius:24px; border:2px solid #86efac; box-shadow:0 24px 60px rgba(0,0,0,0.35); background:#ffffff; position:relative; z-index:1; animation:scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+      <button type="button" class="btn-arrival-close" id="riderArrivedModalCloseX" onclick="closeRiderArrivedModal()" aria-label="Close" style="position:absolute; top:12px; right:12px; width:30px; height:30px; border-radius:50%; background:#f3f4f6; border:none; font-size:18px; line-height:1; color:#6b7280; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2; transition:background 0.2s;">&times;</button>
       <div style="width:72px; height:72px; border-radius:50%; background:#dcfce7; color:#15803d; font-size:34px; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; box-shadow:0 0 0 10px rgba(22,163,74,0.18);">
         <i class="fa-solid fa-location-pin fa-bounce"></i>
       </div>
@@ -1714,10 +1715,10 @@ function playSynthArrivalAlarm() {
         // Clean, smooth, unhurried 4-note music-box arpeggio (C5 -> E5 -> G5 -> C6)
         // Spaced ~350ms apart (0.00s, 0.35s, 0.70s, 1.05s) with pure sine waves
         const notes = [
-          { freq: 523.25, time: 0.000, dur: 0.90, peak: 0.12 }, // Note 1: 523.25 Hz (C5) at 0ms
-          { freq: 659.25, time: 0.350, dur: 0.90, peak: 0.12 }, // Note 2: 659.25 Hz (E5) at 350ms
-          { freq: 783.99, time: 0.700, dur: 0.90, peak: 0.12 }, // Note 3: 783.99 Hz (G5) at 700ms
-          { freq: 1046.50, time: 1.050, dur: 1.20, peak: 0.14 }  // Note 4: 1046.50 Hz (C6) at 1050ms (rings out cleanly to ~2.25s)
+          { freq: 523.25, time: 0.000, dur: 1.00, peak: 0.12 }, // Note 1: 523.25 Hz (C5) at 0ms, lasts 1.0s
+          { freq: 659.25, time: 0.350, dur: 1.00, peak: 0.12 }, // Note 2: 659.25 Hz (E5) at 350ms, lasts 1.0s
+          { freq: 783.99, time: 0.700, dur: 1.00, peak: 0.12 }, // Note 3: 783.99 Hz (G5) at 700ms, lasts 1.0s
+          { freq: 1046.50, time: 1.050, dur: 1.35, peak: 0.14 }  // Note 4: 1046.50 Hz (C6) at 1050ms (full harmonic finale ringing to ~2.40s)
         ];
 
         const attackTime = 0.015; // 15ms soft linear attack ramp to completely eliminate any start click / transient tick
@@ -1741,7 +1742,7 @@ function playSynthArrivalAlarm() {
           osc.connect(gain);
           gain.connect(trackSynthAudioCtx.destination);
           osc.start(noteTime);
-          osc.stop(noteEnd + 0.04);
+          osc.stop(noteEnd + 0.08);
 
           const nodeItem = { osc, gain, noteStart: noteTime };
           trackActiveOscillators.push(nodeItem);
@@ -1755,10 +1756,10 @@ function playSynthArrivalAlarm() {
     }
 
     chimeTick();
-    // Repeating interval: 4-note arpeggio plays out completely in ~2.25s,
-    // rests in 4.0 seconds of complete silence, and repeats cleanly without sounding harsh.
-    // Total cycle duration: 2250ms chime + 4000ms silence rest = 6250ms
-    trackSynthLoopInterval = setInterval(chimeTick, 6250);
+    // Repeating interval: 4-note arpeggio plays out completely in ~2.40s,
+    // rests in 4.0 seconds of complete silence, and repeats cleanly without sounding harsh or cutting off.
+    // Total cycle duration: 2400ms chime + 4000ms silence rest = 6400ms
+    trackSynthLoopInterval = setInterval(chimeTick, 6400);
   } catch (e) {
     console.warn('Track synth chime error:', e);
   }
@@ -1827,15 +1828,35 @@ window.stopArrivalAlertSound = stopArrivalAlertSound;
 window.stopArrivalAlarm = stopArrivalAlertSound;
 
 function closeRiderArrivedModal() {
+  const oId = (typeof orderId !== 'undefined' ? orderId : 0)
+    || (window.FoodDashCall && typeof window.FoodDashCall.getActiveOrderId === 'function' ? window.FoodDashCall.getActiveOrderId() : 0);
+
+  // Set localStorage & sessionStorage guard flags immediately
+  if (oId) {
+    try {
+      localStorage.setItem('fd_arrival_ack_' + oId, '1');
+      sessionStorage.setItem('fd_arrival_ack_' + oId, '1');
+    } catch (e) {}
+  }
+  try {
+    localStorage.setItem('fd_arrival_acknowledged_all', '1');
+    sessionStorage.setItem('fd_arrival_acknowledged_all', '1');
+  } catch (e) {}
+
+  // Explicitly invoke stopArrivalAlarm()
   if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
     window.FoodDashCall.stopArrivalAlarm();
   }
+  if (typeof window.stopArrivalAlarm === 'function') {
+    try { window.stopArrivalAlarm(); } catch (e) {}
+  }
   stopArrivalAlertSound();
+
   const modal = document.getElementById('riderArrivedModal');
   if (modal) {
-    modal.style.display = 'none';
-    modal.style.visibility = 'hidden';
-    modal.style.pointerEvents = 'none';
+    modal.style.setProperty('display', 'none', 'important');
+    modal.style.setProperty('visibility', 'hidden', 'important');
+    modal.style.setProperty('pointer-events', 'none', 'important');
     modal.classList.remove('show', 'active');
   }
   if (window.FoodDashCall && typeof window.FoodDashCall.stopAllTones === 'function') {
@@ -1844,19 +1865,29 @@ function closeRiderArrivedModal() {
 }
 
 function respondToRiderArrival(responseOption) {
-  // Immediately invoke stopArrivalAlarm() for full cleanup
-  if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
-    window.FoodDashCall.stopArrivalAlarm();
-  }
-  stopArrivalAlertSound();
-
   const oId = (typeof orderId !== 'undefined' ? orderId : 0)
     || (window.FoodDashCall && typeof window.FoodDashCall.getActiveOrderId === 'function' ? window.FoodDashCall.getActiveOrderId() : 0);
 
+  // Set localStorage & sessionStorage guard flags immediately
   if (oId) {
-    try { sessionStorage.setItem('fd_arrival_ack_' + oId, '1'); } catch (e) {}
+    try {
+      localStorage.setItem('fd_arrival_ack_' + oId, '1');
+      sessionStorage.setItem('fd_arrival_ack_' + oId, '1');
+    } catch (e) {}
   }
-  try { sessionStorage.setItem('fd_arrival_acknowledged_all', '1'); } catch (e) {}
+  try {
+    localStorage.setItem('fd_arrival_acknowledged_all', '1');
+    sessionStorage.setItem('fd_arrival_acknowledged_all', '1');
+  } catch (e) {}
+
+  // Explicitly invoke stopArrivalAlarm() for full cleanup
+  if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
+    window.FoodDashCall.stopArrivalAlarm();
+  }
+  if (typeof window.stopArrivalAlarm === 'function') {
+    try { window.stopArrivalAlarm(); } catch (e) {}
+  }
+  stopArrivalAlertSound();
 
   closeRiderArrivedModal();
 
@@ -1868,13 +1899,29 @@ function respondToRiderArrival(responseOption) {
 function attachTrackArrivalModalListeners() {
   const modal = document.getElementById('riderArrivedModal');
   if (!modal) return;
-  const buttons = modal.querySelectorAll('.btn-arrival-action, #riderArrivedActionButtons button');
+  const buttons = modal.querySelectorAll('.btn-arrival-action, #riderArrivedActionButtons button, .btn-arrival-close, #riderArrivedModalCloseX, [onclick*="closeRiderArrivedModal"]');
   buttons.forEach(btn => {
     if (btn.dataset.arrivalAudioBound === 'true') return;
     btn.dataset.arrivalAudioBound = 'true';
     btn.addEventListener('click', function() {
+      const oId = (typeof orderId !== 'undefined' ? orderId : 0)
+        || (window.FoodDashCall && typeof window.FoodDashCall.getActiveOrderId === 'function' ? window.FoodDashCall.getActiveOrderId() : 0);
+      if (oId) {
+        try {
+          localStorage.setItem('fd_arrival_ack_' + oId, '1');
+          sessionStorage.setItem('fd_arrival_ack_' + oId, '1');
+        } catch (e) {}
+      }
+      try {
+        localStorage.setItem('fd_arrival_acknowledged_all', '1');
+        sessionStorage.setItem('fd_arrival_acknowledged_all', '1');
+      } catch (e) {}
+
       if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
         window.FoodDashCall.stopArrivalAlarm();
+      }
+      if (typeof window.stopArrivalAlarm === 'function') {
+        try { window.stopArrivalAlarm(); } catch (e) {}
       }
       stopArrivalAlertSound();
     }, true);
@@ -1907,9 +1954,19 @@ function playArrivalAlertSound() {
 window.playArrivalAlertSound = playArrivalAlertSound;
 
 function handleRiderArrivedEvent(data) {
-  const isAck = Boolean(data.arrival_acknowledged) || (sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1') || (sessionStorage.getItem('fd_arrival_acknowledged_all') === '1');
+  if (window.isLoggingOut || 
+      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) return;
+  const isAck = Boolean(data.arrival_acknowledged) 
+    || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
+    || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1')
+    || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_acknowledged_all') === '1')
+    || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_acknowledged_all') === '1');
   if (isAck) {
-    if (window.FoodDashCall) FoodDashCall.stopAllTones();
+    if (window.FoodDashCall) {
+      FoodDashCall.stopArrivalAlarm();
+      FoodDashCall.stopAllTones();
+    }
     stopArrivalAlertSound();
     return;
   }
