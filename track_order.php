@@ -461,6 +461,33 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
   pointer-events: auto !important;
   animation: bannerSlideDown 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
 }
+
+/* Inactive arrival banner, modal, and backdrop reset rules to prevent click/touch blocking */
+.live-rider-msg-banner:not(.slide-down):not(.show),
+#liveRiderMessageBanner:not(.slide-down):not(.show),
+.live-rider-msg-banner[style*="display: none"],
+.live-rider-msg-banner[style*="display:none"],
+#liveRiderMessageBanner[style*="display: none"],
+#liveRiderMessageBanner[style*="display:none"],
+#riderArrivedModal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
+#riderArrivedModal[style*="display: none"],
+#riderArrivedModal[style*="display:none"],
+.fd-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
+.modal-backdrop:not(.show):not(.active),
+.fd-modal-backdrop:not(.show):not(.active) {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  z-index: -9999 !important;
+}
+#riderArrivedModal:not(.show):not(.active) .fd-modal-backdrop,
+#riderArrivedModal:not(.show):not(.active) [onclick*="closeRiderArrivedModal"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
 @keyframes bannerSlideDown {
   0% { transform: translate(-50%, -40px); opacity: 0; }
   100% { transform: translate(-50%, 0); opacity: 1; }
@@ -753,8 +780,8 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
   </div>
 
   <!-- Prominent Rider Arrived Live Notification Modal -->
-  <div id="riderArrivedModal" style="display:none; position:fixed; inset:0; z-index:9999999; align-items:center; justify-content:center;">
-    <div onclick="closeRiderArrivedModal()" style="position:absolute; inset:0; background:rgba(15,23,42,0.65); backdrop-filter:blur(4px);"></div>
+  <div id="riderArrivedModal" class="fd-modal" style="display:none; pointer-events:none; visibility:hidden; position:fixed; inset:0; z-index:9999999; align-items:center; justify-content:center;">
+    <div class="fd-modal-backdrop" onclick="closeRiderArrivedModal()" style="position:absolute; inset:0; background:rgba(15,23,42,0.65); backdrop-filter:blur(4px);"></div>
     <div style="text-align:center; padding:28px 22px 24px; width:calc(100% - 32px); max-width:350px; border-radius:24px; border:2px solid #86efac; box-shadow:0 24px 60px rgba(0,0,0,0.35); background:#ffffff; position:relative; z-index:1; animation:scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
       <button type="button" class="btn-arrival-close" id="riderArrivedModalCloseX" onclick="closeRiderArrivedModal()" aria-label="Close" style="position:absolute; top:12px; right:12px; width:30px; height:30px; border-radius:50%; background:#f3f4f6; border:none; font-size:18px; line-height:1; color:#6b7280; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2; transition:background 0.2s;">&times;</button>
       <div style="width:72px; height:72px; border-radius:50%; background:#dcfce7; color:#15803d; font-size:34px; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; box-shadow:0 0 0 10px rgba(22,163,74,0.18);">
@@ -1813,8 +1840,11 @@ function dismissLiveRiderBanner(force = false) {
   }
   const banner = document.getElementById('liveRiderMessageBanner');
   if (banner) {
-    banner.classList.remove('slide-down', 'show');
-    banner.style.display = 'none';
+    banner.classList.remove('slide-down', 'show', 'active');
+    banner.style.setProperty('display', 'none', 'important');
+    banner.style.setProperty('visibility', 'hidden', 'important');
+    banner.style.setProperty('pointer-events', 'none', 'important');
+    banner.style.setProperty('opacity', '0', 'important');
   }
   if (msgBannerTimeout) {
     clearTimeout(msgBannerTimeout);
@@ -1891,8 +1921,11 @@ function showTrackNotificationBanner(title, text, durationMs = 6500, onClick = n
     }
   };
 
-  banner.style.display = 'flex';
-  banner.classList.add('slide-down', 'show');
+  banner.style.setProperty('display', 'flex', 'important');
+  banner.style.setProperty('visibility', 'visible', 'important');
+  banner.style.setProperty('pointer-events', 'auto', 'important');
+  banner.style.setProperty('opacity', '1', 'important');
+  banner.classList.add('slide-down', 'show', 'active');
 
   // Protect banner display duration against incoming 2-second polls
   window._bannerActiveUntil = Date.now() + durationMs;
@@ -2037,7 +2070,26 @@ function stopArrivalAlertSound() {
     modal.style.setProperty('display', 'none', 'important');
     modal.style.setProperty('visibility', 'hidden', 'important');
     modal.style.setProperty('pointer-events', 'none', 'important');
+    modal.style.setProperty('opacity', '0', 'important');
+    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop, [onclick*="closeRiderArrivedModal"]');
+    backdrops.forEach(bd => {
+      bd.classList.remove('show', 'active');
+      bd.style.setProperty('display', 'none', 'important');
+      bd.style.setProperty('visibility', 'hidden', 'important');
+      bd.style.setProperty('pointer-events', 'none', 'important');
+      bd.style.setProperty('opacity', '0', 'important');
+    });
   }
+  document.querySelectorAll('body > .modal-backdrop, body > .fd-modal-backdrop, .modal-backdrop:not(.show), .fd-modal-backdrop:not(.active)').forEach(el => {
+    if (!el.closest('.show, .active, [style*="display: flex"], [style*="display:flex"]')) {
+      try {
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+        el.remove();
+      } catch (e) {}
+    }
+  });
   if (trackActiveOscillators && trackActiveOscillators.length > 0) {
     const now = trackSynthAudioCtx ? trackSynthAudioCtx.currentTime : 0;
     trackActiveOscillators.forEach(item => {
@@ -2118,12 +2170,35 @@ function closeRiderArrivedModal() {
 
   const modal = document.getElementById('riderArrivedModal');
   if (modal) {
+    modal.classList.remove('show', 'active');
     modal.style.setProperty('display', 'none', 'important');
     modal.style.setProperty('visibility', 'hidden', 'important');
     modal.style.setProperty('pointer-events', 'none', 'important');
-    modal.classList.remove('show', 'active');
+    modal.style.setProperty('opacity', '0', 'important');
+    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop, [onclick*="closeRiderArrivedModal"]');
+    backdrops.forEach(bd => {
+      bd.classList.remove('show', 'active');
+      bd.style.setProperty('display', 'none', 'important');
+      bd.style.setProperty('visibility', 'hidden', 'important');
+      bd.style.setProperty('pointer-events', 'none', 'important');
+      bd.style.setProperty('opacity', '0', 'important');
+    });
   }
+  document.querySelectorAll('body > .modal-backdrop, body > .fd-modal-backdrop, .modal-backdrop:not(.show), .fd-modal-backdrop:not(.active)').forEach(el => {
+    if (!el.closest('.show, .active, [style*="display: flex"], [style*="display:flex"]')) {
+      try {
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+        el.remove();
+      } catch (e) {}
+    }
+  });
+
   dismissLiveRiderBanner(true);
+  if (window.FoodDashCall && typeof window.FoodDashCall.cleanupArrivalModalDOM === 'function') {
+    window.FoodDashCall.cleanupArrivalModalDOM();
+  }
   if (window.FoodDashCall && typeof window.FoodDashCall.stopAllTones === 'function') {
     FoodDashCall.stopAllTones();
   }

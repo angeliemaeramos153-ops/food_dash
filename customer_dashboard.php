@@ -785,6 +785,9 @@ a:active,
 }
 
 /* Guarantee inactive modals, backdrops, and hidden floating elements never block clicks */
+#riderArrivedModal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
+#riderArrivedModal[style*="display:none"],
+#riderArrivedModal[style*="display: none"],
 .sim-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
 .sim-modal[style*="display:none"],
 .sim-modal[style*="display: none"],
@@ -806,7 +809,8 @@ a:active,
 #fdGmailModal:not(.active),
 .toast:not(.show),
 .cust-toast:not(.show),
-.fd-modal-backdrop:not(.active) {
+.modal-backdrop:not(.show):not(.active),
+.fd-modal-backdrop:not(.show):not(.active) {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
@@ -8335,7 +8339,26 @@ function stopArrivalAlertSound() {
     modal.style.setProperty('display', 'none', 'important');
     modal.style.setProperty('visibility', 'hidden', 'important');
     modal.style.setProperty('pointer-events', 'none', 'important');
+    modal.style.setProperty('opacity', '0', 'important');
+    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop, [onclick*="closeRiderArrivedModal"]');
+    backdrops.forEach(bd => {
+      bd.classList.remove('show', 'active');
+      bd.style.setProperty('display', 'none', 'important');
+      bd.style.setProperty('visibility', 'hidden', 'important');
+      bd.style.setProperty('pointer-events', 'none', 'important');
+      bd.style.setProperty('opacity', '0', 'important');
+    });
   }
+  document.querySelectorAll('body > .modal-backdrop, body > .fd-modal-backdrop, .modal-backdrop:not(.show), .fd-modal-backdrop:not(.active)').forEach(el => {
+    if (!el.closest('.show, .active, [style*="display: flex"], [style*="display:flex"]')) {
+      try {
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+        el.remove();
+      } catch (e) {}
+    }
+  });
   if (window.FoodDashCall) {
     if (typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
       window.FoodDashCall.stopArrivalAlarm();
@@ -8359,9 +8382,11 @@ function dismissLiveRiderBanner(force = false) {
   }
   const banner = document.getElementById('liveRiderMessageBanner');
   if (banner) {
-    banner.classList.remove('show');
-    banner.classList.remove('slide-down');
-    banner.style.display = 'none';
+    banner.classList.remove('show', 'active', 'slide-down');
+    banner.style.setProperty('display', 'none', 'important');
+    banner.style.setProperty('visibility', 'hidden', 'important');
+    banner.style.setProperty('pointer-events', 'none', 'important');
+    banner.style.setProperty('opacity', '0', 'important');
   }
   if (msgBannerTimeout) {
     clearTimeout(msgBannerTimeout);
@@ -8447,10 +8472,12 @@ function showCustomerFloatingBanner(title, text, onClick = null, durationMs = 65
     }
   };
 
-  // Force the arrival banner to display and slide down reliably
-  banner.style.display = 'block';
-  banner.classList.add('slide-down');
-  banner.classList.add('show');
+  // Force the arrival banner to display with active pointer events
+  banner.style.setProperty('display', 'block', 'important');
+  banner.style.setProperty('visibility', 'visible', 'important');
+  banner.style.setProperty('pointer-events', 'auto', 'important');
+  banner.style.setProperty('opacity', '1', 'important');
+  banner.classList.add('slide-down', 'show', 'active');
 
   // Protect banner display duration against incoming 2-second polls
   window._bannerActiveUntil = now + durationMs;
@@ -8849,12 +8876,35 @@ function closeRiderArrivedModal() {
 
   const modal = document.getElementById('riderArrivedModal');
   if (modal) {
+    modal.classList.remove('show', 'active');
     modal.style.setProperty('display', 'none', 'important');
     modal.style.setProperty('visibility', 'hidden', 'important');
     modal.style.setProperty('pointer-events', 'none', 'important');
-    modal.classList.remove('show', 'active');
+    modal.style.setProperty('opacity', '0', 'important');
+    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop, [onclick*="closeRiderArrivedModal"]');
+    backdrops.forEach(bd => {
+      bd.classList.remove('show', 'active');
+      bd.style.setProperty('display', 'none', 'important');
+      bd.style.setProperty('visibility', 'hidden', 'important');
+      bd.style.setProperty('pointer-events', 'none', 'important');
+      bd.style.setProperty('opacity', '0', 'important');
+    });
   }
+  document.querySelectorAll('body > .modal-backdrop, body > .fd-modal-backdrop, .modal-backdrop:not(.show), .fd-modal-backdrop:not(.active)').forEach(el => {
+    if (!el.closest('.show, .active, [style*="display: flex"], [style*="display:flex"]')) {
+      try {
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+        el.remove();
+      } catch (e) {}
+    }
+  });
+
   dismissLiveRiderBanner(true);
+  if (window.FoodDashCall && typeof window.FoodDashCall.cleanupArrivalModalDOM === 'function') {
+    window.FoodDashCall.cleanupArrivalModalDOM();
+  }
   if (window.FoodDashCall && typeof window.FoodDashCall.stopAllTones === 'function') {
     FoodDashCall.stopAllTones();
   }

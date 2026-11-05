@@ -451,6 +451,55 @@
     }
   }
 
+  function cleanupArrivalModalDOM() {
+    const modal = document.getElementById('riderArrivedModal');
+    if (modal) {
+      modal.classList.remove('show', 'active');
+      modal.style.setProperty('display', 'none', 'important');
+      modal.style.setProperty('visibility', 'hidden', 'important');
+      modal.style.setProperty('pointer-events', 'none', 'important');
+      modal.style.setProperty('opacity', '0', 'important');
+
+      const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop, [onclick*="closeRiderArrivedModal"]');
+      backdrops.forEach(bd => {
+        bd.classList.remove('show', 'active');
+        bd.style.setProperty('display', 'none', 'important');
+        bd.style.setProperty('visibility', 'hidden', 'important');
+        bd.style.setProperty('pointer-events', 'none', 'important');
+        bd.style.setProperty('opacity', '0', 'important');
+      });
+
+      const btns = modal.querySelectorAll('.btn-arrival-action, #riderArrivedActionButtons button');
+      btns.forEach(b => { b.disabled = true; });
+    }
+
+    // Ensure any fixed-position modal backdrops do not linger invisibly in the DOM
+    if (typeof document !== 'undefined') {
+      const orphanedBackdrops = document.querySelectorAll('body > .modal-backdrop, body > .fd-modal-backdrop, .modal-backdrop:not(.show), .fd-modal-backdrop:not(.active)');
+      orphanedBackdrops.forEach(ob => {
+        if (!ob.closest('.show, .active, [style*="display: flex"], [style*="display:flex"]')) {
+          try {
+            ob.style.setProperty('display', 'none', 'important');
+            ob.style.setProperty('visibility', 'hidden', 'important');
+            ob.style.setProperty('pointer-events', 'none', 'important');
+            ob.remove();
+          } catch (e) {}
+        }
+      });
+    }
+  }
+
+  function cleanupArrivalBannerDOM() {
+    const topBanner = document.getElementById('liveRiderMessageBanner');
+    if (topBanner) {
+      topBanner.classList.remove('show', 'active', 'slide-down');
+      topBanner.style.setProperty('display', 'none', 'important');
+      topBanner.style.setProperty('visibility', 'hidden', 'important');
+      topBanner.style.setProperty('pointer-events', 'none', 'important');
+      topBanner.style.setProperty('opacity', '0', 'important');
+    }
+  }
+
   function stopArrivalAlarm() {
     arrivalAcknowledged = true;
     arrivalAlarmActive = false;
@@ -480,13 +529,9 @@
         window.arrivalAlertAudio.currentTime = 0;
       } catch (e) {}
     }
-    const modal = document.getElementById('riderArrivedModal');
-    if (modal) {
-      modal.classList.remove('show', 'active');
-      modal.style.setProperty('display', 'none', 'important');
-      modal.style.setProperty('visibility', 'hidden', 'important');
-      modal.style.setProperty('pointer-events', 'none', 'important');
-    }
+
+    // Explicitly reset display, pointer events, and backdrops
+    cleanupArrivalModalDOM();
   }
   const stopArrivalAlarmAudio = stopArrivalAlarm;
 
@@ -549,18 +594,9 @@
       sessionStorage.removeItem('fd_arrival_acknowledged_all');
     } catch (e) {}
 
-    const modal = document.getElementById('riderArrivedModal');
-    if (modal) {
-      modal.classList.remove('show', 'active');
-      modal.style.setProperty('display', 'none', 'important');
-      modal.style.setProperty('visibility', 'hidden', 'important');
-      modal.style.setProperty('pointer-events', 'none', 'important');
-    }
-    const topBanner = document.getElementById('liveRiderMessageBanner');
-    if (topBanner) {
-      topBanner.style.display = 'none';
-      topBanner.classList.remove('show', 'slide-down');
-    }
+    // Explicitly reset display, pointer-events, and backdrops
+    cleanupArrivalModalDOM();
+    cleanupArrivalBannerDOM();
     if (typeof window.dismissLiveRiderBanner === 'function') {
       try { window.dismissLiveRiderBanner(true); } catch (e) {}
     }
@@ -1511,14 +1547,10 @@
     }
 
     // 2. Cleanly dismiss modal immediately without leaving state hanging
-    const modal = document.getElementById('riderArrivedModal');
-    if (modal) {
-      modal.style.setProperty('display', 'none', 'important');
-      modal.style.setProperty('visibility', 'hidden', 'important');
-      modal.style.setProperty('pointer-events', 'none', 'important');
-      modal.classList.remove('show', 'active');
-      const btns = modal.querySelectorAll('.btn-arrival-action, #riderArrivedActionButtons button');
-      btns.forEach(b => { b.disabled = true; });
+    cleanupArrivalModalDOM();
+    cleanupArrivalBannerDOM();
+    if (typeof window.dismissLiveRiderBanner === 'function') {
+      try { window.dismissLiveRiderBanner(true); } catch (e) {}
     }
 
     // 3. Send live automatic response message into chat
@@ -1562,10 +1594,10 @@
     stopArrivalAlarm();
     stopArrivalAlarmAudio();
     stopAllTones();
-    const modal = document.getElementById('riderArrivedModal');
-    if (modal) {
-      modal.style.setProperty('display', 'none', 'important');
-      modal.classList.remove('show', 'active');
+    cleanupArrivalModalDOM();
+    cleanupArrivalBannerDOM();
+    if (typeof window.dismissLiveRiderBanner === 'function') {
+      try { window.dismissLiveRiderBanner(true); } catch (e) {}
     }
     if (typeof window.openTrackingFromArrived === 'function') {
       window.openTrackingFromArrived();
@@ -1638,6 +1670,8 @@
     stopAllTones,
     resetEngine,
     bindArrivalModalListeners,
+    cleanupArrivalModalDOM,
+    cleanupArrivalBannerDOM,
     getActiveOrderId: () => activeOrderId,
     setRole: (r) => { myRole = r; },
     getCallState: () => currentCallState,
@@ -1649,6 +1683,8 @@
   window.stopArrivalAlertSound = stopArrivalAlarm;
   window.clearArrivalState = clearArrivalState;
   window.resetArrivalState = resetArrivalState;
+  window.cleanupArrivalModalDOM = cleanupArrivalModalDOM;
+  window.cleanupArrivalBannerDOM = cleanupArrivalBannerDOM;
 
   if (typeof document !== 'undefined') {
     // Immediate capture-phase handler to forcefully cancel arrival alarm and audio when Log Out is clicked anywhere
