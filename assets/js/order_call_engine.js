@@ -32,21 +32,114 @@
   let arrivalAcknowledged = false;
   let arrivalAlarmActive = false;
 
-  // Initialize Web Audio Context on first user gesture
-  function initAudioContext() {
-    if (!audioCtx) {
-      try {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (AudioContextClass) {
-          audioCtx = new AudioContextClass();
-        }
-      } catch (e) {
-        console.warn('AudioContext init error:', e);
+  // =============================================================
+  // STRICT SINGLETON AUDIO ENGINE
+  // Eliminates audio mixing, overlapping contexts, and distortion
+  // =============================================================
+  const SingletonAudioEngine = {
+    audioCtx: null,
+    synthLoopInterval: null,
+    arrivalMasterGain: null,
+    activeSynthNodes: [],
+    isChimePlaying: false,
+
+    // Close any existing AudioContext, disconnect all active nodes, and clear active timers
+    reset: function (closeContext = false) {
+      // 1. Clear active interval reference
+      if (this.synthLoopInterval) {
+        clearInterval(this.synthLoopInterval);
+        this.synthLoopInterval = null;
       }
+      if (synthLoopInterval) {
+        clearInterval(synthLoopInterval);
+        synthLoopInterval = null;
+      }
+      this.isChimePlaying = false;
+      isChimePlaying = false;
+
+      // 2. Disconnect and stop all active oscillator and gain nodes
+      if (this.activeSynthNodes && this.activeSynthNodes.length > 0) {
+        const nodesToClear = this.activeSynthNodes.slice();
+        this.activeSynthNodes = [];
+        nodesToClear.forEach(item => {
+          try {
+            if (item.gain) {
+              item.gain.gain.cancelScheduledValues(0);
+              item.gain.gain.setValueAtTime(0.0001, 0);
+              item.gain.disconnect();
+            }
+          } catch (e) {}
+          try {
+            if (item.osc) {
+              item.osc.onended = null;
+              try { item.osc.stop(); } catch (eStop) {}
+              item.osc.disconnect();
+            }
+          } catch (e) {}
+        });
+      }
+      if (activeSynthNodes && activeSynthNodes.length > 0) {
+        const legacyNodes = activeSynthNodes.slice();
+        activeSynthNodes = [];
+        legacyNodes.forEach(item => {
+          try { if (item.gain) item.gain.disconnect(); } catch (e) {}
+          try { if (item.osc) { item.osc.onended = null; item.osc.stop(); item.osc.disconnect(); } } catch (e) {}
+        });
+      }
+
+      // 3. Disconnect master gain node
+      if (this.arrivalMasterGain) {
+        try {
+          this.arrivalMasterGain.gain.cancelScheduledValues(0);
+          this.arrivalMasterGain.disconnect();
+        } catch (e) {}
+        this.arrivalMasterGain = null;
+      }
+      if (arrivalMasterGain) {
+        try { arrivalMasterGain.disconnect(); } catch (e) {}
+        arrivalMasterGain = null;
+      }
+
+      // 4. Check for and close any existing AudioContext when requested or before a new arpeggio loop
+      if (closeContext && this.audioCtx) {
+        try {
+          if (this.audioCtx.state !== 'closed' && typeof this.audioCtx.close === 'function') {
+            this.audioCtx.close().catch(() => {});
+          }
+        } catch (e) {}
+        this.audioCtx = null;
+        audioCtx = null;
+        if (window._fdAudioCtx === this.audioCtx) window._fdAudioCtx = null;
+      }
+    },
+
+    // Return or instantiate the single AudioContext instance
+    getContext: function (forceNew = false) {
+      if (forceNew && this.audioCtx) {
+        this.reset(true);
+      }
+      if (!this.audioCtx || this.audioCtx.state === 'closed') {
+        try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            this.audioCtx = new AudioContextClass();
+            audioCtx = this.audioCtx;
+            window._fdAudioCtx = this.audioCtx;
+          }
+        } catch (e) {
+          console.warn('SingletonAudioEngine getContext error:', e);
+        }
+      }
+      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume().catch(() => {});
+      }
+      return this.audioCtx;
     }
-    if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume().catch(() => {});
-    }
+  };
+
+  // Initialize Web Audio Context on first user gesture
+  function initAudioContext(forceNew = false) {
+    return SingletonAudioEngine.getContext(forceNew);
   }
 
   // Pre-bind gesture listeners for browser audio policy (especially mobile Safari & Chrome)
@@ -198,29 +291,39 @@
         (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
         (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) return;
 
-    // If the arpeggio loop is already running, prevent duplicate restarts / stuttering
-    if (synthLoopInterval && arrivalAlarmActive) {
-      return;
-    }
-    stopSynthLoop();
-    initAudioContext();
-    if (!audioCtx) return;
+    // Strict Singleton Pattern: Always check for and close any existing AudioContext,
+    // disconnect active oscillator/gain nodes, and clear active setInterval references
+    // before instantiating a new arpeggio loop.
+    SingletonAudioEngine.reset(true);
+
+    const ctx = SingletonAudioEngine.getContext(true);
+    if (!ctx) return;
 
     arrivalAlarmActive = true;
     arrivalAcknowledged = false;
+
+    // Create a fresh dedicated master gain node connected to ctx.destination
+    const masterGain = ctx.createGain();
+    const nowInit = ctx.currentTime;
+    masterGain.gain.setValueAtTime(0.85, nowInit);
+    masterGain.connect(ctx.destination);
+    SingletonAudioEngine.arrivalMasterGain = masterGain;
+    arrivalMasterGain = masterGain;
 
     function playAlarmChime() {
       if (!arrivalAlarmActive || arrivalAcknowledged || window.isLoggingOut || 
           (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
           (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
-        stopSynthLoop();
+        SingletonAudioEngine.reset(true);
         return;
       }
-      if (isChimePlaying) return;
+      if (SingletonAudioEngine.isChimePlaying) return;
 
-      if (!audioCtx) return;
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume().then(() => {
+      const activeCtx = SingletonAudioEngine.audioCtx;
+      if (!activeCtx || activeCtx.state === 'closed') return;
+
+      if (activeCtx.state === 'suspended') {
+        activeCtx.resume().then(() => {
           if (arrivalAlarmActive && !arrivalAcknowledged && !window.isLoggingOut && 
               !(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') &&
               !(typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
@@ -230,20 +333,15 @@
         return;
       }
 
-      isChimePlaying = true;
-      setTimeout(() => { isChimePlaying = false; }, 2500);
+      SingletonAudioEngine.isChimePlaying = true;
+      setTimeout(() => { SingletonAudioEngine.isChimePlaying = false; }, 2500);
 
       try {
-        const now = audioCtx.currentTime;
-
-        // Dedicated arrival master gain node for instantaneous, clean cutoff on dismissal
-        if (!arrivalMasterGain) {
-          arrivalMasterGain = audioCtx.createGain();
-          arrivalMasterGain.gain.setValueAtTime(0.85, now);
-          arrivalMasterGain.connect(audioCtx.destination);
-        } else {
-          arrivalMasterGain.gain.cancelScheduledValues(now);
-          arrivalMasterGain.gain.setValueAtTime(0.85, now);
+        const now = activeCtx.currentTime;
+        const mg = SingletonAudioEngine.arrivalMasterGain;
+        if (mg) {
+          mg.gain.cancelScheduledValues(now);
+          mg.gain.setValueAtTime(0.85, now);
         }
 
         // Clean, smooth, unhurried 4-note music-box arpeggio (C5 -> E5 -> G5 -> C6)
@@ -258,8 +356,8 @@
         const attackTime = 0.015; // 15ms soft linear attack ramp to completely eliminate any start click / transient tick
 
         notes.forEach(n => {
-          const osc = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
+          const osc = activeCtx.createOscillator();
+          const gain = activeCtx.createGain();
 
           osc.type = 'sine'; // Soft, warm, pure sine wave tone for music-box chime
           const noteTime = now + n.time;
@@ -275,15 +373,19 @@
           gain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
 
           osc.connect(gain);
-          gain.connect(arrivalMasterGain);
+          if (mg) {
+            gain.connect(mg);
+          } else {
+            gain.connect(activeCtx.destination);
+          }
           osc.start(noteTime);
           osc.stop(noteEnd + 0.08); // Generous tail to prevent any premature cutoff
 
           const nodeItem = { osc, gain, noteStart: noteTime, decayEnd: noteEnd };
-          activeSynthNodes.push(nodeItem);
+          SingletonAudioEngine.activeSynthNodes.push(nodeItem);
           osc.onended = () => {
-            const idx = activeSynthNodes.indexOf(nodeItem);
-            if (idx > -1) activeSynthNodes.splice(idx, 1);
+            const idx = SingletonAudioEngine.activeSynthNodes.indexOf(nodeItem);
+            if (idx > -1) SingletonAudioEngine.activeSynthNodes.splice(idx, 1);
             try {
               osc.disconnect();
               gain.disconnect();
@@ -299,58 +401,14 @@
     // Repeating interval: 4-note arpeggio plays out completely in ~2.40s,
     // rests in 4.0 seconds of complete silence, and repeats cleanly without sounding harsh or cutting off.
     // Total cycle duration: 2400ms chime + 4000ms silence rest = 6400ms
-    synthLoopInterval = setInterval(playAlarmChime, 6400);
+    SingletonAudioEngine.synthLoopInterval = setInterval(playAlarmChime, 6400);
+    synthLoopInterval = SingletonAudioEngine.synthLoopInterval;
   }
 
   function stopSynthLoop() {
-    if (synthLoopInterval) {
-      clearInterval(synthLoopInterval);
-      synthLoopInterval = null;
-    }
+    SingletonAudioEngine.reset(true);
+    synthLoopInterval = null;
     isChimePlaying = false;
-
-    // Immediately ramp master gain down and disconnect
-    if (arrivalMasterGain && audioCtx) {
-      try {
-        const now = audioCtx.currentTime;
-        arrivalMasterGain.gain.cancelScheduledValues(now);
-        arrivalMasterGain.gain.setValueAtTime(arrivalMasterGain.gain.value, now);
-        arrivalMasterGain.gain.linearRampToValueAtTime(0.0001, now + 0.012);
-        const mg = arrivalMasterGain;
-        arrivalMasterGain = null;
-        setTimeout(() => {
-          try { mg.disconnect(); } catch (e) {}
-        }, 20);
-      } catch (e) {
-        try { arrivalMasterGain.disconnect(); } catch (e2) {}
-        arrivalMasterGain = null;
-      }
-    }
-
-    if (activeSynthNodes && activeSynthNodes.length > 0) {
-      const now = audioCtx ? audioCtx.currentTime : 0;
-      activeSynthNodes.forEach(item => {
-        try {
-          if (item.gain && audioCtx) {
-            item.gain.gain.cancelScheduledValues(now);
-            item.gain.gain.setValueAtTime(0.0001, now);
-            item.gain.disconnect();
-          }
-        } catch (e) {}
-        try {
-          if (item.osc) {
-            item.osc.onended = null;
-            if (item.noteStart && item.noteStart > now) {
-              try { item.osc.stop(item.noteStart); } catch (e1) { try { item.osc.stop(); } catch (e2) {} }
-            } else {
-              try { item.osc.stop(now + 0.01); } catch (e1) { try { item.osc.stop(); } catch (e2) {} }
-            }
-            item.osc.disconnect();
-          }
-        } catch (e) {}
-      });
-      activeSynthNodes = [];
-    }
   }
 
   function playRingbackTone() {
@@ -1439,7 +1497,8 @@
     bindArrivalModalListeners,
     getActiveOrderId: () => activeOrderId,
     setRole: (r) => { myRole = r; },
-    getCallState: () => currentCallState
+    getCallState: () => currentCallState,
+    getAudioEngine: () => SingletonAudioEngine
   };
 
   window.playSynthArrivalAlarm = playSynthArrivalAlarm;

@@ -1238,19 +1238,11 @@ async function pollRiderLocation() {
     const dLat = parseFloat(data.destination_lat || ord.destination_lat || initDestLat);
     const dLng = parseFloat(data.destination_lng || ord.destination_lng || initDestLng);
 
-    // Updates riderMarker smoothly via OSRM road animation (700ms duration synchronized with 800ms polling)
-    if (riderMarker && !isNaN(rLat) && !isNaN(rLng) && rLat !== 0) {
-      animateMarkerTo(riderMarker, rLat, rLng, 700);
-      // Snap route polyline via OSRM roads
-      fetchOsrmRoadPolyline(rLat, rLng, dLat, dLng);
-    }
-
     // Distance & ETA calculation matching rider dashboard
     let distKm = (typeof data.distance_km === 'number') ? data.distance_km : null;
     if (distKm === null && !isNaN(rLat) && !isNaN(rLng) && rLat !== 0) {
       distKm = calculateHaversineKm(rLat, rLng, dLat, dLng);
     }
-    updateEtaBadge(distKm);
 
     // SPEED UP ARRIVAL & IMMEDIATE MODAL TRIGGER
     const sNorm = String(ord.status || data.status || '').toUpperCase().trim();
@@ -1268,6 +1260,37 @@ async function pollRiderLocation() {
     }
 
     if (isArrivedPayload) {
+      // 1. Instantly force-snap the rider marker to the destination coordinates
+      if (riderMarker) {
+        if (riderMarker._animFrameId) {
+          cancelAnimationFrame(riderMarker._animFrameId);
+          riderMarker._animFrameId = null;
+        }
+        riderMarker.setLatLng([dLat, dLng]);
+        if (typeof riderMarker.setZIndexOffset === 'function') {
+          riderMarker.setZIndexOffset(1000);
+        }
+      }
+
+      // 2. Center the map directly on destination
+      if (trackingMap) {
+        trackingMap.setView([dLat, dLng], 17, { animate: true });
+      }
+
+      // 3. Reset distance to "Arrived!"
+      distKm = 0;
+      updateEtaBadge(0, 0);
+      const etaBadgeText = document.getElementById('etaBadgeText');
+      if (etaBadgeText) etaBadgeText.textContent = 'Your rider has arrived outside! 🛵';
+      const distPillText = document.getElementById('distPillText');
+      if (distPillText) distPillText.textContent = 'Road Distance: Arrived!';
+
+      // 4. Clear any stale telemetry offset and route polyline so customer matches rider dashboard immediately
+      if (routePolyline) {
+        routePolyline.setLatLngs([]);
+      }
+      currentTrackOsrmPath = [];
+
       const isAck = Boolean(data.arrival_acknowledged) || Boolean(ord.arrival_acknowledged)
         || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
         || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
@@ -1281,6 +1304,14 @@ async function pollRiderLocation() {
         // Bypass any lagging checks: immediately trigger arrival modal and sound
         handleRiderArrivedEvent(data.order || data);
       }
+    } else {
+      // Normal moving telemetry: update riderMarker smoothly via OSRM road animation
+      if (riderMarker && !isNaN(rLat) && !isNaN(rLng) && rLat !== 0) {
+        animateMarkerTo(riderMarker, rLat, rLng, 700);
+        // Snap route polyline via OSRM roads
+        fetchOsrmRoadPolyline(rLat, rLng, dLat, dLng);
+      }
+      updateEtaBadge(distKm);
     }
 
     // Check for active incoming call from rider
@@ -2026,6 +2057,27 @@ function handleRiderArrivedEvent(data) {
     playArrivalAlertSound();
   }
 
+  // Force-snap rider marker directly to destination coordinates & center map
+  const targetDestLat = (typeof initDestLat !== 'undefined' && initDestLat) ? initDestLat : (data.destination_lat || data.dest_lat || (data.order && data.order.destination_lat));
+  const targetDestLng = (typeof initDestLng !== 'undefined' && initDestLng) ? initDestLng : (data.destination_lng || data.dest_lng || (data.order && data.order.destination_lng));
+  if (riderMarker && targetDestLat && targetDestLng) {
+    if (riderMarker._animFrameId) {
+      cancelAnimationFrame(riderMarker._animFrameId);
+      riderMarker._animFrameId = null;
+    }
+    riderMarker.setLatLng([targetDestLat, targetDestLng]);
+    if (typeof riderMarker.setZIndexOffset === 'function') {
+      riderMarker.setZIndexOffset(1000);
+    }
+    if (trackingMap) {
+      trackingMap.setView([targetDestLat, targetDestLng], 17, { animate: true });
+    }
+    if (routePolyline) {
+      routePolyline.setLatLngs([]);
+    }
+    currentTrackOsrmPath = [];
+  }
+
   // Update status badge on page to Arrived
   const statusPills = document.querySelectorAll('.status-pill');
   statusPills.forEach(pill => {
@@ -2041,7 +2093,7 @@ function handleRiderArrivedEvent(data) {
   }
   const distPillText = document.getElementById('distPillText');
   if (distPillText) {
-    distPillText.textContent = '0m (Arrived)';
+    distPillText.textContent = 'Road Distance: Arrived!';
   }
 }
 

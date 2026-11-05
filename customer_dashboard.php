@@ -7575,7 +7575,17 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     if (dKm === null && !isNaN(destLat) && !isNaN(destLng) && !isNaN(riderLat) && !isNaN(riderLng) && riderLat !== 0) {
       dKm = calculateHaversineKm(riderLat, riderLng, destLat, destLng);
     }
-    updateCustomerEtaBadge(dKm);
+
+    if (isLiveArrived || (dKm !== null && dKm <= 0.035)) {
+      dKm = 0;
+      updateCustomerEtaBadge(0, 0);
+      const distTextEl = document.getElementById('custTrackDistText');
+      if (distTextEl) distTextEl.textContent = 'Road Distance: Arrived!';
+      const etaBadgeText = document.getElementById('custTrackEtaBadgeText');
+      if (etaBadgeText) etaBadgeText.textContent = 'Your rider has arrived outside! 🛵';
+    } else {
+      updateCustomerEtaBadge(dKm);
+    }
 
     // If close to destination (dist <= 0.8km or near/arrived), maintain fast 1000ms polling rate
     if ((dKm !== null && dKm <= 0.8) || isLiveArrived) {
@@ -7599,7 +7609,8 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
       storeLat, storeLng, storeName: ord.store_name || data.store_name,
       destLat, destLng, deliveryAddress: ord.delivery_address,
       riderLat, riderLng, riderName: currentTrackingRiderName,
-      isInitial
+      isInitial,
+      isArrived: Boolean(isLiveArrived || (dKm !== null && dKm === 0))
     });
 
   } catch (err) {
@@ -7696,22 +7707,44 @@ function renderCustomerMap(opts) {
     }
   }
 
-  // c. Rider Motorcycle Pin (dynamically update position for live PC simulator movements & smooth road animation)
-  if (validRider) {
+  // c. Rider Motorcycle Pin (instantly force-snaps to destination if arrived, or smoothly animates if moving)
+  if (opts.isArrived && validDest) {
+    if (!custRiderMarker) {
+      custRiderMarker = L.marker([opts.destLat, opts.destLng], { icon: riderIcon, zIndexOffset: 1000 }).addTo(custTrackingMap);
+      custRiderMarker.bindPopup(`<b>${escapeCustHtml(opts.riderName || 'Rider')}</b><br><small>Arrived at Destination</small>`);
+    } else {
+      if (custRiderMarker._animFrameId) {
+        cancelAnimationFrame(custRiderMarker._animFrameId);
+        custRiderMarker._animFrameId = null;
+      }
+      custRiderMarker.setLatLng([opts.destLat, opts.destLng]);
+      if (typeof custRiderMarker.setZIndexOffset === 'function') {
+        custRiderMarker.setZIndexOffset(1000);
+      }
+    }
+    // Center map on destination
+    if (custTrackingMap) {
+      custTrackingMap.setView([opts.destLat, opts.destLng], 17, { animate: true });
+    }
+    // Clear stale telemetry offset & route polyline
+    if (custRoutePolyline) {
+      custRoutePolyline.setLatLngs([]);
+    }
+  } else if (validRider) {
     if (!custRiderMarker) {
       custRiderMarker = L.marker([opts.riderLat, opts.riderLng], { icon: riderIcon, zIndexOffset: 1000 }).addTo(custTrackingMap);
       custRiderMarker.bindPopup(`<b>${escapeCustHtml(opts.riderName || 'Rider')}</b><br><small>Live Motorcycle GPS</small>`);
     } else {
       animateMarkerAlongRoad(custRiderMarker, opts.riderLat, opts.riderLng, 850);
     }
-  }
 
-  // d. Dynamic connecting road polyline via OSRM (never straight line)
-  const polyStart = validRider ? [opts.riderLat, opts.riderLng] : (validStore ? [opts.storeLat, opts.storeLng] : null);
-  const polyEnd = validDest ? [opts.destLat, opts.destLng] : null;
+    // d. Dynamic connecting road polyline via OSRM (never straight line)
+    const polyStart = [opts.riderLat, opts.riderLng];
+    const polyEnd = validDest ? [opts.destLat, opts.destLng] : null;
 
-  if (polyStart && polyEnd) {
-    fetchCustOsrmRoute(polyStart[0], polyStart[1], polyEnd[0], polyEnd[1]);
+    if (polyStart && polyEnd) {
+      fetchCustOsrmRoute(polyStart[0], polyStart[1], polyEnd[0], polyEnd[1]);
+    }
   }
 
   if (opts.isInitial) {
@@ -8797,7 +8830,26 @@ function updateOrderStatusToArrived(orderId) {
   }
   const distText = document.getElementById('custTrackDistText');
   if (distText) {
-    distText.textContent = '0m away (Arrived)';
+    distText.textContent = 'Road Distance: Arrived!';
+  }
+
+  // Instantly force-snap the rider marker to destination coordinates, center map, and clear route polyline
+  if (custTrackingMap && custDestMarker && custRiderMarker) {
+    const destLL = custDestMarker.getLatLng();
+    if (destLL) {
+      if (custRiderMarker._animFrameId) {
+        cancelAnimationFrame(custRiderMarker._animFrameId);
+        custRiderMarker._animFrameId = null;
+      }
+      custRiderMarker.setLatLng(destLL);
+      if (typeof custRiderMarker.setZIndexOffset === 'function') {
+        custRiderMarker.setZIndexOffset(1000);
+      }
+      custTrackingMap.setView(destLL, 17, { animate: true });
+      if (custRoutePolyline) {
+        custRoutePolyline.setLatLngs([]);
+      }
+    }
   }
 }
 
