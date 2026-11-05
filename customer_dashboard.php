@@ -7826,13 +7826,13 @@ function playSynthArrivalAlarm() {
           customerSynthAudioCtx.resume().catch(() => {});
         }
         const now = customerSynthAudioCtx.currentTime;
-        // Pleasant 4-note arpeggio phrase (C5 -> E5 -> G5 -> C6)
-        // Spaced sequentially using precise ctx.currentTime offsets: 0ms, 150ms, 300ms, 450ms
+        // Calm, peaceful 4-note arpeggio phrase (C5 -> E5 -> G5 -> C6)
+        // Generously spaced at 380ms intervals: 0ms, 380ms, 760ms, 1140ms
         const notes = [
-          { freq: 523.25, time: 0.000, dur: 0.45, vol: 0.16 }, // C5 (0ms)
-          { freq: 659.25, time: 0.150, dur: 0.45, vol: 0.16 }, // E5 (150ms)
-          { freq: 783.99, time: 0.300, dur: 0.45, vol: 0.16 }, // G5 (300ms)
-          { freq: 1046.50, time: 0.450, dur: 0.85, vol: 0.18 }  // C6 (450ms, decays cleanly to ~1.30s)
+          { freq: 523.25, time: 0.000, dur: 0.48, vol: 0.16 }, // Note 1: C5 at 0ms (480ms duration)
+          { freq: 659.25, time: 0.380, dur: 0.48, vol: 0.16 }, // Note 2: E5 at 380ms (480ms duration)
+          { freq: 783.99, time: 0.760, dur: 0.48, vol: 0.16 }, // Note 3: G5 at 760ms (480ms duration)
+          { freq: 1046.50, time: 1.140, dur: 0.85, vol: 0.18 }  // Note 4: C6 at 1140ms (rings out cleanly to ~2.0s)
         ];
         notes.forEach(n => {
           const osc = customerSynthAudioCtx.createOscillator();
@@ -7845,13 +7845,13 @@ function playSynthArrivalAlarm() {
           const decayEnd = noteStart + n.dur;
 
           gain.gain.setValueAtTime(0.0001, noteStart);
-          gain.gain.linearRampToValueAtTime(n.vol, noteStart + 0.02);
+          gain.gain.linearRampToValueAtTime(n.vol, noteStart + 0.025);
           gain.gain.exponentialRampToValueAtTime(0.0001, decayEnd);
 
           osc.connect(gain);
           gain.connect(customerSynthAudioCtx.destination);
           osc.start(noteStart);
-          osc.stop(decayEnd + 0.02);
+          osc.stop(decayEnd + 0.03);
 
           customerActiveOscillators.push(osc);
           osc.onended = () => {
@@ -7864,9 +7864,9 @@ function playSynthArrivalAlarm() {
     }
 
     chimeTick();
-    // Repeating interval set to ~4000ms (4 seconds):
-    // Full 4-note melody phrase rings out (~1.3s), pauses in silence (~2.7s), then replays
-    customerSynthLoopInterval = setInterval(chimeTick, 4000);
+    // Repeating interval set to peaceful 5000ms (5 seconds):
+    // Full 4-note melody phrase rings out (~2.0s), pauses in silence (~3.0s), then replays calmly
+    customerSynthLoopInterval = setInterval(chimeTick, 5000);
   } catch (e) {
     console.warn('Customer synth chime error:', e);
   }
