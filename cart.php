@@ -1701,8 +1701,8 @@ function initCartMap() {
     if (!container) return;
 
     var hasCoords = cartPinnedLat && cartPinnedLng;
-    var initLat = hasCoords ? cartPinnedLat : 11.0050;
-    var initLng = hasCoords ? cartPinnedLng : 124.6075;
+    var initLat = hasCoords ? cartPinnedLat : 11.01034;
+    var initLng = hasCoords ? cartPinnedLng : 124.61781;
     var initZoom = hasCoords ? 17 : 14;
 
     if (!cartLeafletMap) {

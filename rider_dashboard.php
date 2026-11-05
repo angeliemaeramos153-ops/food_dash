@@ -47,9 +47,17 @@ if (!function_exists('normalize_delivery_coordinates')) {
             strpos($norm, 'bonifacio') !== false
         );
 
+        if ($is_wlc_target) {
+            return [
+                'lat' => 11.0076,
+                'lng' => 124.6089
+            ];
+        }
+
+        // Default to dynamic Barangay Alta Vista coordinates
         return [
-            'lat' => 11.0076,
-            'lng' => 124.6089
+            'lat' => 11.01034,
+            'lng' => 124.61781
         ];
     }
 }
@@ -3109,13 +3117,13 @@ function resolveDestinationCoordinates(orderData) {
   }
 
   return {
-    latitude: 11.0076,
-    longitude: 124.6089,
+    latitude: 11.01034,
+    longitude: 124.61781,
     destinationName:
       orderData?.delivery_address ||
       orderData?.destination_name ||
       orderData?.address ||
-      'Western Leyte College (A. Bonifacio St.)',
+      'Barangay Alta Vista, Ormoc City',
   };
 }
 
@@ -3198,13 +3206,17 @@ async function initDeliveryMap(data) {
   const rLng = (data.rider_lng !== null && !isNaN(data.rider_lng) && Number(data.rider_lng) !== 0) ? Number(data.rider_lng) : null;
   const hasRiderCoord = (rLat !== null && rLng !== null && rLat >= -90 && rLat <= 90 && rLng >= -180 && rLng <= 180);
 
-  // Default center: Ormoc City center (ensures map never stays unrendered/blank)
-  const defaultOrmocCenter = [11.0050, 124.6075];
+  // Default coordinates: dynamic Barangay Alta Vista default destination coordinates
+  const altaVistaLat = 11.01034;
+  const altaVistaLng = 124.61781;
+  const targetCustLat = (hasCustomerCoord && cLat) ? cLat : altaVistaLat;
+  const targetCustLng = (hasCustomerCoord && cLng) ? cLng : altaVistaLng;
+
   const activeOriginCoord = (hasRiderCoord && !data.is_initial_shop_origin) ? [rLat, rLng] : (hasStoreCoord ? [sLat, sLng] : null);
-  const initialCenter = (hasCustomerCoord && activeOriginCoord)
-    ? [(cLat + activeOriginCoord[0]) / 2, (cLng + activeOriginCoord[1]) / 2]
-    : (hasCustomerCoord ? [cLat, cLng] : (activeOriginCoord ? activeOriginCoord : defaultOrmocCenter));
-  const initialZoom = (hasCustomerCoord || hasStoreCoord || hasRiderCoord) ? 15 : 14;
+  const initialCenter = (activeOriginCoord)
+    ? [(targetCustLat + activeOriginCoord[0]) / 2, (targetCustLng + activeOriginCoord[1]) / 2]
+    : [targetCustLat, targetCustLng];
+  const initialZoom = (hasStoreCoord || hasRiderCoord) ? 15 : 16;
 
   // Initialize Leaflet Map with explicit center and zoom
   deliveryMap = L.map('delivery-map', {
@@ -3213,7 +3225,10 @@ async function initDeliveryMap(data) {
     zoomControl: true,
     scrollWheelZoom: true,
     attributionControl: false
-  });
+  }).setView([targetCustLat, targetCustLng], 16);
+
+  window.deliveryMap = deliveryMap;
+  window.map = deliveryMap;
 
   // OpenStreetMap Tile Layer with reliable subdomains
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -3225,45 +3240,51 @@ async function initDeliveryMap(data) {
 
   // Immediately call invalidateSize right after map is created and attached to DOM
   deliveryMap.invalidateSize();
-  requestAnimationFrame(() => {
-    if (deliveryMap) deliveryMap.invalidateSize();
-  });
+  setTimeout(() => {
+    if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') {
+      map.invalidateSize();
+    }
+    if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') {
+      deliveryMap.invalidateSize();
+    }
+  }, 200);
 
   // Multi-tier staggered invalidations to guarantee tile calculation regardless of layout speed or render cycle
   [50, 150, 300, 600, 1200].forEach(delay => {
     setTimeout(() => {
-      if (deliveryMap) {
+      if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') {
+        map.invalidateSize();
+      }
+      if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') {
         deliveryMap.invalidateSize();
       }
     }, delay);
   });
 
-  // 3. Customer Destination Custom Marker strictly from id / delivery_lng
-  if (hasCustomerCoord) {
-    const customerCoord = [cLat, cLng];
-    const customerIcon = L.divIcon({
-      className: 'custom-map-marker',
-      html: `
-        <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
-          <div style="background:#923D32;color:#ffffff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(146,61,50,0.45);border:2.5px solid #ffffff;font-size:15px;">
-            <i class="fa-solid fa-house-chimney"></i>
-          </div>
-          <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid #923D32;margin-top:-2px;"></div>
-          <div style="background:rgba(0,0,0,0.2);width:16px;height:4px;border-radius:50%;margin-top:1px;"></div>
+  // 3. Customer Destination Custom Marker strictly from dynamic/database coords
+  const customerCoord = [targetCustLat, targetCustLng];
+  const customerIcon = L.divIcon({
+    className: 'custom-map-marker',
+    html: `
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+        <div style="background:#923D32;color:#ffffff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(146,61,50,0.45);border:2.5px solid #ffffff;font-size:15px;">
+          <i class="fa-solid fa-house-chimney"></i>
         </div>
-      `,
-      iconSize: [34, 46],
-      iconAnchor: [17, 43],
-      popupAnchor: [0, -42]
-    });
+        <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid #923D32;margin-top:-2px;"></div>
+        <div style="background:rgba(0,0,0,0.2);width:16px;height:4px;border-radius:50%;margin-top:1px;"></div>
+      </div>
+    `,
+    iconSize: [34, 46],
+    iconAnchor: [17, 43],
+    popupAnchor: [0, -42]
+  });
 
-    customerMarker = L.marker(customerCoord, { icon: customerIcon }).addTo(deliveryMap);
-    customerMarker.bindPopup(`
-      <b><i class="fa-solid fa-location-dot" style="color:#923D32"></i> Customer Destination</b><br>
-      <strong>${esc(data.customer_name)}</strong><br>
-      <span>${esc(data.delivery_address || 'Delivery Address')}</span>
-    `);
-  }
+  customerMarker = L.marker(customerCoord, { icon: customerIcon }).addTo(deliveryMap);
+  customerMarker.bindPopup(`
+    <b><i class="fa-solid fa-location-dot" style="color:#923D32"></i> Customer Destination</b><br>
+    <strong>${esc(data.customer_name || 'Customer')}</strong><br>
+    <span>${esc(data.delivery_address || 'Barangay Alta Vista, Ormoc City')}</span>
+  `);
 
   // 1. Dynamic Starting Store Pickup Marker directly at store's real location
   if (hasStoreCoord) {
@@ -3285,21 +3306,16 @@ async function initDeliveryMap(data) {
   // Route Polyline & Bounds: Between active origin (rider live GPS or store pickup) and customer destination via OSRM
   const activeOriginCoord = (hasRiderCoord && !data.is_initial_shop_origin) ? [rLat, rLng] : (hasStoreCoord ? [sLat, sLng] : null);
 
-  if (hasCustomerCoord && activeOriginCoord) {
-    const customerCoord = [cLat, cLng];
+  if (activeOriginCoord) {
     const initialBounds = L.latLngBounds([activeOriginCoord, customerCoord]);
     deliveryMap.fitBounds(initialBounds, { padding: [50, 50], maxZoom: 16 });
     // Asynchronously fetch and render real-street OSRM road geometry
     loadAndDrawRoadRoute(activeOriginCoord[0], activeOriginCoord[1], customerCoord[0], customerCoord[1], true);
-  } else if (hasCustomerCoord) {
+  } else {
     // Keep map centered strictly on customer destination until live GPS is acquired
-    deliveryMap.setView([cLat, cLng], 16);
+    deliveryMap.setView([targetCustLat, targetCustLng], 16);
     const distEl = document.getElementById('mapRouteDistance');
     if (distEl) distEl.textContent = 'Waiting for live rider GPS…';
-  } else if (activeOriginCoord) {
-    deliveryMap.setView(activeOriginCoord, 16);
-    const distEl = document.getElementById('mapRouteDistance');
-    if (distEl) distEl.textContent = 'Store pickup location';
   }
 
   if (deliveryMap) {
@@ -3311,11 +3327,9 @@ async function initDeliveryMap(data) {
     deliveryMap.invalidateSize();
   }
   setTimeout(() => {
-    if (deliveryMap) deliveryMap.invalidateSize();
-  }, 100);
-  setTimeout(() => {
-    if (deliveryMap) deliveryMap.invalidateSize();
-  }, 250);
+    if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
+    if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
+  }, 200);
 }
 
 async function sendRiderLocation(orderId, lat, lng, isImmediate = false, isReset = false) {
@@ -3521,7 +3535,10 @@ function toggleLiveLocation(orderId) {
 
 // In-app map initialization on load & responsiveness
 function triggerMapResize() {
-  if (deliveryMap) {
+  if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') {
+    try { map.invalidateSize(); } catch (e) {}
+  }
+  if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') {
     try {
       deliveryMap.invalidateSize();
     } catch (e) {}
@@ -3534,25 +3551,34 @@ if (document.readyState === 'loading') {
       initDeliveryMap(activeDeliveryData);
     }
     initSimulator();
-    [100, 300, 600, 1200].forEach(delay => setTimeout(triggerMapResize, delay));
+    [100, 200, 300, 600, 1200].forEach(delay => setTimeout(triggerMapResize, delay));
   });
 } else {
   if (activeDeliveryData && document.getElementById('delivery-map')) {
     initDeliveryMap(activeDeliveryData);
   }
   initSimulator();
-  [100, 300, 600, 1200].forEach(delay => setTimeout(triggerMapResize, delay));
+  [100, 200, 300, 600, 1200].forEach(delay => setTimeout(triggerMapResize, delay));
 }
 
 window.addEventListener('load', () => {
   [50, 200, 500, 1000].forEach(delay => setTimeout(triggerMapResize, delay));
 });
-window.addEventListener('resize', triggerMapResize);
+window.addEventListener('resize', () => {
+  triggerMapResize();
+  setTimeout(() => {
+    if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
+    if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
+  }, 200);
+});
 window.addEventListener('orientationchange', () => {
-  setTimeout(triggerMapResize, 200);
+  setTimeout(() => {
+    if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
+    if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
+  }, 200);
 });
 window.addEventListener('hashchange', () => {
-  [50, 150, 350, 700].forEach(delay => setTimeout(triggerMapResize, delay));
+  [50, 150, 200, 350, 700].forEach(delay => setTimeout(triggerMapResize, delay));
 });
 
 // Automatic visibility detection: triggers invalidateSize immediately whenever delivery-map enters viewport
@@ -3563,7 +3589,10 @@ if (typeof IntersectionObserver !== 'undefined') {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
           triggerMapResize();
-          requestAnimationFrame(triggerMapResize);
+          setTimeout(() => {
+            if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
+            if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
+          }, 200);
         }
       });
     }, { threshold: [0, 0.05, 0.25, 0.5, 1.0] });
@@ -3576,17 +3605,34 @@ if (typeof ResizeObserver !== 'undefined') {
   if (mapElem) {
     const ro = new ResizeObserver(() => {
       triggerMapResize();
+      setTimeout(() => {
+        if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
+        if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
+      }, 200);
     });
     ro.observe(mapElem);
   }
 }
 
-// Ensure tab switches trigger invalidateSize immediately
+// Ensure tab switches and page visibility changes trigger invalidateSize immediately
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    triggerMapResize();
+    setTimeout(() => {
+      if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
+      if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
+    }, 200);
+  }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('nav.bottom a, [href="#delivery"]').forEach(el => {
+  document.querySelectorAll('nav.bottom a, [href="#delivery"], .nav-item, .tab-btn').forEach(el => {
     el.addEventListener('click', () => {
       setTimeout(triggerMapResize, 50);
-      setTimeout(triggerMapResize, 200);
+      setTimeout(() => {
+        if (typeof map !== 'undefined' && map && typeof map.invalidateSize === 'function') map.invalidateSize();
+        if (deliveryMap && typeof deliveryMap.invalidateSize === 'function') deliveryMap.invalidateSize();
+      }, 200);
     });
   });
 });

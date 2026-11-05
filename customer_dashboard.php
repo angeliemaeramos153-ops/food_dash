@@ -3735,10 +3735,10 @@ a:active,
       <!-- Leaflet map picker -->
       <div id="add-address-picker-map" style="height:170px; width:100%; border-radius:10px; border:1px solid #d8cbb5; margin-bottom:8px;"></div>
       <div id="newAddrGpsNotice" style="font-size:9.5px; color:#15803d; font-weight:600; margin-bottom:10px;">
-        <i class="fa-solid fa-circle-check"></i> <span id="newAddrCoordsText">Pin set: 11.00762, 124.60749</span>
+        <i class="fa-solid fa-circle-check"></i> <span id="newAddrCoordsText">Pin set: 11.01034, 124.61781</span>
       </div>
-      <input type="hidden" id="newAddrLat" value="11.00762">
-      <input type="hidden" id="newAddrLng" value="124.60749">
+      <input type="hidden" id="newAddrLat" value="11.01034">
+      <input type="hidden" id="newAddrLng" value="124.61781">
 
       <label style="display:flex; align-items:center; gap:8px; font-size:11px; color:#374151; cursor:pointer; margin-bottom:14px;">
         <input type="checkbox" id="newAddrSetDefault" checked style="width:16px; height:16px; accent-color:#4B5320;">
@@ -6524,8 +6524,8 @@ function openAddAddressModal() {
   if (zp) zp.value = '6541';
   selectNewAddrLabel('Home');
 
-  const defaultLat = 11.00762;
-  const defaultLng = 124.60749;
+  const defaultLat = 11.01034;
+  const defaultLng = 124.61781;
   updateNewAddrCoords(defaultLat, defaultLng);
 
   setTimeout(() => {
@@ -6709,8 +6709,8 @@ async function submitNewAddress() {
   const barangay = document.getElementById('newAddrBarangay')?.value.trim() || '';
   const city = document.getElementById('newAddrCity')?.value.trim() || 'Ormoc City';
   const postal_code = document.getElementById('newAddrZip')?.value.trim() || '6541';
-  const lat = parseFloat(document.getElementById('newAddrLat')?.value || '11.00762');
-  const lng = parseFloat(document.getElementById('newAddrLng')?.value || '124.60749');
+  const lat = parseFloat(document.getElementById('newAddrLat')?.value || '11.01034');
+  const lng = parseFloat(document.getElementById('newAddrLng')?.value || '124.61781');
   const is_default = document.getElementById('newAddrSetDefault')?.checked ? 1 : 0;
 
   const btn = document.getElementById('btnSaveNewAddress');
@@ -7833,20 +7833,23 @@ function renderCustomerMap(opts) {
   if (!mapContainer || typeof L === 'undefined') return;
 
   // Ormoc City default center
-  const defaultCenter = [11.00938, 124.60929];
+  // Barangay Alta Vista dynamic coordinates from active database order session
+  const altaVistaLat = 11.01034;
+  const altaVistaLng = 124.61781;
 
   const validStore = !isNaN(opts.storeLat) && !isNaN(opts.storeLng) && opts.storeLat !== 0;
   const validDest = !isNaN(opts.destLat) && !isNaN(opts.destLng) && opts.destLat !== 0;
   const validRider = !isNaN(opts.riderLat) && !isNaN(opts.riderLng) && opts.riderLat !== 0;
 
   // Requirement: Ensure map initializes and centers on rider's active coordinates or Ormoc City
-  const center = (validRider && validDest) ? [(opts.riderLat + opts.destLat) / 2, (opts.riderLng + opts.destLng) / 2] : (validRider ? [opts.riderLat, opts.riderLng] : (validDest ? [opts.destLat, opts.destLng] : (validStore ? [opts.storeLat, opts.storeLng] : defaultCenter)));
+  const targetDestLat = validDest ? opts.destLat : altaVistaLat;
+  const targetDestLng = validDest ? opts.destLng : altaVistaLng;
 
   if (!custTrackingMap) {
     custTrackingMap = L.map('cust-tracking-map', {
       zoomControl: true,
       attributionControl: false
-    }).setView(center, 16);
+    }).setView([targetDestLat, targetDestLng], 16);
 
     window.custTrackingMap = custTrackingMap;
     window.trackingMap = custTrackingMap;
@@ -7906,12 +7909,12 @@ function renderCustomerMap(opts) {
   }
 
   // b. Customer Delivery Pin (destination lat/lng)
-  if (validDest) {
+  if (targetDestLat && targetDestLng) {
     if (!custDestMarker) {
-      custDestMarker = L.marker([opts.destLat, opts.destLng], { icon: destIcon }).addTo(custTrackingMap);
+      custDestMarker = L.marker([targetDestLat, targetDestLng], { icon: destIcon }).addTo(custTrackingMap);
       custDestMarker.bindPopup(`<b>Your Delivery Location</b><br><small>${escapeCustHtml(opts.deliveryAddress || 'Destination')}</small>`);
     } else {
-      custDestMarker.setLatLng([opts.destLat, opts.destLng]);
+      custDestMarker.setLatLng([targetDestLat, targetDestLng]);
     }
   }
 
@@ -7959,7 +7962,7 @@ function renderCustomerMap(opts) {
     setTimeout(() => {
       custTrackingMap.invalidateSize();
       if (validRider && validDest) {
-        const bounds = L.latLngBounds([[opts.riderLat, opts.riderLng], [opts.destLat, opts.destLng]]);
+        const bounds = L.latLngBounds([[opts.riderLat, opts.riderLng], [targetDestLat, targetDestLng]]);
         custTrackingMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
       } else if (validRider) {
         custTrackingMap.setView([opts.riderLat, opts.riderLng], 16);
@@ -7970,10 +7973,10 @@ function renderCustomerMap(opts) {
         if (pointsToFit.length >= 2) {
           custTrackingMap.fitBounds(pointsToFit, { padding: [40, 40], maxZoom: 16 });
         } else if (pointsToFit.length === 1) {
-          custTrackingMap.setView(pointsToFit[0], 15);
+          custTrackingMap.setView([targetDestLat, targetDestLng], 16);
         }
       }
-    }, 150);
+    }, 200);
   }
 }
 
