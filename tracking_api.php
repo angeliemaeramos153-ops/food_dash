@@ -445,16 +445,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         o.order_id, o.order_ref, o.customer_id, o.customer_name, 
         COALESCE(NULLIF(TRIM(cu.phone), ''), NULLIF(TRIM(o.customer_phone), ''), '') AS customer_phone,
         COALESCE(NULLIF(TRIM(o.store_name), ''), NULLIF(TRIM(st.store_name), ''), NULLIF(TRIM(s.shop_name), ''), 'SM Center Ormoc') AS store_name,
-        COALESCE(NULLIF(TRIM(o.delivery_address), ''), 'Western Leyte College (A. Bonifacio St.), Ormoc City') AS delivery_address, 
+        COALESCE(NULLIF(TRIM(o.delivery_address), ''), 'Barangay Alta Vista, Ormoc City') AS delivery_address, 
         COALESCE(o.status, 'on_delivery') AS status,
         COALESCE(o.delivery_status, o.status, 'on_delivery') AS delivery_status,
         o.near_notified_at, o.location_updated_at,
         COALESCE(st.lat, s.lat, o.store_lat, ord.store_lat, 11.00620000) AS store_lat,
         COALESCE(st.lng, s.lng, o.store_lng, ord.store_lng, 124.60680000) AS store_lng,
-        COALESCE(o.delivery_lat, o.customer_lat, ord.delivery_lat, 11.00760000) AS destination_lat,
-        COALESCE(o.delivery_lng, o.customer_lng, ord.delivery_lng, 124.60890000) AS destination_lng,
-        COALESCE(o.customer_lat, o.delivery_lat, 11.00760000) AS customer_lat,
-        COALESCE(o.customer_lng, o.delivery_lng, 124.60890000) AS customer_lng,
+        COALESCE(o.delivery_lat, o.customer_lat, ord.delivery_lat, 11.01034000) AS destination_lat,
+        COALESCE(o.delivery_lng, o.customer_lng, ord.delivery_lng, 124.61781000) AS destination_lng,
+        COALESCE(o.customer_lat, o.delivery_lat, 11.01034000) AS customer_lat,
+        COALESCE(o.customer_lng, o.delivery_lng, 124.61781000) AS customer_lng,
         COALESCE(NULLIF(o.rider_id, 0), NULLIF(ord.rider_id, 0), NULL) AS rider_id,
         COALESCE(o.rider_lat, ord.rider_lat, ord.current_lat, r.current_lat, NULL) AS rider_lat,
         COALESCE(o.rider_lng, ord.rider_lng, ord.current_lng, r.current_lng, NULL) AS rider_lng,
@@ -476,15 +476,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         try {
             $stmtOrd = $conn->prepare("SELECT 
                 ord.id AS order_id, ord.order_number AS order_ref, ord.user_id AS customer_id,
-                COALESCE(ord.delivery_address, 'Western Leyte College (A. Bonifacio St.), Ormoc City') AS delivery_address,
+                COALESCE(ord.delivery_address, 'Barangay Alta Vista, Ormoc City') AS delivery_address,
                 COALESCE(ord.status, 'on_delivery') AS status,
                 COALESCE(ord.status, 'on_delivery') AS delivery_status,
                 COALESCE(ord.store_lat, 11.00620000) AS store_lat,
                 COALESCE(ord.store_lng, 124.60680000) AS store_lng,
-                COALESCE(ord.delivery_lat, 11.00760000) AS destination_lat,
-                COALESCE(ord.delivery_lng, 124.60890000) AS destination_lng,
-                COALESCE(ord.delivery_lat, 11.00760000) AS customer_lat,
-                COALESCE(ord.delivery_lng, 124.60890000) AS customer_lng,
+                COALESCE(ord.delivery_lat, 11.01034000) AS destination_lat,
+                COALESCE(ord.delivery_lng, 124.61781000) AS destination_lng,
+                COALESCE(ord.delivery_lat, 11.01034000) AS customer_lat,
+                COALESCE(ord.delivery_lng, 124.61781000) AS customer_lng,
                 ord.rider_id,
                 COALESCE(ord.current_lat, ord.rider_lat, r.current_lat, NULL) AS rider_lat,
                 COALESCE(ord.current_lng, ord.rider_lng, r.current_lng, NULL) AS rider_lng,
@@ -528,6 +528,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     $rider_lng       = $current_lng;
     $dest_lat        = $destination_lat;
     $dest_lng        = $destination_lng;
+
+    $addr_lower = strtolower($o['delivery_address'] ?? '');
+    if ((strpos($addr_lower, 'alta vista') !== false || strpos($addr_lower, 'altavista') !== false) &&
+        abs($destination_lat - 11.0076) < 0.0005 && abs($destination_lng - 124.6089) < 0.0005) {
+        $destination_lat = 11.01034;
+        $destination_lng = 124.61781;
+        $dest_lat        = 11.01034;
+        $dest_lng        = 124.61781;
+    }
 
     // Synchronize inside $o so nested order object has ZERO null coordinates
     $o['store_lat']       = $store_lat;

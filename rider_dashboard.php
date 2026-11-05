@@ -7,9 +7,8 @@ require_once 'payment_helper.php';
 
 /**
  * PHP Normalization Function for Order Destination Coordinates:
- * If the delivery address contains "western", "leyte", "college", "wlc", or "bonifacio",
- * forces latitude output to 11.0076 and longitude to 124.6089, completely overriding any 5.00000
- * or raw database numbers before it renders to the screen or map script.
+ * Enforces dynamic coordinates from database order records, defaulting to Barangay Alta Vista
+ * (11.01034, 124.61781) and eliminating hardcoded fallback overwrites.
  * Evaluates dynamically for all orders with zero hardcoded order IDs.
  */
 if (!function_exists('normalize_delivery_coordinates')) {
@@ -20,11 +19,19 @@ if (!function_exists('normalize_delivery_coordinates')) {
         $fLat = (isset($raw_lat) && is_numeric($raw_lat)) ? (float)$raw_lat : null;
         $fLng = (isset($raw_lng) && is_numeric($raw_lng)) ? (float)$raw_lng : null;
 
+        $is_corrupt_bonifacio_coords = (
+            $fLat !== null && $fLng !== null &&
+            abs($fLat - 11.0076) < 0.0005 &&
+            abs($fLng - 124.6089) < 0.0005 &&
+            (strpos($norm, 'alta vista') !== false || strpos($norm, 'altavista') !== false)
+        );
+
         // 1. ABSOLUTE PRIORITY: Valid Coordinates from Database Record
         // If valid latitude and longitude exist, strictly use them instead of keyword overrides
         $has_valid_coords = (
             $fLat !== null &&
             $fLng !== null &&
+            !$is_corrupt_bonifacio_coords &&
             $fLat >= 10.95 && $fLat <= 11.15 &&
             $fLng >= 124.50 && $fLng <= 124.75 &&
             abs($fLat - 5.0) >= 0.0001 &&
@@ -38,19 +45,11 @@ if (!function_exists('normalize_delivery_coordinates')) {
             ];
         }
 
-        // 2. Keyword fallback (ONLY when database coordinates are missing or corrupt)
-        $is_wlc_target = (
-            strpos($norm, 'western') !== false ||
-            strpos($norm, 'leyte') !== false ||
-            strpos($norm, 'college') !== false ||
-            strpos($norm, 'wlc') !== false ||
-            strpos($norm, 'bonifacio') !== false
-        );
-
-        if ($is_wlc_target) {
+        // 2. Address check for Alta Vista
+        if (strpos($norm, 'alta vista') !== false || strpos($norm, 'altavista') !== false) {
             return [
-                'lat' => 11.0076,
-                'lng' => 124.6089
+                'lat' => 11.01034,
+                'lng' => 124.61781
             ];
         }
 
@@ -2839,6 +2838,12 @@ const ORMOC_GEOCODING_DICTIONARY = {
     },
   },
   destinations: {
+    alta_vista: {
+      name: 'Barangay Alta Vista, Ormoc City',
+      latitude: 11.01034,
+      longitude: 124.61781,
+      keywords: ['alta vista', 'altavista', 'barangay alta vista'],
+    },
     western_leyte_college: {
       name: 'Western Leyte College',
       latitude: 11.0076,
@@ -3068,9 +3073,17 @@ function resolveDestinationCoordinates(orderData) {
     orderData?.lng
   );
 
+  const isCorruptBonifacio =
+    !isNaN(rawDestLat) &&
+    !isNaN(rawDestLng) &&
+    Math.abs(rawDestLat - 11.0076) < 0.0005 &&
+    Math.abs(rawDestLng - 124.6089) < 0.0005 &&
+    (addressStr.includes('alta vista') || addressStr.includes('altavista'));
+
   const hasValidCoords =
     !isNaN(rawDestLat) &&
     !isNaN(rawDestLng) &&
+    !isCorruptBonifacio &&
     isValidOrmocCoordinate(rawDestLat, rawDestLng) &&
     !(Math.abs(rawDestLat - 11.0138) < 0.001 && Math.abs(rawDestLng - 124.6040) < 0.001);
 
@@ -3086,23 +3099,16 @@ function resolveDestinationCoordinates(orderData) {
     };
   }
 
-  // 2. Keyword fallback (ONLY when valid coordinates are absent or corrupt)
-  const isWlcOrBonifacio =
-    addressStr.includes('western') ||
-    addressStr.includes('leyte') ||
-    addressStr.includes('college') ||
-    addressStr.includes('wlc') ||
-    addressStr.includes('bonifacio');
-
-  if (isWlcOrBonifacio) {
+  // 2. Specific address check for Alta Vista
+  if (addressStr.includes('alta vista') || addressStr.includes('altavista')) {
     return {
-      latitude: 11.0076,
-      longitude: 124.6089,
+      latitude: 11.01034,
+      longitude: 124.61781,
       destinationName:
         orderData?.delivery_address ||
         orderData?.destination_name ||
         orderData?.address ||
-        'Western Leyte College (A. Bonifacio St.)',
+        'Barangay Alta Vista, Ormoc City',
     };
   }
 

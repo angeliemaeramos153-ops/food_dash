@@ -211,7 +211,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
         }
     }
 
-    // Resolve dynamic delivery coordinates (WLC default: 11.0076, 124.6089)
+    // Resolve dynamic delivery coordinates (Alta Vista default: 11.01034, 124.61781)
     $dest_c = resolve_ormoc_dest_coords($delivery_address, $delivery_lat, $delivery_lng);
     $delivery_lat = (float)$dest_c['lat'];
     $delivery_lng = (float)$dest_c['lng'];

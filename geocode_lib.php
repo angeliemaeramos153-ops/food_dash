@@ -75,8 +75,8 @@ if (!function_exists('geocode_address_fallback')) {
             'combado'               => [11.0185, 124.6062],
             'cogon combado'         => [11.0185, 124.6062],
             'batuan'                => [11.0185, 124.6062],
-            'alta vista'       => [11.0118026, 124.6203237],
-            'altavista'        => [11.0118026, 124.6203237],
+            'alta vista'       => [11.01034, 124.61781],
+            'altavista'        => [11.01034, 124.61781],
             'cogon'            => [11.0233014, 124.6040868],
             'valencia'         => [11.1071389, 124.5782215],
             'ipil'             => [10.9754111, 124.6331304],
@@ -172,13 +172,8 @@ if (!function_exists('smart_geocode_ormoc')) {
 
         // 1. Destination / Street Matching
         if ($type === 'destination' || $type === 'any') {
-            if (
-                strpos($norm, 'western') !== false ||
-            strpos($norm, 'college') !== false ||
-            strpos($norm, 'wlc') !== false ||
-            strpos($norm, 'bonifacio') !== false
-            ) {
-                return ['lat' => 11.0076, 'lng' => 124.6089, 'name' => 'Western Leyte College (A. Bonifacio St.)', 'type' => 'destination'];
+            if (strpos($norm, 'alta vista') !== false || strpos($norm, 'altavista') !== false) {
+                return ['lat' => 11.01034, 'lng' => 124.61781, 'name' => 'Barangay Alta Vista, Ormoc City', 'type' => 'destination'];
             }
             if (strpos($norm, 'city hall') !== false) {
                 return ['lat' => 11.0088, 'lng' => 124.6050, 'name' => 'Ormoc City Hall', 'type' => 'destination'];
@@ -355,9 +350,19 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
         $fLat = (isset($raw_lat) && is_numeric($raw_lat)) ? (float)$raw_lat : null;
         $fLng = (isset($raw_lng) && is_numeric($raw_lng)) ? (float)$raw_lng : null;
 
+        // If coordinates were previously overwritten by the old Bonifacio fallback bug (11.0076, 124.6089)
+        // on an Alta Vista address, ignore the bad coords so the correct Alta Vista coordinates take precedence.
+        $is_corrupt_bonifacio_coords = (
+            $fLat !== null && $fLng !== null &&
+            abs($fLat - 11.0076) < 0.0005 &&
+            abs($fLng - 124.6089) < 0.0005 &&
+            (strpos($norm, 'alta vista') !== false || strpos($norm, 'altavista') !== false)
+        );
+
         $has_valid_coords = (
             $fLat !== null &&
             $fLng !== null &&
+            !$is_corrupt_bonifacio_coords &&
             is_valid_ormoc_coord($fLat, $fLng) &&
             abs($fLat - 5.0) >= 0.0001 &&
             !(abs($fLat - 11.0138) < 0.001 && abs($fLng - 124.6040) < 0.001)
@@ -372,20 +377,13 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
             ];
         }
 
-        // 2. Keyword-based matching fallback (ONLY when valid coordinates are absent or corrupted)
-        $is_wlc_or_bonifacio = (
-            strpos($norm, 'western') !== false ||
-            strpos($norm, 'college') !== false ||
-            strpos($norm, 'wlc') !== false ||
-            strpos($norm, 'bonifacio') !== false
-        );
-
-        if ($is_wlc_or_bonifacio) {
+        // 2. Specific address check for Alta Vista
+        if (strpos($norm, 'alta vista') !== false || strpos($norm, 'altavista') !== false) {
             return [
-                'lat' => 11.0076,
-                'lng' => 124.6089,
-                'name' => !empty($clean) ? $clean : 'Western Leyte College (A. Bonifacio St.)',
-                'source' => 'wlc_campus_override'
+                'lat' => 11.01034,
+                'lng' => 124.61781,
+                'name' => !empty($clean) ? $clean : 'Barangay Alta Vista, Ormoc City',
+                'source' => 'alta_vista_address'
             ];
         }
 
@@ -400,11 +398,12 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
             ];
         }
 
+        // Default to dynamic Barangay Alta Vista coordinates
         return [
-            'lat' => 11.0076,
-            'lng' => 124.6089,
-            'name' => !empty($clean) ? $clean : 'Western Leyte College (A. Bonifacio St.)',
-            'source' => 'wlc_campus_override'
+            'lat' => 11.01034,
+            'lng' => 124.61781,
+            'name' => !empty($clean) ? $clean : 'Barangay Alta Vista, Ormoc City',
+            'source' => 'alta_vista_default'
         ];
     }
 }
@@ -412,7 +411,7 @@ if (!function_exists('resolve_ormoc_dest_coords')) {
 /**
  * Robust dynamic geocoding check:
  * 1. Whenever order details or coordinates are loaded (specifically customer_lat, customer_lng, or delivery_address), normalize address text (lowercase, trimmed).
- * 2. If delivery address contains "western", "leyte", "college", "wlc", or "bonifacio", strictly override destination coordinates to WLC's precise campus center: latitude 11.0076, longitude 124.6089, completely discarding corrupted database coordinates like 5.00000.
+ * 2. Enforce verified database coordinates from the order record; if Alta Vista address, defaults/resolves to latitude 11.01034, longitude 124.61781.
  * 3. If the store is Jollibee SM, override store coordinates to SM Ormoc: latitude 11.0062, longitude 124.6068.
  * 4. Ensure zero hardcoded order IDs - evaluates all orders dynamically.
  */
@@ -522,16 +521,16 @@ if (!function_exists('apply_dynamic_geocoding_to_order')) {
             $order['pickup_lng'] = 124.6068000;
         }
 
-        // Guarantee destination coordinates NEVER null (defaults to WLC: 11.0076, 124.6089)
+        // Guarantee destination coordinates NEVER null (defaults to Alta Vista: 11.01034, 124.61781)
         if (empty($order['destination_lat']) || !is_numeric($order['destination_lat']) || (float)$order['destination_lat'] == 0 || (float)$order['destination_lat'] == 5.0) {
-            $order['destination_lat'] = 11.0076000;
-            $order['destination_lng'] = 124.6089000;
-            $order['dest_lat']        = 11.0076000;
-            $order['dest_lng']        = 124.6089000;
-            $order['delivery_lat']    = 11.0076000;
-            $order['delivery_lng']    = 124.6089000;
-            $order['customer_lat']    = 11.0076000;
-            $order['customer_lng']    = 124.6089000;
+            $order['destination_lat'] = 11.0103400;
+            $order['destination_lng'] = 124.6178100;
+            $order['dest_lat']        = 11.0103400;
+            $order['dest_lng']        = 124.6178100;
+            $order['delivery_lat']    = 11.0103400;
+            $order['delivery_lng']    = 124.6178100;
+            $order['customer_lat']    = 11.0103400;
+            $order['customer_lng']    = 124.6178100;
         }
 
         // Guarantee current & rider coordinates NEVER null (defaults to live rider GPS or store coordinates)

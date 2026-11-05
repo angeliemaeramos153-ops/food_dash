@@ -485,10 +485,10 @@ try {
                 COALESCE(fo.delivery_status, o.status, 'waiting') AS delivery_status,
                 'delivery' AS order_type,
                 COALESCE(fo.delivery_address, o.delivery_address, '') AS delivery_address,
-                COALESCE(fo.delivery_lat, fo.customer_lat, o.delivery_lat, o.customer_lat) AS delivery_lat,
-                COALESCE(fo.delivery_lng, fo.customer_lng, o.delivery_lng, o.customer_lng) AS delivery_lng,
-                COALESCE(fo.delivery_lat, fo.customer_lat, o.delivery_lat, o.customer_lat) AS destination_lat,
-                COALESCE(fo.delivery_lng, fo.customer_lng, o.delivery_lng, o.customer_lng) AS destination_lng,
+                COALESCE(fo.delivery_lat, fo.customer_lat, o.delivery_lat) AS delivery_lat,
+                COALESCE(fo.delivery_lng, fo.customer_lng, o.delivery_lng) AS delivery_lng,
+                COALESCE(fo.delivery_lat, fo.customer_lat, o.delivery_lat) AS destination_lat,
+                COALESCE(fo.delivery_lng, fo.customer_lng, o.delivery_lng) AS destination_lng,
                 COALESCE(r.rider_name, ru.full_name, o.rider_name, '') AS rider_name,
                 COALESCE(r.phone, ru.phone, fo.rider_phone, o.rider_phone, '') AS rider_phone,
                 COALESCE(fo.rider_lat, o.current_lat) AS current_lat,
@@ -546,9 +546,15 @@ try {
     $db_orders = [];
 }
 
-// Normalize order_ref for display (e.g., #FD-261024-8117)
+// Normalize order_ref and dynamic coordinates for display
+if (file_exists(__DIR__ . '/geocode_lib.php')) {
+    require_once __DIR__ . '/geocode_lib.php';
+}
 foreach ($db_orders as &$ord_ref_item) {
     $ord_ref_item['order_ref'] = '#' . ltrim($ord_ref_item['order_ref'] ?? ('FD-' . ($ord_ref_item['order_id'] ?? $ord_ref_item['id'])), '#');
+    if (function_exists('apply_dynamic_geocoding_to_order')) {
+        apply_dynamic_geocoding_to_order($ord_ref_item);
+    }
 }
 unset($ord_ref_item);
 
