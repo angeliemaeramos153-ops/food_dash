@@ -498,9 +498,28 @@
       clearTimeout(arrivalModalTimer);
       arrivalModalTimer = null;
     }
-    if (typeof window !== 'undefined' && window._arrivalModalTimer) {
-      clearTimeout(window._arrivalModalTimer);
-      window._arrivalModalTimer = null;
+    if (typeof window !== 'undefined') {
+      if (window._arrivalModalTimer) {
+        clearTimeout(window._arrivalModalTimer);
+        window._arrivalModalTimer = null;
+      }
+      window._hasTriggeredArrivalModal = false;
+      window._wasTrackArrived = false;
+      if (window._customerTrackingLastStates && oId) {
+        window._customerTrackingLastStates[oId] = 'on_delivery';
+      }
+      if (window._customerLastOrderStates && oId) {
+        window._customerLastOrderStates[oId] = 'on_delivery';
+      }
+      if (window._customerCommLastStates && oId) {
+        window._customerCommLastStates[oId] = 'on_delivery';
+      }
+      if (typeof window._lastTrackDeliveryStatus !== 'undefined') {
+        window._lastTrackDeliveryStatus = 'on_delivery';
+      }
+      if (typeof window._lastCommDeliveryStatus !== 'undefined') {
+        window._lastCommDeliveryStatus = 'on_delivery';
+      }
     }
     stopSynthLoop();
     if (arrivalAudio) {

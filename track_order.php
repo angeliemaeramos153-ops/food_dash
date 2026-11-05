@@ -1204,6 +1204,8 @@ function initMap() {
 
 // Exactly 800ms real-time high-frequency GPS telemetry polling loop
 let _isPollingLocation = false;
+let _hasTrackInitialBaseline = false;
+let _lastTrackDeliveryStatus = null;
 async function pollRiderLocation() {
   if (!orderId || _isPollingLocation) return;
   _isPollingLocation = true;
@@ -1256,8 +1258,15 @@ async function pollRiderLocation() {
     // Consistent 2-second polling interval aligned with rider dashboard telemetry
     window._trackPollingIntervalMs = 2000;
 
+    const isInitialPoll = !_hasTrackInitialBaseline;
+    const wasNonArrived = _lastTrackDeliveryStatus !== null && !['arrived', 'arrived_destination'].includes(_lastTrackDeliveryStatus);
+    const isActiveArrivalTransition = !isInitialPoll && wasNonArrived && isArrivedPayload;
+
     if (isArrivedPayload) {
       window._wasTrackArrived = true;
+      _lastTrackDeliveryStatus = 'arrived';
+      _hasTrackInitialBaseline = true;
+
       // 1. Instantly force-snap the rider marker to the destination coordinates
       if (riderMarker) {
         if (riderMarker._animFrameId) {
@@ -1283,14 +1292,24 @@ async function pollRiderLocation() {
       const distPillText = document.getElementById('distPillText');
       if (distPillText) distPillText.textContent = 'Road Distance: Arrived!';
 
-      // 4. Clear any stale telemetry offset and route polyline so customer matches rider dashboard immediately
+      // 4. Update status pill UI to Arrived
+      const statusPills = document.querySelectorAll('.status-pill');
+      statusPills.forEach(pill => {
+        pill.style.background = '#dcfce7';
+        pill.style.color = '#15803d';
+        pill.style.borderColor = '#86efac';
+        pill.innerHTML = '<i class="fa-solid fa-location-pin fa-bounce"></i> <span>Arrived</span>';
+      });
+
+      // 5. Clear any stale telemetry offset and route polyline so customer matches rider dashboard immediately
       if (routePolyline) {
         routePolyline.setLatLngs([]);
       }
       currentTrackOsrmPath = [];
 
-      // Remove premature flags on initial arrival detection so they never block modal execution
-      if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
+      // STRICT ARRIVAL TRIGGER: Only trigger banner and delayed modal on ACTIVE transition during active polling!
+      // Do NOT fire on initial page load if order was already arrived.
+      if (isActiveArrivalTransition) {
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem('fd_arrival_ack_' + orderId);
           localStorage.removeItem('fd_arrival_acknowledged_all');
@@ -1303,7 +1322,7 @@ async function pollRiderLocation() {
           window.FoodDashCall.arrivalAcknowledged = false;
         }
         handleRiderArrivedEvent(data.order || data);
-      } else {
+      } else if (!isInitialPoll) {
         const isAck = Boolean(data.arrival_acknowledged) || Boolean(ord.arrival_acknowledged)
           || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
           || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
@@ -1313,12 +1332,15 @@ async function pollRiderLocation() {
             FoodDashCall.stopAllTones();
           }
           stopArrivalAlertSound();
-        } else {
-          handleRiderArrivedEvent(data.order || data);
         }
       }
     } else {
-      const wasArrived = Boolean(window._wasTrackArrived || hasShownArrivedAlert || window._hasTriggeredArrivalModal || window._arrivalModalTimer);
+      const currentNorm = dNorm || sNorm.toLowerCase() || 'on_delivery';
+      const wasArrived = Boolean(window._wasTrackArrived || hasShownArrivedAlert || window._hasTriggeredArrivalModal || window._arrivalModalTimer || (_lastTrackDeliveryStatus && ['arrived', 'arrived_destination'].includes(_lastTrackDeliveryStatus)));
+
+      _lastTrackDeliveryStatus = currentNorm;
+      _hasTrackInitialBaseline = true;
+
       if (wasArrived) {
         if (window._arrivalModalTimer) {
           clearTimeout(window._arrivalModalTimer);
@@ -1357,9 +1379,15 @@ async function pollRiderLocation() {
           modal.style.setProperty('pointer-events', 'none', 'important');
         }
         stopArrivalAlertSound();
+
+        // 4. Reset map view bounds between rider and destination on reset to store
+        if (trackingMap && !isNaN(rLat) && !isNaN(rLng) && rLat !== 0 && !isNaN(dLat) && !isNaN(dLng) && dLat !== 0) {
+          const bounds = L.latLngBounds([[rLat, rLng], [dLat, dLng]]);
+          trackingMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+        }
       }
 
-      // 4. Instantly reset telemetry state on customer tracking map/UI
+      // 5. Instantly reset telemetry state on customer tracking map/UI
       if (riderMarker && !isNaN(rLat) && !isNaN(rLng) && rLat !== 0) {
         if (typeof riderMarker.setZIndexOffset === 'function') {
           riderMarker.setZIndexOffset(500);
@@ -2330,6 +2358,8 @@ function handleRiderArrivedEvent(data = {}) {
 window.handleRiderArrivedEvent = handleRiderArrivedEvent;
 
 // 500ms background polling loop checking order_communication_api.php
+let _hasCommInitialBaseline = false;
+let _lastCommDeliveryStatus = null;
 async function pollOrderCommunication() {
   if (!orderId) return;
   try {
@@ -2372,9 +2402,18 @@ async function pollOrderCommunication() {
     const dNorm = String(data.delivery_status || '').toLowerCase();
     const isArrivedNow = Boolean(data.is_arrived) || ['arrived', 'arrived_destination'].includes(dNorm) || ['ARRIVED', 'ARRIVED_DESTINATION'].includes(sNorm);
 
+    const isCommInitialPoll = !_hasCommInitialBaseline;
+    const wasCommNonArrived = _lastCommDeliveryStatus !== null && !['arrived', 'arrived_destination'].includes(_lastCommDeliveryStatus);
+    const isCommActiveTransition = !isCommInitialPoll && wasCommNonArrived && isArrivedNow;
+
     if (isArrivedNow) {
-      window._wasTrackArrived = true;
-      if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
+      _lastCommDeliveryStatus = 'arrived';
+      _hasCommInitialBaseline = true;
+
+      // STRICT ARRIVAL TRIGGER: Only trigger banner and delayed modal on ACTIVE transition during active polling!
+      // Do NOT fire on initial page load if order was already arrived.
+      if (isCommActiveTransition) {
+        window._wasTrackArrived = true;
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem('fd_arrival_ack_' + orderId);
           localStorage.removeItem('fd_arrival_acknowledged_all');
@@ -2387,16 +2426,19 @@ async function pollOrderCommunication() {
           window.FoodDashCall.arrivalAcknowledged = false;
         }
         handleRiderArrivedEvent(data);
-      } else if (data.arrival_acknowledged || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')) {
+      } else if (!isCommInitialPoll && (data.arrival_acknowledged || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1'))) {
         if (window._hasTriggeredArrivalModal) {
           if (window.FoodDashCall) FoodDashCall.stopAllTones();
           stopArrivalAlertSound();
         }
-      } else {
-        handleRiderArrivedEvent(data);
       }
     } else {
-      const wasCommArrived = Boolean(window._wasTrackArrived || hasShownArrivedAlert || window._hasTriggeredArrivalModal || window._arrivalModalTimer);
+      const commCurrentNorm = dNorm || sNorm.toLowerCase() || 'on_delivery';
+      const wasCommArrived = Boolean(window._wasTrackArrived || hasShownArrivedAlert || window._hasTriggeredArrivalModal || window._arrivalModalTimer || (_lastCommDeliveryStatus && ['arrived', 'arrived_destination'].includes(_lastCommDeliveryStatus)));
+
+      _lastCommDeliveryStatus = commCurrentNorm;
+      _hasCommInitialBaseline = true;
+
       if (wasCommArrived) {
         if (window._arrivalModalTimer) {
           clearTimeout(window._arrivalModalTimer);
@@ -2410,6 +2452,7 @@ async function pollOrderCommunication() {
           sessionStorage.removeItem('fd_arrival_ack_' + orderId);
           localStorage.removeItem('fd_arrival_acknowledged_all');
           sessionStorage.removeItem('fd_arrival_acknowledged_all');
+          sessionStorage.removeItem('fd_arrived_alert_seen_' + orderId);
         } catch (e) {}
         if (window.FoodDashCall && typeof window.FoodDashCall.clearArrivalState === 'function') {
           window.FoodDashCall.clearArrivalState(orderId);
