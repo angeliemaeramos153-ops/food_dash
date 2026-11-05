@@ -492,11 +492,20 @@
     const topBanner = document.getElementById('liveRiderMessageBanner');
     if (topBanner) {
       topBanner.classList.remove('show', 'active', 'slide-down');
-      topBanner.style.setProperty('display', 'none', 'important');
-      topBanner.style.setProperty('visibility', 'hidden', 'important');
-      topBanner.style.setProperty('pointer-events', 'none', 'important');
       topBanner.style.setProperty('opacity', '0', 'important');
+      topBanner.style.setProperty('pointer-events', 'none', 'important');
+      setTimeout(() => {
+        if (!topBanner.classList.contains('show') && !topBanner.classList.contains('slide-down')) {
+          topBanner.style.setProperty('display', 'none', 'important');
+          topBanner.style.setProperty('visibility', 'hidden', 'important');
+        }
+      }, 250);
     }
+    if (window._callEngineBannerTimer) {
+      clearTimeout(window._callEngineBannerTimer);
+      window._callEngineBannerTimer = null;
+    }
+    window._bannerActiveUntil = 0;
   }
 
   function stopArrivalAlarm() {
@@ -1376,13 +1385,13 @@
       topBanner.classList.add('slide-down', 'show');
       topBanner.style.display = 'flex';
       if (typeof window !== 'undefined') {
-        window._bannerActiveUntil = Date.now() + 6500;
+        window._bannerActiveUntil = Date.now() + 3000;
         if (typeof window.dismissLiveRiderBanner === 'function') {
           if (window._callEngineBannerTimer) clearTimeout(window._callEngineBannerTimer);
           window._callEngineBannerTimer = setTimeout(() => {
             window._bannerActiveUntil = 0;
             window.dismissLiveRiderBanner(true);
-          }, 6500);
+          }, 3000);
         }
       }
     }

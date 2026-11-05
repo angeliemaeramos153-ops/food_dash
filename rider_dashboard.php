@@ -1197,28 +1197,29 @@ main{padding:16px;flex:1;overflow-x:hidden}
 .toast-rider.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast-rider.err{background:var(--earth-clay)}
 
-/* Floating Customer Message Toast Alert */
+/* Floating Customer Message Toast Alert - Optimized Sleek Toast */
 .rider-customer-toast {
   position: fixed;
-  top: 68px;
+  top: 14px;
   left: 50%;
-  transform: translate(-50%, -20px);
-  max-width: 420px;
-  width: calc(100% - 28px);
+  transform: translate(-50%, -10px);
+  max-width: 360px;
+  width: calc(100% - 24px);
   background: #ffffff;
-  border: 1.5px solid var(--harvest-sun);
-  border-left: 5px solid var(--olive-shadow);
-  border-radius: 14px;
-  padding: 11px 14px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.18), 0 3px 10px rgba(75,83,32,0.2);
+  border: 1px solid var(--harvest-sun, #d88f2a);
+  border-left: 4px solid var(--olive-shadow, #4b5320);
+  border-radius: 12px;
+  padding: 8px 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12), 0 2px 6px rgba(75,83,32,0.1);
   display: flex;
   align-items: center;
-  gap: 12px;
-  z-index: 9999;
+  gap: 10px;
+  z-index: 99999;
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1), transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+  transition: all 0.25s ease-in-out;
 }
 .rider-customer-toast.show {
   transform: translate(-50%, 0);
@@ -1226,34 +1227,37 @@ main{padding:16px;flex:1;overflow-x:hidden}
   pointer-events: auto;
 }
 .rct-icon {
-  width: 38px;
-  height: 38px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
   border-radius: 50%;
   background: #dcfce7;
   color: #16a34a;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   flex-shrink: 0;
 }
 .rct-body {
   flex: 1;
   overflow: hidden;
+  line-height: 1.2;
 }
 .rct-title {
-  font-size: 0.70rem;
+  font-size: 10px;
   font-weight: 700;
   color: #15803d;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   margin-bottom: 2px;
+  line-height: 1.1;
 }
 .rct-text {
-  font-size: 0.82rem;
+  font-size: 12px;
   font-weight: 600;
   color: #0f172a;
-  line-height: 1.35;
+  line-height: 1.25;
   word-break: break-word;
 }
 .rct-close {
@@ -1263,9 +1267,29 @@ main{padding:16px;flex:1;overflow-x:hidden}
   font-size: 1.35rem;
   line-height: 1;
   cursor: pointer;
-  padding: 4px;
+  padding: 0;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  pointer-events: auto;
+  position: relative;
+  z-index: 10;
+  touch-action: manipulation;
+  transition: all 0.2s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
-.rct-close:hover { color: #0f172a; }
+.rct-close:hover,
+.rct-close:active {
+  color: #0f172a;
+  background: rgba(0, 0, 0, 0.06);
+}
 .delivery-complete-summary {
   animation: fadeInSummary 0.4s ease-out;
 }
@@ -1995,7 +2019,7 @@ main{padding:16px;flex:1;overflow-x:hidden}
     <div class="rct-title" id="rctTitle">Customer Message</div>
     <div class="rct-text" id="rctText">Customer: ...</div>
   </div>
-  <button type="button" class="rct-close" onclick="event.stopPropagation(); dismissRiderCustomerToast()">&times;</button>
+  <button type="button" class="rct-close" onclick="event.stopPropagation(); dismissRiderCustomerToast()" aria-label="Close">&times;</button>
 </div>
 <div class="toast-rider" id="riderToast"></div>
 <script src="assets/js/order_call_engine.js"></script>
@@ -4041,7 +4065,7 @@ function showRiderCustomerMessageToast(displayText, senderName) {
     clearTimeout(_riderCustToastTimer);
     _riderCustToastTimer = setTimeout(() => {
       toast.classList.remove('show');
-    }, 4000);
+    }, 3000);
   }
   toastRider(displayText);
 }

@@ -2306,30 +2306,33 @@ a:active,
   font-variant-numeric: tabular-nums;
 }
 
-/* Matching Floating Notification Banner from Rider Dashboard */
+/* Matching Floating Notification Banner from Rider Dashboard - Optimized Sleek Toast */
 .customer-floating-banner,
 #liveRiderMessageBanner,
 .live-rider-msg-banner {
   position: fixed !important;
-  top: 16px !important;
-  left: 16px !important;
-  right: 16px !important;
+  top: 14px !important;
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) translateY(-10px) !important;
   z-index: 99999 !important;
-  max-width: 440px !important;
+  width: calc(100% - 24px) !important;
+  max-width: 360px !important;
   margin: 0 auto !important;
-  border-radius: 16px !important;
+  border-radius: 12px !important;
   background: #ffffff !important;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.12) !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06) !important;
   border: 1px solid #e2e8f0 !important;
-  padding: 12px 14px !important;
-  display: none !important;
+  padding: 8px 12px !important;
+  display: flex !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
   pointer-events: none !important;
   align-items: center !important;
-  gap: 12px !important;
+  gap: 10px !important;
   cursor: pointer !important;
   box-sizing: border-box !important;
-  animation: bannerSlideDown 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-  transition: transform 0.25s ease, opacity 0.25s ease;
+  transition: all 0.25s ease-in-out !important;
 }
 .customer-floating-banner.show,
 #liveRiderMessageBanner.show,
@@ -2341,30 +2344,32 @@ a:active,
   display: flex !important;
   visibility: visible !important;
   opacity: 1 !important;
+  transform: translateX(-50%) translateY(0) !important;
   pointer-events: auto !important;
-  animation: bannerSlideDown 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
 }
 .customer-floating-banner:not(.show):not(.slide-down),
 #liveRiderMessageBanner:not(.show):not(.slide-down),
 .live-rider-msg-banner:not(.show):not(.slide-down) {
-  display: none !important;
+  opacity: 0 !important;
+  transform: translateX(-50%) translateY(-10px) !important;
   pointer-events: none !important;
 }
 @keyframes bannerSlideDown {
-  0% { transform: translateY(-30px); opacity: 0; }
-  100% { transform: translateY(0); opacity: 1; }
+  0% { transform: translateX(-50%) translateY(-15px); opacity: 0; }
+  100% { transform: translateX(-50%) translateY(0); opacity: 1; }
 }
 .customer-floating-banner .rct-icon,
 .live-rider-msg-banner .rct-icon {
-  width: 38px !important;
-  height: 38px !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
   border-radius: 50% !important;
   background: #dcfce7 !important;
   color: #16a34a !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  font-size: 1.1rem !important;
+  font-size: 0.95rem !important;
   flex-shrink: 0 !important;
 }
 .customer-floating-banner .rct-body,
@@ -2376,18 +2381,19 @@ a:active,
 .customer-floating-banner .rct-title,
 .live-rider-msg-banner .rct-title {
   color: #15803d !important;
-  font-size: 11px !important;
+  font-size: 10px !important;
   font-weight: 700 !important;
-  letter-spacing: 0.5px !important;
+  letter-spacing: 0.4px !important;
   text-transform: uppercase !important;
   margin-bottom: 2px !important;
+  line-height: 1.1 !important;
 }
 .customer-floating-banner .rct-text,
 .live-rider-msg-banner .rct-text {
-  font-size: 13px !important;
+  font-size: 12px !important;
   font-weight: 600 !important;
   color: #0f172a !important;
-  line-height: 1.35 !important;
+  line-height: 1.25 !important;
   word-break: break-word !important;
   white-space: normal !important;
 }
@@ -2399,12 +2405,30 @@ a:active,
   font-size: 1.35rem !important;
   line-height: 1 !important;
   cursor: pointer !important;
-  padding: 4px 6px !important;
+  padding: 0 !important;
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   flex-shrink: 0 !important;
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 10 !important;
+  touch-action: manipulation !important;
+  transition: all 0.2s ease !important;
+  user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 .customer-floating-banner .rct-close:hover,
-.live-rider-msg-banner .rct-close:hover {
+.live-rider-msg-banner .rct-close:hover,
+.customer-floating-banner .rct-close:active,
+.live-rider-msg-banner .rct-close:active {
   color: #0f172a !important;
+  background: rgba(0, 0, 0, 0.06) !important;
 }
 
 /* Order Cancellation UI */
@@ -3585,7 +3609,7 @@ a:active,
     <div class="rct-title" id="liveMsgBannerTitle">MESSAGE FROM RIDER</div>
     <div class="rct-text" id="liveMsgBannerText">I'm outside with your order! 🛵</div>
   </div>
-  <button type="button" class="rct-close" onclick="event.stopPropagation(); dismissLiveRiderBanner()">&times;</button>
+  <button type="button" class="rct-close" onclick="event.stopPropagation(); window._bannerActiveUntil = 0; dismissLiveRiderBanner(true);" aria-label="Close">&times;</button>
 </div>
 
 <!-- Generic In-App Confirmation Modal (Food Dash Palette) -->
@@ -6098,7 +6122,7 @@ async function pollCustomerOrdersLive() {
             window._arrivalModalTimer = null;
           }
           triggerArrivalModal({ order_id: oId, rider_name: rName, order: ord });
-        }, 7000);
+        }, 3000);
 
         // 2. Delayed Modal Trigger: Let banner stay visible for ~3 seconds, then trigger interactive modal
         if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
@@ -6165,7 +6189,7 @@ async function pollCustomerOrdersLive() {
           } else if (typeof showScreen === 'function') {
             showScreen('orders');
           }
-        }, 6500);
+        }, 3000);
 
         // Dynamically update notification badge on header
         if (typeof loadNotifications === 'function') loadNotifications();
@@ -7670,7 +7694,7 @@ window.triggerArrivalModal = triggerArrivalModal;
           window._arrivalModalTimer = null;
         }
         triggerArrivalModal({ order_id: orderId, rider_name: rName, order: ord });
-      }, 7000);
+      }, 3000);
 
       // 2. Delayed Modal Trigger: Let banner stay visible for ~3 seconds, then trigger interactive modal
       if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
@@ -8387,10 +8411,14 @@ function dismissLiveRiderBanner(force = false) {
   const banner = document.getElementById('liveRiderMessageBanner');
   if (banner) {
     banner.classList.remove('show', 'active', 'slide-down');
-    banner.style.setProperty('display', 'none', 'important');
-    banner.style.setProperty('visibility', 'hidden', 'important');
-    banner.style.setProperty('pointer-events', 'none', 'important');
     banner.style.setProperty('opacity', '0', 'important');
+    banner.style.setProperty('pointer-events', 'none', 'important');
+    setTimeout(() => {
+      if (!banner.classList.contains('show') && !banner.classList.contains('slide-down')) {
+        banner.style.setProperty('display', 'none', 'important');
+        banner.style.setProperty('visibility', 'hidden', 'important');
+      }
+    }, 250);
   }
   if (msgBannerTimeout) {
     clearTimeout(msgBannerTimeout);
@@ -8399,7 +8427,7 @@ function dismissLiveRiderBanner(force = false) {
   window._bannerActiveUntil = 0;
 }
 
-function showCustomerFloatingBanner(title, text, onClick = null, durationMs = 6500) {
+function showCustomerFloatingBanner(title, text, onClick = null, durationMs = 3000) {
   if (!text) return;
   const banner = document.getElementById('liveRiderMessageBanner');
   const titleEl = document.getElementById('liveMsgBannerTitle');
@@ -8414,7 +8442,7 @@ function showCustomerFloatingBanner(title, text, onClick = null, durationMs = 65
   const isArrivalNotification = bannerTitle.includes('ARRIVED') || bannerTitle.includes('OUTSIDE');
 
   const lastTime = _customerRecentBanners.get(dedupeKey) || 0;
-  if (now - lastTime < 3500) {
+  if (now - lastTime < 2500) {
     return;
   }
   _customerRecentBanners.set(dedupeKey, now);
@@ -8476,12 +8504,14 @@ function showCustomerFloatingBanner(title, text, onClick = null, durationMs = 65
     }
   };
 
-  // Force the arrival banner to display with active pointer events
-  banner.style.setProperty('display', 'block', 'important');
+  // Force the arrival banner to display with active pointer events and smooth entrance
+  banner.style.setProperty('display', 'flex', 'important');
   banner.style.setProperty('visibility', 'visible', 'important');
   banner.style.setProperty('pointer-events', 'auto', 'important');
-  banner.style.setProperty('opacity', '1', 'important');
-  banner.classList.add('slide-down', 'show', 'active');
+  requestAnimationFrame(() => {
+    banner.style.setProperty('opacity', '1', 'important');
+    banner.classList.add('slide-down', 'show', 'active');
+  });
 
   // Protect banner display duration against incoming 2-second polls
   window._bannerActiveUntil = now + durationMs;
@@ -9108,7 +9138,7 @@ function handleRiderArrivedEvent(data) {
       window._arrivalModalTimer = null;
     }
     triggerArrivalModal({ order_id: oId, rider_name: rName, order: data.order || data });
-  }, 7000);
+  }, 3000);
 
   // 2. Delayed Modal Trigger: Let banner stay visible for ~3 seconds, then trigger interactive modal
   if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {

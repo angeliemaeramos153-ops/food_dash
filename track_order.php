@@ -432,34 +432,44 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
   font-variant-numeric: tabular-nums;
 }
 
-/* Live Rider Message Banner */
+/* Live Rider Message Banner - Optimized Sleek Toast */
 .live-rider-msg-banner {
   position: fixed;
-  top: 64px;
+  top: 14px;
   left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  width: calc(100% - 32px);
-  max-width: 440px;
+  transform: translateX(-50%) translateY(-10px);
+  z-index: 99999;
+  width: calc(100% - 24px);
+  max-width: 360px;
   background: #1e293b;
   color: #ffffff;
-  border-radius: 16px;
-  padding: 12px 14px;
+  border-radius: 12px;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   cursor: pointer;
-  animation: bannerSlideDown 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  box-sizing: border-box;
+  transition: all 0.25s ease-in-out;
 }
 .live-rider-msg-banner.slide-down,
+.live-rider-msg-banner.show,
 .slide-down {
   display: flex !important;
   visibility: visible !important;
   opacity: 1 !important;
+  transform: translateX(-50%) translateY(0) !important;
   pointer-events: auto !important;
-  animation: bannerSlideDown 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+.live-rider-msg-banner:not(.show):not(.slide-down) {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px);
+  pointer-events: none;
 }
 
 /* Ensure underlying tracking layouts, cards, buttons, map controls, and navigation remain fully interactive */
@@ -529,50 +539,85 @@ body, .container, .main-wrap, .card, .btn, button, a, #map, .leaflet-container, 
   100% { transform: scale(1); opacity: 1; }
 }
 .msg-banner-avatar {
-  width: 40px;
-  height: 40px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
   border-radius: 50%;
   background: #16a34a;
   color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 14px;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.4);
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
 }
 .msg-banner-content {
   flex: 1;
   min-width: 0;
+  line-height: 1.2;
 }
 .msg-banner-title {
   display: flex;
   justify-content: space-between;
-  font-size: 0.72rem;
+  font-size: 10px;
   font-weight: 700;
   color: #94a3b8;
   text-transform: uppercase;
   margin-bottom: 2px;
+  letter-spacing: 0.4px;
+  line-height: 1.1;
 }
 .msg-banner-body {
-  font-size: 0.88rem;
+  font-size: 12px;
   font-weight: 600;
   color: #ffffff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.25;
 }
 .tap-reply-pill {
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
-  font-size: 0.72rem;
+  font-size: 10px;
   font-weight: 700;
-  padding: 5px 9px;
-  border-radius: 12px;
+  padding: 3px 7px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   flex-shrink: 0;
+}
+.btn-banner-close {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border: none !important;
+  color: #ffffff !important;
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+  border-radius: 50% !important;
+  font-size: 17px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  flex-shrink: 0 !important;
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 20 !important;
+  touch-action: manipulation !important;
+  transition: all 0.2s ease !important;
+  padding: 0 !important;
+  user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+.btn-banner-close:hover,
+.btn-banner-close:active {
+  background: rgba(255, 255, 255, 0.30) !important;
+  color: #ffffff !important;
 }
 
 /* Official Payment Brand Badges */
@@ -807,7 +852,7 @@ body, .container, .main-wrap, .card, .btn, button, a, #map, .leaflet-container, 
     </div>
     <div class="msg-banner-action" style="display:flex; align-items:center; gap:8px;">
       <span class="tap-reply-pill" id="liveMsgBannerActionPill">Reply <i class="fa-solid fa-chevron-right"></i></span>
-      <button type="button" class="btn-banner-close" onclick="event.stopPropagation(); dismissLiveRiderBanner(true);" aria-label="Close" style="background:rgba(255,255,255,0.18); border:none; color:#ffffff; width:26px; height:26px; border-radius:50%; font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; transition:background 0.2s;">&times;</button>
+      <button type="button" class="btn-banner-close" onclick="event.stopPropagation(); window._bannerActiveUntil = 0; dismissLiveRiderBanner(true);" aria-label="Close">&times;</button>
     </div>
   </div>
 
@@ -1484,7 +1529,7 @@ async function pollRiderLocation() {
           ? `Order ${cleanRef} has been picked up by ${rName}! Total due: ${formattedTotal}` 
           : `Order ${cleanRef} has been picked up by ${rName}! On the way to you.`;
 
-        showTrackNotificationBanner('ORDER PICKED UP - READY FOR DELIVERY', pickupMsg, 6500);
+        showTrackNotificationBanner('ORDER PICKED UP - READY FOR DELIVERY', pickupMsg, 3000);
       }
     }
 
@@ -1873,10 +1918,14 @@ function dismissLiveRiderBanner(force = false) {
   const banner = document.getElementById('liveRiderMessageBanner');
   if (banner) {
     banner.classList.remove('slide-down', 'show', 'active');
-    banner.style.setProperty('display', 'none', 'important');
-    banner.style.setProperty('visibility', 'hidden', 'important');
-    banner.style.setProperty('pointer-events', 'none', 'important');
     banner.style.setProperty('opacity', '0', 'important');
+    banner.style.setProperty('pointer-events', 'none', 'important');
+    setTimeout(() => {
+      if (!banner.classList.contains('show') && !banner.classList.contains('slide-down')) {
+        banner.style.setProperty('display', 'none', 'important');
+        banner.style.setProperty('visibility', 'hidden', 'important');
+      }
+    }, 250);
   }
   if (msgBannerTimeout) {
     clearTimeout(msgBannerTimeout);
@@ -1886,7 +1935,7 @@ function dismissLiveRiderBanner(force = false) {
 }
 window.dismissLiveRiderBanner = dismissLiveRiderBanner;
 
-function showTrackNotificationBanner(title, text, durationMs = 6500, onClick = null) {
+function showTrackNotificationBanner(title, text, durationMs = 3000, onClick = null) {
   if (!text) return;
   const banner = document.getElementById('liveRiderMessageBanner');
   const titleEl = document.getElementById('liveMsgBannerTitle');
@@ -1956,8 +2005,10 @@ function showTrackNotificationBanner(title, text, durationMs = 6500, onClick = n
   banner.style.setProperty('display', 'flex', 'important');
   banner.style.setProperty('visibility', 'visible', 'important');
   banner.style.setProperty('pointer-events', 'auto', 'important');
-  banner.style.setProperty('opacity', '1', 'important');
-  banner.classList.add('slide-down', 'show', 'active');
+  requestAnimationFrame(() => {
+    banner.style.setProperty('opacity', '1', 'important');
+    banner.classList.add('slide-down', 'show', 'active');
+  });
 
   // Protect banner display duration against incoming 2-second polls
   window._bannerActiveUntil = Date.now() + durationMs;
@@ -1983,7 +2034,7 @@ function handleLiveRiderMessage(msg) {
   }
 
   const senderName = msg.sender_name || 'Alex';
-  showTrackNotificationBanner(`MESSAGE FROM RIDER (${senderName})`, msg.message_text, 6500, openTrackChat);
+  showTrackNotificationBanner(`MESSAGE FROM RIDER (${senderName})`, msg.message_text, 3000, openTrackChat);
 
   // Update the unread badge counter in real time and append to chat drawer
   unreadChatCount++;
@@ -2433,7 +2484,7 @@ function handleRiderArrivedEvent(data = {}) {
   window._lastArrivalPayload = data;
 
   // 1. Staggered Arrival Flow: Trigger ONLY top notification banner first
-  showTrackNotificationBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside to receive your order.`, 7000, () => {
+  showTrackNotificationBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside to receive your order.`, 3000, () => {
     // If user clicks the banner, trigger the interactive arrival modal immediately
     if (window._arrivalModalTimer) {
       clearTimeout(window._arrivalModalTimer);
