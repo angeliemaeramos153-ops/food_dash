@@ -273,7 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     if (!in_array($norm_st, ['ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'pending', 'preparing', 'on_delivery', 'on_the_way']) || (!empty($assigned_rid) && $assigned_rid !== $rid)) {
                         throw new Exception('This order is not ready for pickup or has already been assigned.');
                     }
-                    $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'on_the_way', status = 'on_delivery', updated_at = NOW() WHERE order_id = :oid");
+                    $stmt = $conn->prepare("UPDATE food_orders SET rider_id = :rid, delivery_status = 'on_the_way', status = 'on_delivery', arrived_notified_at = NULL, arrival_acknowledged_at = NULL, arrival_ack_response = NULL, updated_at = NOW() WHERE order_id = :oid");
                     $stmt->execute([':rid' => $rid, ':oid' => $order_id]);
 
                     $stmt = $conn->prepare("UPDATE riders SET status = 'on_delivery', current_order = :ref, active_order_id = :oid WHERE rider_id = :rid");
@@ -281,10 +281,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
 
                     // Sync to orders table: Run exact required SQL query UPDATE orders SET status = 'on_delivery' WHERE id = ?
                     try {
-                        $conn->prepare("UPDATE orders SET status = 'on_delivery' WHERE id = :oid")->execute([':oid' => $order_id]);
+                        $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL WHERE id = :oid")->execute([':oid' => $order_id]);
                     } catch (Throwable $e) {}
                     try {
-                        $conn->prepare("UPDATE orders SET status = 'on_delivery', rider_id = :rid, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':rid' => $rid, ':oid' => $order_id, ':oid2' => $order_id]);
+                        $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL, rider_id = :rid, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':rid' => $rid, ':oid' => $order_id, ':oid2' => $order_id]);
                     } catch (Throwable $e) {}
 
                     // 1 & 2. Dynamically query database for specific order and real calculated total amount directly from 'orders' and 'order_items'
@@ -387,8 +387,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     exit();
                 } elseif ($action === 'on_way') {
                     if ((int)($order['rider_id'] ?? 0) !== $rid) throw new Exception('You are not assigned to this order.');
-                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', updated_at = NOW() WHERE order_id = :oid AND rider_id = :rid");
+                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', status = 'on_delivery', arrived_notified_at = NULL, arrival_acknowledged_at = NULL, arrival_ack_response = NULL, updated_at = NOW() WHERE order_id = :oid AND rider_id = :rid");
                     $stmt->execute([':oid' => $order_id, ':rid' => $rid]);
+                    try {
+                        $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':oid' => $order_id, ':oid2' => $order_id]);
+                    } catch (Throwable $e) {}
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Rider is en route to customer');
                     create_notification($conn, $customer_id, 'rider_on_way', 'Rider On the Way', 'Rider ' . $user_name . ' is actively heading towards your delivery address.', $order_id);
@@ -404,8 +407,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     exit();
                 } elseif ($action === 'near') {
                     if ((int)($order['rider_id'] ?? 0) !== $rid) throw new Exception('You are not assigned to this order.');
-                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'near_customer', updated_at = NOW() WHERE order_id = :oid AND rider_id = :rid");
+                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'near_customer', status = 'on_delivery', arrived_notified_at = NULL, arrival_acknowledged_at = NULL, arrival_ack_response = NULL, updated_at = NOW() WHERE order_id = :oid AND rider_id = :rid");
                     $stmt->execute([':oid' => $order_id, ':rid' => $rid]);
+                    try {
+                        $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':oid' => $order_id, ':oid2' => $order_id]);
+                    } catch (Throwable $e) {}
 
                     record_order_audit_log($conn, $order_id, 'OUT_FOR_DELIVERY', 'OUT_FOR_DELIVERY', $user_id, 'rider', 'Rider is near customer drop-off');
                     create_notification($conn, $customer_id, 'rider_near', 'Rider Arriving Soon', 'Your rider is near your delivery address. Please prepare to receive ' . $ref . '.', $order_id);
@@ -418,6 +424,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $rid > 0) {
                     if (ob_get_level()) ob_clean();
                     header('Content-Type: application/json; charset=utf-8');
                     echo json_encode(['success' => true, 'message' => 'Customer notified that you are near.']);
+                    exit();
+                } elseif ($action === 'reset_to_store' || $action === 'reset_store') {
+                    $stmt = $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', status = 'on_delivery', arrived_notified_at = NULL, arrival_acknowledged_at = NULL, arrival_ack_response = NULL, updated_at = NOW() WHERE order_id = :oid");
+                    $stmt->execute([':oid' => $order_id]);
+                    try {
+                        $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':oid' => $order_id, ':oid2' => $order_id]);
+                    } catch (Throwable $e) {}
+                    try {
+                        require_once __DIR__ . '/supabase_lib.php';
+                        sync_order_to_supabase($order_id, $conn);
+                    } catch (Throwable $e) {}
+
+                    if (ob_get_level()) ob_clean();
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode(['success' => true, 'message' => 'Order state reset to on_delivery at store origin.', 'status' => 'on_delivery', 'delivery_status' => 'on_the_way']);
                     exit();
                 } elseif ($action === 'arrived' || $action === 'arrived_destination') {
                     if ((int)($order['rider_id'] ?? 0) !== $rid) throw new Exception('You are not assigned to this order.');
@@ -2491,6 +2512,14 @@ async function resetRiderToStore() {
     return;
   }
 
+  // Update activeDeliveryData local state away from arrived back to on_delivery
+  activeDeliveryData.status = 'on_delivery';
+  activeDeliveryData.delivery_status = 'on_the_way';
+  activeDeliveryData.is_arrived = false;
+  activeDeliveryData.arrived_notified_at = null;
+  activeDeliveryData.arrival_acknowledged_at = null;
+  activeDeliveryData.arrival_ack_response = null;
+
   const storeRes = resolveStoreCoordinates(activeDeliveryData);
   const sLat = storeRes.latitude;
   const sLng = storeRes.longitude;
@@ -2498,6 +2527,21 @@ async function resetRiderToStore() {
   if (sLat === null || sLng === null || isNaN(sLat) || isNaN(sLng) || sLat === 0) {
     toastRider('Store pickup coordinates not available.', true);
     return;
+  }
+
+  // Sync reset to server backend immediately
+  const orderId = activeGpsOrderId || (activeDeliveryData ? (activeDeliveryData.order_id || activeDeliveryData.id) : 0);
+  if (orderId > 0) {
+    try {
+      const fd = new FormData();
+      fd.append('delivery_action', 'reset_to_store');
+      fd.append('order_id', orderId);
+      fd.append('ajax', 'true');
+      fetch(window.location.href, { method: 'POST', body: fd }).catch(() => {});
+    } catch (e) {}
+    try {
+      fetch(`rider_action.php?action=reset_to_store&order_id=${orderId}`).catch(() => {});
+    } catch (e) {}
   }
 
   handleRiderPositionUpdate(sLat, sLng, 'reset');
@@ -2724,7 +2768,8 @@ function handleRiderPositionUpdate(lat, lng, source = 'gps', accuracy = null) {
     || 0;
 
   const isSimMode = (source === 'simulation' || source === 'manual' || source === 'reset');
-  sendRiderLocation(orderId, numLat, numLng, isSimMode);
+  const isReset = (source === 'reset');
+  sendRiderLocation(orderId, numLat, numLng, isSimMode, isReset);
 }
 
 // ==========================================
@@ -3226,7 +3271,7 @@ async function initDeliveryMap(data) {
   }, 250);
 }
 
-async function sendRiderLocation(orderId, lat, lng, isImmediate = false) {
+async function sendRiderLocation(orderId, lat, lng, isImmediate = false, isReset = false) {
   const now = Date.now();
   // Continuous persistence: throttle high-frequency hardware GPS or auto-drive simulation steps to 1000ms.
   // Never throttle manual map clicks, marker drag drop, resets, or arrival triggers.
@@ -3243,7 +3288,9 @@ async function sendRiderLocation(orderId, lat, lng, isImmediate = false) {
       lng: lng,
       current_lat: lat,
       current_lng: lng,
-      is_simulation: isImmediate ? 1 : 0
+      is_simulation: isImmediate ? 1 : 0,
+      reset_to_store: isReset ? 1 : 0,
+      is_reset: isReset ? 1 : 0
     };
 
     // Primary: api_order.php with seamless tracking_api.php fallback

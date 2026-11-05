@@ -326,7 +326,10 @@ if ($is_accept_action) {
 // 8. RIDER SUB-STATES & COMPLETION
 // -------------------------------------------------------------
 if ($action === 'on_way' || $action === 'on_the_way') {
-    $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+    $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', status = 'on_delivery', arrived_notified_at = NULL, arrival_acknowledged_at = NULL, arrival_ack_response = NULL, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+    try {
+        $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':oid' => $order_id, ':oid2' => $order_id]);
+    } catch (Throwable $e) {}
     record_order_audit_log($conn, $order_id, 'on_delivery', 'on_delivery', $rider_user_id, 'rider', 'Rider is en route to customer');
     create_notification($conn, $actual_customer_id, 'rider_on_way', 'Rider On the Way', 'Rider ' . $rider_name . ' is heading towards your delivery address.', $order_id);
 
@@ -340,7 +343,10 @@ if ($action === 'on_way' || $action === 'on_the_way') {
 }
 
 if ($action === 'near' || $action === 'near_customer') {
-    $conn->prepare("UPDATE food_orders SET delivery_status = 'near_customer', updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+    $conn->prepare("UPDATE food_orders SET delivery_status = 'near_customer', status = 'on_delivery', arrived_notified_at = NULL, arrival_acknowledged_at = NULL, arrival_ack_response = NULL, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+    try {
+        $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':oid' => $order_id, ':oid2' => $order_id]);
+    } catch (Throwable $e) {}
     record_order_audit_log($conn, $order_id, 'on_delivery', 'on_delivery', $rider_user_id, 'rider', 'Rider is near customer drop-off');
     create_notification($conn, $actual_customer_id, 'rider_near', 'Rider Arriving Soon', 'Your rider is near your delivery address. Please prepare to receive ' . $full_order_number . '.', $order_id);
 
@@ -350,6 +356,24 @@ if ($action === 'near' || $action === 'near_customer') {
         'total_amount'    => (float)$real_total_amount,
         'status'          => 'on_delivery',
         'delivery_status' => 'near_customer'
+    ]);
+}
+
+if ($action === 'reset_to_store' || $action === 'reset_store' || $action === 'reset') {
+    $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', status = 'on_delivery', arrived_notified_at = NULL, arrival_acknowledged_at = NULL, arrival_ack_response = NULL, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+    try {
+        $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':oid' => $order_id, ':oid2' => $order_id]);
+    } catch (Throwable $e) {}
+    try {
+        require_once __DIR__ . '/supabase_lib.php';
+        sync_order_to_supabase($order_id, $conn);
+    } catch (Throwable $e) {}
+    rider_json_out(true, 'Rider reset to store origin.', [
+        'order_id'        => $order_id,
+        'order_number'    => $full_order_number,
+        'total_amount'    => (float)$real_total_amount,
+        'status'          => 'on_delivery',
+        'delivery_status' => 'on_the_way'
     ]);
 }
 

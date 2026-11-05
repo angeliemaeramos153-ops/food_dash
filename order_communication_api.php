@@ -281,6 +281,18 @@ if ($action === 'acknowledge_arrival') {
     ]);
 }
 
+if ($action === 'reset_to_store' || $action === 'clear_arrival') {
+    $order_id = (int)($payload['order_id'] ?? $_GET['order_id'] ?? 0);
+    if ($order_id > 0) {
+        try {
+            $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', status = 'on_delivery', arrived_notified_at = NULL, arrival_acknowledged_at = NULL, arrival_ack_response = NULL, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+            $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':oid' => $order_id, ':oid2' => $order_id]);
+        } catch (Throwable $e) {}
+        comm_out(true, 'Arrival state cleared and reset to store.', ['order_id' => $order_id, 'status' => 'on_delivery', 'delivery_status' => 'on_the_way']);
+    }
+    comm_out(false, 'Valid order_id is required.', [], 422);
+}
+
 // -------------------------------------------------------------
 // 3.5 MARK ACKNOWLEDGEMENT SEEN (Rider dismissed / seen ack toast)
 // -------------------------------------------------------------

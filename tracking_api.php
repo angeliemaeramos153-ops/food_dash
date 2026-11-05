@@ -180,9 +180,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $near = ($distance <= 0.5); // <= 500 meters
             $arrived = ($distance <= 0.05); // <= 50 meters geofence!
 
-            // 1. Automated "Rider Arrived" Live Notification (<= 50 meters)
             $curr_st = strtolower(trim((string)($fresh['status'] ?? '')));
             $curr_del = strtolower(trim((string)($fresh['delivery_status'] ?? '')));
+
+            // Reset to store or status moved away from arrived
+            $is_reset = !empty($payload['reset_to_store']) || !empty($payload['is_reset']) || !empty($_GET['reset_to_store']);
+            if ($is_reset || ($distance !== null && $distance > 0.1 && ($curr_st === 'arrived' || $curr_del === 'arrived'))) {
+                $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', status = 'on_delivery', arrived_notified_at = NULL, arrival_acknowledged_at = NULL, arrival_ack_response = NULL, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+                try {
+                    $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL, updated_at = NOW() WHERE order_id = :oid OR id = :oid2")->execute([':oid' => $order_id, ':oid2' => $order_id]);
+                    require_once __DIR__ . '/supabase_lib.php';
+                    sync_order_to_supabase($order_id, $conn);
+                } catch (Throwable $e) {}
+                $arrived = false;
+                $curr_st = 'on_delivery';
+                $curr_del = 'on_the_way';
+            }
+
+            // 1. Automated "Rider Arrived" Live Notification (<= 50 meters)
             $is_delivering = in_array($curr_del, ['on_the_way', 'near_customer', 'arrived', 'arrived_destination'], true)
                           || in_array($curr_st, ['out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived', 'arrived_destination'], true);
             if ($arrived && empty($fresh['arrived_notified_at']) && $is_delivering) {
@@ -605,6 +620,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         'order_ref'          => $o['order_ref'],
         'distance_km'        => $distance,
         'near'               => $near,
+        'is_arrived'         => (bool)($distance !== null && $distance <= 0.05 && in_array(strtolower(trim($o['delivery_status'] ?? '')), ['arrived', 'arrived_destination'], true)),
+        'arrival_acknowledged'=> !empty($o['arrival_acknowledged_at']),
         'near_threshold_km'  => 0.5,
         'current_lat'        => $current_lat,
         'current_lng'        => $current_lng,

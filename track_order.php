@@ -1297,17 +1297,71 @@ async function pollRiderLocation() {
         }
         stopArrivalAlertSound();
       } else {
-        // Bypass any lagging checks: immediately trigger arrival modal and sound
+        // Sequential Arrival Notification & Modal Chain
         handleRiderArrivedEvent(data.order || data);
       }
     } else {
-      // Normal moving telemetry: update riderMarker smoothly via OSRM road animation
+      // 1. Rider reset to store or changed status away from arrived (e.g. back to on_delivery)
+      // Clear any lingering arrival acknowledgment flags
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('fd_arrival_ack_' + orderId);
+        localStorage.removeItem('fd_arrival_acknowledged_all');
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('fd_arrival_ack_' + orderId);
+        sessionStorage.removeItem('fd_arrival_acknowledged_all');
+        sessionStorage.removeItem('fd_arrived_alert_seen_' + orderId);
+      }
+      hasShownArrivedAlert = false;
+      if (window.FoodDashCall && typeof window.FoodDashCall.clearArrivalState === 'function') {
+        window.FoodDashCall.clearArrivalState(orderId);
+      }
+
+      // 2. Remove stuck arrival banner & toasts
+      const banner = document.getElementById('liveRiderMessageBanner');
+      if (banner && (banner.textContent || '').includes('ARRIVED')) {
+        banner.style.display = 'none';
+        banner.classList.remove('slide-down', 'show');
+        if (msgBannerTimeout) {
+          clearTimeout(msgBannerTimeout);
+          msgBannerTimeout = null;
+        }
+      }
+      document.querySelectorAll('.live-toast-banner, .cust-toast').forEach(el => el.remove());
+
+      // 3. Close arrival modal & stop alarm
+      const modal = document.getElementById('riderArrivedModal');
+      if (modal) {
+        modal.classList.remove('show', 'active');
+        modal.style.setProperty('display', 'none', 'important');
+        modal.style.setProperty('visibility', 'hidden', 'important');
+        modal.style.setProperty('pointer-events', 'none', 'important');
+      }
+      stopArrivalAlertSound();
+
+      // 4. Instantly reset telemetry state on customer tracking map/UI
       if (riderMarker && !isNaN(rLat) && !isNaN(rLng) && rLat !== 0) {
+        if (typeof riderMarker.setZIndexOffset === 'function') {
+          riderMarker.setZIndexOffset(500);
+        }
         animateMarkerTo(riderMarker, rLat, rLng, 1800);
         // Snap route polyline via OSRM roads
         fetchOsrmRoadPolyline(rLat, rLng, dLat, dLng);
       }
       updateEtaBadge(distKm);
+
+      // Reset status pill UI back away from "Arrived"
+      const statusPills = document.querySelectorAll('.status-pill');
+      statusPills.forEach(pill => {
+        pill.style.background = '';
+        pill.style.color = '';
+        pill.style.borderColor = '';
+        const normDeliveryStatus = String(ord.delivery_status || data.delivery_status || 'on_the_way').toLowerCase();
+        let pillText = 'On Delivery';
+        if (normDeliveryStatus === 'near_customer') pillText = 'Near Customer';
+        else if (normDeliveryStatus === 'on_the_way') pillText = 'On The Way';
+        pill.innerHTML = `<i class="fa-solid fa-motorcycle"></i> <span>${pillText}</span>`;
+      });
     }
 
     // Check for active incoming call from rider
@@ -1917,6 +1971,11 @@ function closeRiderArrivedModal() {
     modal.style.setProperty('pointer-events', 'none', 'important');
     modal.classList.remove('show', 'active');
   }
+  const banner = document.getElementById('liveRiderMessageBanner');
+  if (banner) {
+    banner.style.display = 'none';
+    banner.classList.remove('slide-down', 'show');
+  }
   if (window.FoodDashCall && typeof window.FoodDashCall.stopAllTones === 'function') {
     FoodDashCall.stopAllTones();
   }
@@ -2027,28 +2086,33 @@ function handleRiderArrivedEvent(data) {
     return;
   }
 
+  const rName = data.rider_name || (data.order && data.order.rider_name) || 'Alex';
+
+  // Requirement 2: Sequential Arrival Notification & Modal Chain
+  // Step 1: Lightweight notification banner appears first
+  const banner = document.getElementById('liveRiderMessageBanner');
+  const titleEl = document.getElementById('liveMsgBannerTitle');
+  const textEl = document.getElementById('liveMsgBannerText');
+  if (banner && textEl) {
+    if (titleEl) titleEl.textContent = `RIDER ARRIVED (${rName})`;
+    textEl.textContent = `📍 Your rider has arrived outside with your order! Please meet outside to receive your order.`;
+    banner.classList.add('slide-down', 'show');
+    banner.style.display = 'flex';
+  }
+
+  // Step 2: Immediately chains directly into triggering the arrival alert modal and playing singleton music-box arpeggio without delay
   const modal = document.getElementById('riderArrivedModal');
-  // Instant Modal Pop-up on Arrival: immediately bypass any lagging checks and trigger!
   if (modal) {
     modal.classList.add('show', 'active');
     modal.style.setProperty('display', 'flex', 'important');
     modal.style.setProperty('visibility', 'visible', 'important');
     modal.style.setProperty('pointer-events', 'auto', 'important');
   }
-  // Dismiss top notification banner completely upon arrival: ONLY render center arrival modal
-  const banner = document.getElementById('liveRiderMessageBanner');
-  if (banner) {
-    banner.style.display = 'none';
-    banner.classList.remove('slide-down', 'show');
-  }
-  if (msgBannerTimeout) {
-    clearTimeout(msgBannerTimeout);
-    msgBannerTimeout = null;
-  }
 
-  const rName = data.rider_name || 'Alex';
   if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
     FoodDashCall.triggerArrivalAlarm(orderId, rName);
+  } else if (typeof playSynthArrivalAlarm === 'function') {
+    playSynthArrivalAlarm();
   } else if (typeof playArrivalAlertSound === 'function') {
     playArrivalAlertSound();
   }
@@ -2142,6 +2206,31 @@ async function pollOrderCommunication() {
         stopArrivalAlertSound();
       } else {
         handleRiderArrivedEvent(data);
+      }
+    } else {
+      // Clear lingering arrival flags if status moved away from arrived
+      try {
+        localStorage.removeItem('fd_arrival_ack_' + orderId);
+        sessionStorage.removeItem('fd_arrival_ack_' + orderId);
+        localStorage.removeItem('fd_arrival_acknowledged_all');
+        sessionStorage.removeItem('fd_arrival_acknowledged_all');
+      } catch (e) {}
+      if (window.FoodDashCall && typeof window.FoodDashCall.clearArrivalState === 'function') {
+        window.FoodDashCall.clearArrivalState(orderId);
+      }
+      hasShownArrivedAlert = false;
+      const modal = document.getElementById('riderArrivedModal');
+      if (modal) {
+        modal.classList.remove('show', 'active');
+        modal.style.setProperty('display', 'none', 'important');
+        modal.style.setProperty('visibility', 'hidden', 'important');
+        modal.style.setProperty('pointer-events', 'none', 'important');
+      }
+      stopArrivalAlertSound();
+      const banner = document.getElementById('liveRiderMessageBanner');
+      if (banner && (banner.textContent || '').includes('ARRIVED')) {
+        banner.style.display = 'none';
+        banner.classList.remove('slide-down', 'show');
       }
     }
     window._trackOrderPrevStatus = data.delivery_status || data.status;

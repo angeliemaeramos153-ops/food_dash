@@ -195,6 +195,20 @@ if ($distance_km !== null) {
     $eta_minutes = ($distance_km <= 0.035) ? 0 : max(1, (int)round(($distance_km / 25) * 60));
 }
 
+// If rider has reset to store or moved away from destination (> 100m), ensure status resets away from arrived
+if ($distance_km !== null && $distance_km > 0.1 && ($raw_st === 'arrived' || $raw_dst === 'arrived')) {
+    try {
+        $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', status = 'on_delivery', arrived_notified_at = NULL, arrival_acknowledged_at = NULL, arrival_ack_response = NULL, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => (int)$o['order_id']]);
+        $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL, updated_at = NOW() WHERE id = :oid OR order_id = :oid2")->execute([':oid' => (int)$o['order_id'], ':oid2' => (int)$o['order_id']]);
+    } catch (Throwable $e) {}
+    $raw_st = 'on_delivery';
+    $raw_dst = 'on_the_way';
+    $o['status'] = 'on_delivery';
+    $o['delivery_status'] = 'on_the_way';
+    $o['arrival_acknowledged_at'] = null;
+    $o['arrival_ack_response'] = null;
+}
+
 // State evaluation: exact check for arrived status or arrival threshold
 $is_arrived = in_array($raw_dst, ['arrived', 'arrived_destination'], true) 
            || in_array($raw_st, ['arrived', 'arrived_destination'], true)

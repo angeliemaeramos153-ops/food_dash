@@ -489,6 +489,56 @@
   }
   const stopArrivalAlarmAudio = stopArrivalAlarm;
 
+  function clearArrivalState(orderId) {
+    const oId = orderId || activeOrderId || (typeof window !== 'undefined' && (window.activeCustomerTrackingOrderId || window.orderId)) || 0;
+    arrivalAcknowledged = false;
+    arrivalAlarmActive = false;
+    stopSynthLoop();
+    if (arrivalAudio) {
+      try {
+        arrivalAudio.pause();
+        arrivalAudio.currentTime = 0;
+      } catch (e) {}
+    }
+    if (window.arrivalAlertAudio) {
+      try {
+        window.arrivalAlertAudio.pause();
+        window.arrivalAlertAudio.currentTime = 0;
+      } catch (e) {}
+    }
+    if (oId) {
+      try {
+        localStorage.removeItem('fd_arrival_ack_' + oId);
+        sessionStorage.removeItem('fd_arrival_ack_' + oId);
+        sessionStorage.removeItem('fd_arrived_alert_seen_' + oId);
+      } catch (e) {}
+      if (window.displayedNotificationIds && typeof window.displayedNotificationIds.delete === 'function') {
+        window.displayedNotificationIds.delete('arrived_' + oId);
+      }
+    }
+    try {
+      localStorage.removeItem('fd_arrival_acknowledged_all');
+      sessionStorage.removeItem('fd_arrival_acknowledged_all');
+    } catch (e) {}
+
+    const modal = document.getElementById('riderArrivedModal');
+    if (modal) {
+      modal.classList.remove('show', 'active');
+      modal.style.setProperty('display', 'none', 'important');
+      modal.style.setProperty('visibility', 'hidden', 'important');
+      modal.style.setProperty('pointer-events', 'none', 'important');
+    }
+    const topBanner = document.getElementById('liveRiderMessageBanner');
+    if (topBanner) {
+      topBanner.style.display = 'none';
+      topBanner.classList.remove('show', 'slide-down');
+    }
+    if (typeof window.dismissLiveRiderBanner === 'function') {
+      try { window.dismissLiveRiderBanner(); } catch (e) {}
+    }
+  }
+  const resetArrivalState = clearArrivalState;
+
   function playArrivalAlarmAudio() {
     if (window.isLoggingOut || 
         (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
@@ -1265,16 +1315,18 @@
     // Ensure buttons and close controls are injected
     injectArrivalButtons(orderId);
 
-    // Hide/dismiss top notification banner completely upon arrival to keep ONLY the center arrival modal
+    // Sequential Arrival Notification & Modal Chain: Lightweight notification banner appears first
     const topBanner = document.getElementById('liveRiderMessageBanner');
-    if (topBanner) {
-      topBanner.style.display = 'none';
-      topBanner.classList.remove('show', 'slide-down');
-    }
-    if (typeof window.dismissLiveRiderBanner === 'function') {
-      try { window.dismissLiveRiderBanner(); } catch (e) {}
+    const titleEl = document.getElementById('liveMsgBannerTitle');
+    const textEl = document.getElementById('liveMsgBannerText');
+    if (topBanner && textEl) {
+      if (titleEl) titleEl.textContent = `RIDER ARRIVED (${rFirst})`;
+      textEl.textContent = `📍 Your rider has arrived outside with your order! Please meet outside to receive your order.`;
+      topBanner.classList.add('slide-down', 'show');
+      topBanner.style.display = 'flex';
     }
 
+    // Immediately chains directly into triggering the arrival alert modal
     if (modal) {
       modal.classList.add('show', 'active');
       modal.style.setProperty('display', 'flex', 'important');
@@ -1295,9 +1347,9 @@
       bindArrivalModalListeners(modal);
     }
 
-    // Play persistent looping arrival alarm audio if not already running
+    // Immediately play the singleton music-box arpeggio without delay
     if (!arrivalAlarmActive || !synthLoopInterval) {
-      playArrivalAlarmAudio();
+      playSynthArrivalAlarm();
     }
   }
 
@@ -1490,6 +1542,8 @@
     playSynthArrivalAlarm,
     stopArrivalAlarm,
     stopArrivalAlarmAudio,
+    clearArrivalState,
+    resetArrivalState,
     acknowledgeArrival,
     viewTrackingMap,
     stopAllTones,
@@ -1504,6 +1558,8 @@
   window.playSynthArrivalAlarm = playSynthArrivalAlarm;
   window.stopArrivalAlarm = stopArrivalAlarm;
   window.stopArrivalAlertSound = stopArrivalAlarm;
+  window.clearArrivalState = clearArrivalState;
+  window.resetArrivalState = resetArrivalState;
 
   if (typeof document !== 'undefined') {
     // Immediate capture-phase handler to forcefully cancel arrival alarm and audio when Log Out is clicked anywhere

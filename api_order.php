@@ -69,6 +69,14 @@ if ($raw_lat !== null && $raw_lng !== null && is_numeric($raw_lat) && is_numeric
 
     // 3. Execute SQL UPDATE query on MySQL food_orders (Primary Source of Truth)
     if ($order_id > 0) {
+        $is_reset = !empty($payload['reset_to_store']) || !empty($payload['is_reset']) || !empty($_GET['reset_to_store']);
+        if ($is_reset) {
+            try {
+                $conn->prepare("UPDATE food_orders SET delivery_status = 'on_the_way', status = 'on_delivery', arrived_notified_at = NULL, arrival_acknowledged_at = NULL, arrival_ack_response = NULL, updated_at = NOW() WHERE order_id = :oid")->execute([':oid' => $order_id]);
+                $conn->prepare("UPDATE orders SET status = 'on_delivery', arrived_notified_at = NULL, updated_at = NOW() WHERE id = :oid OR order_id = :oid2")->execute([':oid' => $order_id, ':oid2' => $order_id]);
+            } catch (Throwable $e) {}
+        }
+
         try {
             $stmtFO = $conn->prepare("UPDATE food_orders SET rider_lat = :lat, rider_lng = :lng, location_updated_at = NOW() WHERE order_id = :oid");
             $stmtFO->execute([
