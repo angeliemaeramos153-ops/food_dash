@@ -6,10 +6,18 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+$uid = (int)($_SESSION['user_id'] ?? 0);
+$role = strtolower((string)($_SESSION['role'] ?? 'rider'));
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 
 require_once __DIR__ . '/db_connect.php';
 
 header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-cache, no-store, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 $rawInput = file_get_contents('php://input');
 $payload = json_decode($rawInput, true);
@@ -31,10 +39,24 @@ if (is_numeric($raw_oid)) {
 }
 if ($order_id <= 0) {
     // Resolve dynamically from the active delivering order
-    $rid = (int)($_SESSION['user_id'] ?? 0);
-    $q_act = $conn->prepare("SELECT order_id FROM food_orders WHERE (rider_id = :rid OR :rid_check = 0) AND LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived') ORDER BY order_id DESC LIMIT 1");
-    $q_act->execute([':rid' => $rid, ':rid_check' => $rid]);
-    $order_id = (int)($q_act->fetchColumn() ?: 0);
+    $rid = $uid > 0 ? $uid : 0;
+    try {
+        $q_act = $conn->prepare("SELECT order_id FROM food_orders WHERE (rider_id = :rid OR :rid_check = 0) AND LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived') ORDER BY order_id DESC LIMIT 1");
+        $q_act->execute([':rid' => $rid, ':rid_check' => $rid]);
+        $order_id = (int)($q_act->fetchColumn() ?: 0);
+    } catch (Throwable $e) {}
+}
+if ($order_id <= 0) {
+    try {
+        $q_act2 = $conn->query("SELECT order_id FROM food_orders WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived') ORDER BY order_id DESC LIMIT 1");
+        $order_id = (int)($q_act2 ? $q_act2->fetchColumn() : 0);
+    } catch (Throwable $e) {}
+}
+if ($order_id <= 0) {
+    try {
+        $q_act3 = $conn->query("SELECT order_id FROM food_orders ORDER BY order_id DESC LIMIT 1");
+        $order_id = (int)($q_act3 ? $q_act3->fetchColumn() : 0);
+    } catch (Throwable $e) {}
 }
 
 // 2. Resolve Coordinates (current_lat, current_lng, lat, lng)
@@ -45,33 +67,32 @@ if ($raw_lat !== null && $raw_lng !== null && is_numeric($raw_lat) && is_numeric
     $lat = (float)$raw_lat;
     $lng = (float)$raw_lng;
 
-    // 3. Execute SQL UPDATE query on MySQL food_orders
-    try {
-        $stmtFO = $conn->prepare("UPDATE food_orders SET rider_lat = :lat, rider_lng = :lng, location_updated_at = NOW() WHERE order_id = :oid OR order_ref LIKE :ref");
-        $stmtFO->execute([
-            ':lat' => $lat,
-            ':lng' => $lng,
-            ':oid' => $order_id,
-            ':ref' => '%' . $order_id . '%'
-        ]);
-    } catch (Throwable $e) {}
+    // 3. Execute SQL UPDATE query on MySQL food_orders (Primary Source of Truth)
+    if ($order_id > 0) {
+        try {
+            $stmtFO = $conn->prepare("UPDATE food_orders SET rider_lat = :lat, rider_lng = :lng, location_updated_at = NOW() WHERE order_id = :oid");
+            $stmtFO->execute([
+                ':lat' => $lat,
+                ':lng' => $lng,
+                ':oid' => $order_id
+            ]);
+        } catch (Throwable $e) {}
 
-    // 4. Execute SQL UPDATE query on MySQL orders table
-    try {
-        $stmtOrd = $conn->prepare("UPDATE orders SET current_lat = :lat, current_lng = :lng, rider_lat = :lat2, rider_lng = :lng2, rider_latitude = :lat3, rider_longitude = :lng3 WHERE id = :oid OR order_id = :oid2 OR order_number LIKE :ref OR order_number = :ref2");
-        $stmtOrd->execute([
-            ':lat' => $lat,
-            ':lng' => $lng,
-            ':lat2' => $lat,
-            ':lng2' => $lng,
-            ':lat3' => $lat,
-            ':lng3' => $lng,
-            ':oid' => $order_id,
-            ':oid2' => $order_id,
-            ':ref' => '%' . $order_id . '%',
-            ':ref2' => '#FD-261024-' . $order_id
-        ]);
-    } catch (Throwable $e) {}
+        // 4. Execute SQL UPDATE query on MySQL orders table
+        try {
+            $stmtOrd = $conn->prepare("UPDATE orders SET current_lat = :lat, current_lng = :lng, rider_lat = :lat2, rider_lng = :lng2, rider_latitude = :lat3, rider_longitude = :lng3, updated_at = NOW() WHERE id = :oid OR order_id = :oid2");
+            $stmtOrd->execute([
+                ':lat' => $lat,
+                ':lng' => $lng,
+                ':lat2' => $lat,
+                ':lng2' => $lng,
+                ':lat3' => $lat,
+                ':lng3' => $lng,
+                ':oid' => $order_id,
+                ':oid2' => $order_id
+            ]);
+        } catch (Throwable $e) {}
+    }
 
     // 5. Update MySQL riders and rider_locations table
     try {
@@ -90,34 +111,36 @@ if ($raw_lat !== null && $raw_lng !== null && is_numeric($raw_lat) && is_numeric
         $stmtR->execute([':lat' => $lat, ':lng' => $lng]);
     } catch (Throwable $e) {}
 
-    // 6. Execute SQL UPDATE query / REST PATCH to save current_lat and current_lng into Supabase for order
+    // 6. Supabase broadcast (with fast non-blocking 1s timeout)
     $supabase_success = false;
     $sup_response = null;
-    try {
-        $sup_url = 'https://ijxbecblutgwfmuguxkg.supabase.co/rest/v1/orders?or=(id.eq.' . (int)$order_id . ',order_id.eq.' . (int)$order_id . ',order_number.eq.%23FD-261024-' . (int)$order_id . ')';
-        $sup_key = 'sb_publishable_vtkNEJpgxhN2xp-hbTio8g_iXS4nxz5';
-        $sup_body = json_encode([
-            'current_lat' => $lat,
-            'current_lng' => $lng,
-            'rider_lat'   => $lat,
-            'rider_lng'   => $lng
-        ]);
-        $sch = curl_init($sup_url);
-        curl_setopt($sch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-        curl_setopt($sch, CURLOPT_POSTFIELDS, $sup_body);
-        curl_setopt($sch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($sch, CURLOPT_TIMEOUT, 3);
-        curl_setopt($sch, CURLOPT_HTTPHEADER, [
-            'apikey: ' . $sup_key,
-            'Authorization: Bearer ' . $sup_key,
-            'Content-Type: application/json',
-            'Prefer: return=representation'
-        ]);
-        $sup_response = curl_exec($sch);
-        $http_code = curl_getinfo($sch, CURLINFO_HTTP_CODE);
-        curl_close($sch);
-        $supabase_success = ($http_code >= 200 && $http_code < 300);
-    } catch (Throwable $e) {}
+    if ($order_id > 0) {
+        try {
+            $sup_url = 'https://ijxbecblutgwfmuguxkg.supabase.co/rest/v1/orders?or=(id.eq.' . (int)$order_id . ',order_id.eq.' . (int)$order_id . ',order_number.eq.%23FD-261024-' . (int)$order_id . ')';
+            $sup_key = 'sb_publishable_vtkNEJpgxhN2xp-hbTio8g_iXS4nxz5';
+            $sup_body = json_encode([
+                'current_lat' => $lat,
+                'current_lng' => $lng,
+                'rider_lat'   => $lat,
+                'rider_lng'   => $lng
+            ]);
+            $sch = curl_init($sup_url);
+            curl_setopt($sch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+            curl_setopt($sch, CURLOPT_POSTFIELDS, $sup_body);
+            curl_setopt($sch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($sch, CURLOPT_TIMEOUT, 1);
+            curl_setopt($sch, CURLOPT_HTTPHEADER, [
+                'apikey: ' . $sup_key,
+                'Authorization: Bearer ' . $sup_key,
+                'Content-Type: application/json',
+                'Prefer: return=representation'
+            ]);
+            $sup_response = curl_exec($sch);
+            $http_code = curl_getinfo($sch, CURLINFO_HTTP_CODE);
+            curl_close($sch);
+            $supabase_success = ($http_code >= 200 && $http_code < 300);
+        } catch (Throwable $e) {}
+    }
 
     echo json_encode([
         'success' => true,

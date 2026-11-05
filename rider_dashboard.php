@@ -2288,6 +2288,7 @@ function toggleAutoDriveSimulation() {
 }
 
 function stopAutoDriveSimulation() {
+  window._isAutoDriveRunning = false;
   if (autoDriveTimer !== null) {
     clearInterval(autoDriveTimer);
     autoDriveTimer = null;
@@ -2302,6 +2303,7 @@ function stopAutoDriveSimulation() {
 
 // 2. Snap Auto-Drive Simulation to Street Geometry
 async function startAutoDriveSimulation() {
+  window._isAutoDriveRunning = true;
   if (!activeDeliveryData) {
     toastRider('No active delivery order to simulate.', true);
     return;
@@ -2638,6 +2640,13 @@ function enableManualSimulation(noticeText) {
   if (activeGpsOrderId) {
     updateGpsButtonUI(activeGpsOrderId, true, true);
   }
+
+  const curPos = riderMarker ? riderMarker.getLatLng() : null;
+  const initialLat = curPos ? curPos.lat : (sLat || (cCoord ? cCoord[0] : null));
+  const initialLng = curPos ? curPos.lng : (sLng || (cCoord ? cCoord[1] : null));
+  if (initialLat && initialLng) {
+    handleRiderPositionUpdate(initialLat, initialLng, 'manual');
+  }
 }
 
 function handleRiderPositionUpdate(lat, lng, source = 'gps', accuracy = null) {
@@ -2707,11 +2716,15 @@ function handleRiderPositionUpdate(lat, lng, source = 'gps', accuracy = null) {
   }
 
   // Post the updated coordinates to backend API (api_order.php / tracking_api.php)
-  const orderId = activeGpsOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
-  if (orderId) {
-    const isSimMode = (source === 'simulation' || source === 'manual' || source === 'reset');
-    sendRiderLocation(orderId, numLat, numLng, isSimMode);
-  }
+  // Ensure we resolve order ID from every possible source so mock memory is never isolated
+  const orderId = activeGpsOrderId 
+    || (activeDeliveryData ? activeDeliveryData.order_id : null) 
+    || (typeof activeRiderDeliveryOrderId !== 'undefined' ? activeRiderDeliveryOrderId : null)
+    || (typeof window._riderLastOrderId !== 'undefined' ? window._riderLastOrderId : null)
+    || 0;
+
+  const isSimMode = (source === 'simulation' || source === 'manual' || source === 'reset');
+  sendRiderLocation(orderId, numLat, numLng, isSimMode);
 }
 
 // ==========================================
@@ -3215,8 +3228,11 @@ async function initDeliveryMap(data) {
 
 async function sendRiderLocation(orderId, lat, lng, isImmediate = false) {
   const now = Date.now();
-  if (!isImmediate && (now - lastGpsBroadcastTimestamp < 800)) {
-    return; // Throttle dense hardware GPS steps
+  // Continuous persistence: throttle high-frequency hardware GPS or auto-drive simulation steps to 1000ms.
+  // Never throttle manual map clicks, marker drag drop, resets, or arrival triggers.
+  const minInterval = (isImmediate && !window._isAutoDriveRunning) ? 0 : 1000;
+  if (now - lastGpsBroadcastTimestamp < minInterval) {
+    return;
   }
   lastGpsBroadcastTimestamp = now;
   try {
@@ -3347,15 +3363,15 @@ function startLiveLocation(orderId) {
     sendRiderLocation(orderId, parseFloat(curLat), parseFloat(curLng), true);
   }
 
-  // Periodic 3.5-second live GPS broadcast to database
+  // Periodic 2-second live GPS broadcast to database
   liveBroadcastInterval = setInterval(() => {
-    const targetOrderId = activeGpsOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
+    const targetOrderId = activeGpsOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null) || (typeof activeRiderDeliveryOrderId !== 'undefined' ? activeRiderDeliveryOrderId : null) || 0;
     const bLat = latestRiderLat || (riderMarker ? riderMarker.getLatLng().lat : null);
     const bLng = latestRiderLng || (riderMarker ? riderMarker.getLatLng().lng : null);
-    if (targetOrderId && bLat !== null && bLng !== null && !isNaN(bLat) && !isNaN(bLng)) {
+    if (bLat !== null && bLng !== null && !isNaN(bLat) && !isNaN(bLng)) {
       sendRiderLocation(targetOrderId, parseFloat(bLat), parseFloat(bLng), true);
     }
-  }, 3500);
+  }, 2000);
 
   // If geolocation service is unsupported
   if (!navigator.geolocation) {
@@ -3488,7 +3504,7 @@ function openOrderChat(orderId, customerName, customerPhone) {
     if (activeChatOrderId) {
       fetchOrderMessages(activeChatOrderId, false);
     }
-  }, 2500);
+  }, 2000);
 }
 
 function closeOrderChat() {

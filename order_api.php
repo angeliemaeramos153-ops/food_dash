@@ -453,8 +453,8 @@ if ($action === 'get_rider_location' || $action === 'rider_location') {
         COALESCE(o.customer_lat, o.delivery_lat, 11.00760000) AS customer_lat,
         COALESCE(o.customer_lng, o.delivery_lng, 124.60890000) AS customer_lng,
         COALESCE(NULLIF(o.rider_id, 0), NULLIF(ord.rider_id, 0), NULL) AS rider_id,
-        COALESCE(o.rider_lat, ord.current_lat, ord.rider_lat, r.current_lat, NULL) AS rider_lat,
-        COALESCE(o.rider_lng, ord.current_lng, ord.rider_lng, r.current_lng, NULL) AS rider_lng,
+        COALESCE(o.rider_lat, ord.rider_lat, ord.current_lat, r.current_lat, NULL) AS rider_lat,
+        COALESCE(o.rider_lng, ord.rider_lng, ord.current_lng, r.current_lng, NULL) AS rider_lng,
         COALESCE(NULLIF(TRIM(r.rider_name), ''), NULLIF(TRIM(ru.full_name), ''), NULLIF(TRIM(ord.rider_name), ''), '') AS rider_name,
         COALESCE(NULLIF(TRIM(r.phone), ''), NULLIF(TRIM(ru.phone), ''), NULLIF(TRIM(ord.rider_phone), ''), NULLIF(TRIM(o.rider_phone), ''), '') AS rider_phone
     FROM food_orders o

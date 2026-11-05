@@ -905,7 +905,7 @@ function calculateHaversineKm(lat1, lon1, lat2, lon2) {
 }
 
 // Smoothly interpolate Leaflet marker coordinates so the motorcycle pin glides without snapping
-function animateMarkerTo(marker, newLat, newLng, durationMs = 1400) {
+function animateMarkerTo(marker, newLat, newLng, durationMs = 1800) {
   if (!marker || typeof marker.getLatLng !== 'function') return;
   const cur = marker.getLatLng();
   const startLat = cur.lat;
@@ -1252,12 +1252,8 @@ async function pollRiderLocation() {
       || ['arrived', 'arrived_destination'].includes(dNorm)
       || (distKm !== null && distKm <= 0.035 && ['near_customer', 'on_delivery', 'on_the_way'].includes(dNorm));
 
-    // Dynamic adaptive polling rate: 1000ms when close to destination or in transit, 2000ms when far
-    if (isArrivedPayload || (distKm !== null && distKm <= 0.8) || ['near_customer', 'on_delivery', 'arrived'].includes(dNorm)) {
-      window._trackPollingIntervalMs = 1000;
-    } else {
-      window._trackPollingIntervalMs = 2000;
-    }
+    // Consistent 2-second polling interval aligned with rider dashboard telemetry
+    window._trackPollingIntervalMs = 2000;
 
     if (isArrivedPayload) {
       // 1. Instantly force-snap the rider marker to the destination coordinates
@@ -1307,7 +1303,7 @@ async function pollRiderLocation() {
     } else {
       // Normal moving telemetry: update riderMarker smoothly via OSRM road animation
       if (riderMarker && !isNaN(rLat) && !isNaN(rLng) && rLat !== 0) {
-        animateMarkerTo(riderMarker, rLat, rLng, 700);
+        animateMarkerTo(riderMarker, rLat, rLng, 1800);
         // Snap route polyline via OSRM roads
         fetchOsrmRoadPolyline(rLat, rLng, dLat, dLng);
       }
@@ -2152,7 +2148,7 @@ async function pollOrderCommunication() {
   } catch (e) {}
 }
 
-window._trackPollingIntervalMs = 1000;
+window._trackPollingIntervalMs = 2000;
 let _trackPollTimer = null;
 
 async function executeTrackPollingCycle() {
@@ -2161,7 +2157,7 @@ async function executeTrackPollingCycle() {
     await Promise.allSettled([pollRiderLocation(), pollOrderCommunication()]);
   } catch (e) {}
   if (!window.isLoggingOut) {
-    const delay = window._trackPollingIntervalMs || 1000;
+    const delay = window._trackPollingIntervalMs || 2000;
     _trackPollTimer = setTimeout(executeTrackPollingCycle, delay);
   }
 }

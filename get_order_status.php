@@ -85,8 +85,8 @@ $stmt = $conn->prepare("SELECT
     COALESCE(o.delivery_lat, o.customer_lat, ord.delivery_lat, 11.00760000) AS destination_lat,
     COALESCE(o.delivery_lng, o.customer_lng, ord.delivery_lng, 124.60890000) AS destination_lng,
     COALESCE(NULLIF(o.rider_id, 0), NULLIF(ord.rider_id, 0), NULL) AS rider_id,
-    COALESCE(o.rider_lat, ord.current_lat, ord.rider_lat, r.current_lat, NULL) AS rider_lat,
-    COALESCE(o.rider_lng, ord.current_lng, ord.rider_lng, r.current_lng, NULL) AS rider_lng,
+    COALESCE(o.rider_lat, ord.rider_lat, ord.current_lat, r.current_lat, NULL) AS rider_lat,
+    COALESCE(o.rider_lng, ord.rider_lng, ord.current_lng, r.current_lng, NULL) AS rider_lng,
     COALESCE(NULLIF(TRIM(r.rider_name), ''), NULLIF(TRIM(ru.full_name), ''), NULLIF(TRIM(ord.rider_name), ''), '') AS rider_name,
     COALESCE(NULLIF(TRIM(r.phone), ''), NULLIF(TRIM(ru.phone), ''), NULLIF(TRIM(ord.rider_phone), ''), NULLIF(TRIM(o.rider_phone), ''), '') AS rider_phone,
     o.updated_at

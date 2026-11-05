@@ -626,7 +626,8 @@ if (!function_exists('resolve_order_rider_info')) {
                 if (empty($order['rider_phone'])) {
                     $order['rider_phone'] = trim((string)($found_rider['phone'] ?: ($found_rider['user_phone'] ?: '+63 917 555 0192')));
                 }
-                if (!empty($found_rider['current_lat']) && !empty($found_rider['current_lng'])) {
+                $has_order_coord = !empty($order['rider_lat']) && is_numeric($order['rider_lat']) && (float)$order['rider_lat'] != 0;
+                if (!$has_order_coord && !empty($found_rider['current_lat']) && !empty($found_rider['current_lng'])) {
                     $order['current_lat'] = (float)$found_rider['current_lat'];
                     $order['current_lng'] = (float)$found_rider['current_lng'];
                     $order['rider_lat']   = (float)$found_rider['current_lat'];

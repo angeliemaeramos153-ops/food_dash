@@ -6048,11 +6048,9 @@ async function pollCustomerOrdersLive() {
                   || ['arrived', 'arrived_destination'].includes(status_lower)
                   || Boolean(ord.is_arrived);
 
-      // Dynamic adaptive polling: 1000ms (1s) when delivering / close to destination / arrived
-      if (isDelivering || del_status === 'near_customer' || raw_status === 'NEAR_CUSTOMER' || isArrived) {
-        window._customerPollIntervalMs = 1000;
-        window._customerCommIntervalMs = 1000;
-      }
+      // Consistent 2-second polling interval aligned with rider telemetry
+      window._customerPollIntervalMs = 2000;
+      window._customerCommIntervalMs = 2000;
 
       const arrivedKey = 'fd_arrived_alert_seen_' + oId;
       const modal = document.getElementById('riderArrivedModal');
@@ -6140,8 +6138,8 @@ async function pollCustomerOrdersLive() {
 }
 window.pollCustomerOrdersLive = pollCustomerOrdersLive;
 
-// Adaptive 1 to 2 seconds status polling loop (1000ms when close to destination, 2000ms when idle)
-window._customerPollIntervalMs = 1200;
+// Consistent 2-second status polling loop
+window._customerPollIntervalMs = 2000;
 
 function scheduleNextCustomerOrderPoll() {
   if (window.isLoggingOut || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1')) return;
@@ -6152,7 +6150,7 @@ function scheduleNextCustomerOrderPoll() {
   _pollCustomerOrdersTimer = setTimeout(async () => {
     try { await pollCustomerOrdersLive(); } catch (e) {}
     scheduleNextCustomerOrderPoll();
-  }, window._customerPollIntervalMs || 1200);
+  }, window._customerPollIntervalMs || 2000);
 }
 
 scheduleNextCustomerOrderPoll();
@@ -7166,7 +7164,7 @@ function openCustomerTrackingModal(orderId, meta) {
     if (activeCustomerTrackingOrderId) {
       fetchCustomerLiveTracking(activeCustomerTrackingOrderId, false);
     }
-  }, 1000); // 1000ms (1s) ultra-responsive real-time tracking loop
+  }, 2000); // 2000ms (2s) real-time synchronized tracking loop
 }
 
 function closeCustomerTrackingModal() {
@@ -7205,7 +7203,7 @@ function generateFallbackStreetCorridor(startLat, startLng, destLat, destLng) {
 // Smooth marker interpolation along OSRM road geometry
 let currentCustOsrmPath = [];
 
-function animateMarkerAlongRoad(marker, newLat, newLng, durationMs = 700) {
+function animateMarkerAlongRoad(marker, newLat, newLng, durationMs = 1800) {
   if (!marker) return;
   const startLatLng = marker.getLatLng();
   const startLat = startLatLng.lat;
@@ -7587,11 +7585,9 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
       updateCustomerEtaBadge(dKm);
     }
 
-    // If close to destination (dist <= 0.8km or near/arrived), maintain fast 1000ms polling rate
-    if ((dKm !== null && dKm <= 0.8) || isLiveArrived) {
-      window._customerPollIntervalMs = 1000;
-      window._customerCommIntervalMs = 1000;
-    }
+    // Consistent 2-second polling rate synchronized across dashboards
+    window._customerPollIntervalMs = 2000;
+    window._customerCommIntervalMs = 2000;
 
     // Check for active incoming call from rider
     if (data.active_call && (data.active_call.status === 'ringing' || data.active_call.call_status === 'ringing') && (data.active_call.caller === 'rider' || data.active_call.caller_role === 'rider')) {
@@ -7735,7 +7731,7 @@ function renderCustomerMap(opts) {
       custRiderMarker = L.marker([opts.riderLat, opts.riderLng], { icon: riderIcon, zIndexOffset: 1000 }).addTo(custTrackingMap);
       custRiderMarker.bindPopup(`<b>${escapeCustHtml(opts.riderName || 'Rider')}</b><br><small>Live Motorcycle GPS</small>`);
     } else {
-      animateMarkerAlongRoad(custRiderMarker, opts.riderLat, opts.riderLng, 850);
+      animateMarkerAlongRoad(custRiderMarker, opts.riderLat, opts.riderLng, 1800);
     }
 
     // d. Dynamic connecting road polyline via OSRM (never straight line)

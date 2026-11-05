@@ -51,6 +51,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $order_id = (int)$m[1];
         }
     }
+    if ($order_id <= 0) {
+        try {
+            $q_act = $conn->query("SELECT order_id FROM food_orders WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived') ORDER BY order_id DESC LIMIT 1");
+            $order_id = (int)($q_act ? $q_act->fetchColumn() : 0);
+            if ($order_id <= 0) {
+                $q_latest = $conn->query("SELECT order_id FROM food_orders ORDER BY order_id DESC LIMIT 1");
+                $order_id = (int)($q_latest ? $q_latest->fetchColumn() : 0);
+            }
+        } catch (Throwable $e) {}
+    }
 
     $raw_lat = $payload['current_lat'] ?? $payload['lat'] ?? null;
     $raw_lng = $payload['current_lng'] ?? $payload['lng'] ?? null;
@@ -67,9 +77,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             out(false, 'Only Riders can send live location.', [], 403);
         }
 
-        $stmt = $conn->prepare("SELECT order_id, customer_id, order_ref, rider_id, status FROM food_orders WHERE order_id = :oid OR order_ref LIKE :ref LIMIT 1");
-        $stmt->execute([':oid' => $order_id, ':ref' => '%' . $order_id . '%']);
-        $o = $stmt->fetch(PDO::FETCH_ASSOC);
+        $o = null;
+        if ($order_id > 0) {
+            $stmt = $conn->prepare("SELECT order_id, customer_id, order_ref, rider_id, status FROM food_orders WHERE order_id = :oid LIMIT 1");
+            $stmt->execute([':oid' => $order_id]);
+            $o = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
 
         // Resolve rider_id for this rider account
         $rider_id = 0;
@@ -92,50 +105,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             out(false, 'This delivery is not assigned to this Rider.', [], 403);
         }
 
-        $stmt = $conn->prepare("UPDATE food_orders SET rider_lat = :lat, rider_lng = :lng, location_updated_at = NOW() WHERE order_id = :oid OR order_ref LIKE :ref");
-        $stmt->execute([':lat' => $lat, ':lng' => $lng, ':oid' => $order_id, ':ref' => '%' . $order_id . '%']);
+        if ($order_id > 0) {
+            $stmt = $conn->prepare("UPDATE food_orders SET rider_lat = :lat, rider_lng = :lng, location_updated_at = NOW() WHERE order_id = :oid");
+            $stmt->execute([':lat' => $lat, ':lng' => $lng, ':oid' => $order_id]);
 
-        // 1. RIDER GPS BROADCAST: Update orders table with current_lat and current_lng
-        try {
-            $stmtOrd = $conn->prepare("UPDATE orders SET current_lat = :lat, current_lng = :lng, rider_lat = :lat2, rider_lng = :lng2, rider_latitude = :lat3, rider_longitude = :lng3 WHERE id = :oid OR order_id = :oid2 OR order_number LIKE :ref OR order_number = :ref2");
-            $stmtOrd->execute([
-                ':lat' => $lat,
-                ':lng' => $lng,
-                ':lat2' => $lat,
-                ':lng2' => $lng,
-                ':lat3' => $lat,
-                ':lng3' => $lng,
-                ':oid' => $order_id,
-                ':oid2' => $order_id,
-                ':ref' => '%' . $order_id . '%',
-                ':ref2' => '#FD-261024-' . $order_id
-            ]);
-        } catch (Throwable $e) {}
+            // 1. RIDER GPS BROADCAST: Update orders table with current_lat and current_lng
+            try {
+                $stmtOrd = $conn->prepare("UPDATE orders SET current_lat = :lat, current_lng = :lng, rider_lat = :lat2, rider_lng = :lng2, rider_latitude = :lat3, rider_longitude = :lng3, updated_at = NOW() WHERE id = :oid OR order_id = :oid2");
+                $stmtOrd->execute([
+                    ':lat' => $lat,
+                    ':lng' => $lng,
+                    ':lat2' => $lat,
+                    ':lng2' => $lng,
+                    ':lat3' => $lat,
+                    ':lng3' => $lng,
+                    ':oid' => $order_id,
+                    ':oid2' => $order_id
+                ]);
+            } catch (Throwable $e) {}
 
-        // Broadcast to Supabase orders table via REST API so React Native / Expo receives live GPS
-        try {
-            $sup_url = 'https://ijxbecblutgwfmuguxkg.supabase.co/rest/v1/orders?or=(id.eq.' . (int)$order_id . ',order_id.eq.' . (int)$order_id . ',order_number.eq.%23FD-261024-' . (int)$order_id . ')';
-            $sup_key = 'sb_publishable_vtkNEJpgxhN2xp-hbTio8g_iXS4nxz5';
-            $sup_body = json_encode([
-                'current_lat' => (float)$lat,
-                'current_lng' => (float)$lng,
-                'rider_lat'   => (float)$lat,
-                'rider_lng'   => (float)$lng
-            ]);
-            $sch = curl_init($sup_url);
-            curl_setopt($sch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-            curl_setopt($sch, CURLOPT_POSTFIELDS, $sup_body);
-            curl_setopt($sch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($sch, CURLOPT_TIMEOUT, 2);
-            curl_setopt($sch, CURLOPT_HTTPHEADER, [
-                'apikey: ' . $sup_key,
-                'Authorization: Bearer ' . $sup_key,
-                'Content-Type: application/json',
-                'Prefer: return=representation'
-            ]);
-            curl_exec($sch);
-            curl_close($sch);
-        } catch (Throwable $e) {}
+            // Broadcast to Supabase orders table via REST API so React Native / Expo receives live GPS
+            try {
+                $sup_url = 'https://ijxbecblutgwfmuguxkg.supabase.co/rest/v1/orders?or=(id.eq.' . (int)$order_id . ',order_id.eq.' . (int)$order_id . ',order_number.eq.%23FD-261024-' . (int)$order_id . ')';
+                $sup_key = 'sb_publishable_vtkNEJpgxhN2xp-hbTio8g_iXS4nxz5';
+                $sup_body = json_encode([
+                    'current_lat' => (float)$lat,
+                    'current_lng' => (float)$lng,
+                    'rider_lat'   => (float)$lat,
+                    'rider_lng'   => (float)$lng
+                ]);
+                $sch = curl_init($sup_url);
+                curl_setopt($sch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+                curl_setopt($sch, CURLOPT_POSTFIELDS, $sup_body);
+                curl_setopt($sch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($sch, CURLOPT_TIMEOUT, 1);
+                curl_setopt($sch, CURLOPT_HTTPHEADER, [
+                    'apikey: ' . $sup_key,
+                    'Authorization: Bearer ' . $sup_key,
+                    'Content-Type: application/json',
+                    'Prefer: return=representation'
+                ]);
+                curl_exec($sch);
+                curl_close($sch);
+            } catch (Throwable $e) {}
+        }
 
         // 2. Insert into rider_locations table linked to order_id
         try {
@@ -428,8 +441,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
         COALESCE(o.customer_lat, o.delivery_lat, 11.00760000) AS customer_lat,
         COALESCE(o.customer_lng, o.delivery_lng, 124.60890000) AS customer_lng,
         COALESCE(NULLIF(o.rider_id, 0), NULLIF(ord.rider_id, 0), NULL) AS rider_id,
-        COALESCE(o.rider_lat, ord.current_lat, ord.rider_lat, r.current_lat, NULL) AS rider_lat,
-        COALESCE(o.rider_lng, ord.current_lng, ord.rider_lng, r.current_lng, NULL) AS rider_lng,
+        COALESCE(o.rider_lat, ord.rider_lat, ord.current_lat, r.current_lat, NULL) AS rider_lat,
+        COALESCE(o.rider_lng, ord.rider_lng, ord.current_lng, r.current_lng, NULL) AS rider_lng,
         COALESCE(NULLIF(TRIM(r.rider_name), ''), NULLIF(TRIM(ru.full_name), ''), NULLIF(TRIM(ord.rider_name), ''), '') AS rider_name,
         COALESCE(NULLIF(TRIM(r.phone), ''), NULLIF(TRIM(ru.phone), ''), NULLIF(TRIM(ord.rider_phone), ''), NULLIF(TRIM(o.rider_phone), ''), '') AS rider_phone
     FROM food_orders o
