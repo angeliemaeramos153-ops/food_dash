@@ -767,50 +767,19 @@ a:active,
   transition: transform 0.08s ease, opacity 0.08s ease !important;
 }
 
-/* Ensure child icons, badges, SVG paths, and decorative text never swallow parent card clicks */
-.icon-btn svg, .icon-btn path, .icon-btn i,
-#fdGmailHeaderBtn svg, #fdGmailHeaderBtn path,
-.nav i, .nav span, .nav b,
-.store-logo, .store-logo *, .store strong, .store small,
-.row-icon, .row-icon *, .row-details strong, .row-details small, .row-card i,
-.food-card .food-img, .food-body strong, .food-body small, .price-row .price,
-.search i, .search input[readonly],
-.chip *, .hero button * {
-  pointer-events: none !important;
-}
-
-/* Re-enable explicit pointer events on child action buttons */
+/* Guarantee underlying dashboard layouts, product cards, and navigation links remain fully interactive */
+.app, .screen, .screen.active, .bottom, .bottom-nav, nav, .nav, .nav.active,
+.food-card, .food-card *, .food-body, .food-body *, .food-img, .price-row, .price-row *,
+.card, .store, .store *, .row-card, .row-card *, .chip, .chip *,
+.search, .search *, .hero, .hero *, button, a,
 .add, .btn-qty-minus, .btn-qty-plus, .food-card .add {
   pointer-events: auto !important;
 }
 
-/* Guarantee inactive modals, backdrops, and hidden floating elements never block clicks */
-#riderArrivedModal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
-#riderArrivedModal[style*="display:none"],
+/* Targeted arrival modal & backdrop cleanup strictly when inactive/closed */
+#riderArrivedModal:not(.show):not(.active),
 #riderArrivedModal[style*="display: none"],
-.sim-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
-.sim-modal[style*="display:none"],
-.sim-modal[style*="display: none"],
-.fd-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
-.fd-modal[style*="display:none"],
-.fd-modal[style*="display: none"],
-.logout-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
-.logout-modal[style*="display:none"],
-.logout-modal[style*="display: none"],
-.incoming-call-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
-.incoming-call-modal[style*="display:none"],
-.incoming-call-modal[style*="display: none"],
-.customer-floating-banner:not(.show):not(.slide-down),
-#liveRiderMessageBanner:not(.show):not(.slide-down),
-.live-rider-msg-banner:not(.show):not(.slide-down),
-.customer-floating-banner[style*="display:none"],
-.customer-floating-banner[style*="display: none"],
-.fd-gmail-modal-backdrop:not(.active),
-#fdGmailModal:not(.active),
-.toast:not(.show),
-.cust-toast:not(.show),
-.modal-backdrop:not(.show):not(.active),
-.fd-modal-backdrop:not(.show):not(.active) {
+#riderArrivedModal[style*="display:none"] {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
@@ -818,30 +787,47 @@ a:active,
   z-index: -9999 !important;
 }
 
-/* Explicit active modal rules */
-.sim-modal.show,
-.sim-modal.active,
-.sim-modal[style*="display: flex"],
-.sim-modal[style*="display:flex"],
-.fd-modal.show,
-.fd-modal.active,
-.fd-modal[style*="display: flex"],
-.fd-modal[style*="display:flex"],
-.logout-modal.show,
-.logout-modal.active,
-.logout-modal[style*="display: flex"],
-.logout-modal[style*="display:flex"],
-.incoming-call-modal.show,
-.incoming-call-modal.active,
-.incoming-call-modal[style*="display: flex"],
-.incoming-call-modal[style*="display:flex"],
-.fd-gmail-modal-backdrop.active,
-#fdGmailModal.active {
+#riderArrivedModal:not(.show):not(.active) .fd-modal-backdrop,
+#riderArrivedModal[style*="display: none"] .fd-modal-backdrop,
+#riderArrivedModal[style*="display:none"] .fd-modal-backdrop {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+
+#riderArrivedModal.show,
+#riderArrivedModal.active {
   display: flex !important;
   visibility: visible !important;
   pointer-events: auto !important;
   opacity: 1 !important;
-  z-index: 10000 !important;
+  z-index: 9999999 !important;
+}
+
+#riderArrivedModal.show .fd-modal-backdrop,
+#riderArrivedModal.active .fd-modal-backdrop {
+  display: block !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+
+#liveRiderMessageBanner:not(.show):not(.slide-down),
+#liveRiderMessageBanner[style*="display: none"],
+#liveRiderMessageBanner[style*="display:none"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+
+#liveRiderMessageBanner.show,
+#liveRiderMessageBanner.slide-down {
+  display: flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
 }
 
 .app {
@@ -8340,7 +8326,7 @@ function stopArrivalAlertSound() {
     modal.style.setProperty('visibility', 'hidden', 'important');
     modal.style.setProperty('pointer-events', 'none', 'important');
     modal.style.setProperty('opacity', '0', 'important');
-    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop, [onclick*="closeRiderArrivedModal"]');
+    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop');
     backdrops.forEach(bd => {
       bd.classList.remove('show', 'active');
       bd.style.setProperty('display', 'none', 'important');
@@ -8349,15 +8335,15 @@ function stopArrivalAlertSound() {
       bd.style.setProperty('opacity', '0', 'important');
     });
   }
-  document.querySelectorAll('body > .modal-backdrop, body > .fd-modal-backdrop, .modal-backdrop:not(.show), .fd-modal-backdrop:not(.active)').forEach(el => {
-    if (!el.closest('.show, .active, [style*="display: flex"], [style*="display:flex"]')) {
-      try {
-        el.style.setProperty('display', 'none', 'important');
-        el.style.setProperty('visibility', 'hidden', 'important');
-        el.style.setProperty('pointer-events', 'none', 'important');
-        el.remove();
-      } catch (e) {}
-    }
+  const arrivalBackdrops = document.querySelectorAll('#riderArrivedModal .fd-modal-backdrop, #riderArrivedModal .modal-backdrop, body > .fd-modal-backdrop[data-arrival-backdrop="true"]');
+  arrivalBackdrops.forEach(el => {
+    try {
+      el.classList.remove('show', 'active');
+      el.style.setProperty('display', 'none', 'important');
+      el.style.setProperty('visibility', 'hidden', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
+      el.style.setProperty('opacity', '0', 'important');
+    } catch (e) {}
   });
   if (window.FoodDashCall) {
     if (typeof window.FoodDashCall.stopArrivalAlarm === 'function') {
@@ -8881,7 +8867,7 @@ function closeRiderArrivedModal() {
     modal.style.setProperty('visibility', 'hidden', 'important');
     modal.style.setProperty('pointer-events', 'none', 'important');
     modal.style.setProperty('opacity', '0', 'important');
-    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop, [onclick*="closeRiderArrivedModal"]');
+    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop');
     backdrops.forEach(bd => {
       bd.classList.remove('show', 'active');
       bd.style.setProperty('display', 'none', 'important');
@@ -8890,15 +8876,15 @@ function closeRiderArrivedModal() {
       bd.style.setProperty('opacity', '0', 'important');
     });
   }
-  document.querySelectorAll('body > .modal-backdrop, body > .fd-modal-backdrop, .modal-backdrop:not(.show), .fd-modal-backdrop:not(.active)').forEach(el => {
-    if (!el.closest('.show, .active, [style*="display: flex"], [style*="display:flex"]')) {
-      try {
-        el.style.setProperty('display', 'none', 'important');
-        el.style.setProperty('visibility', 'hidden', 'important');
-        el.style.setProperty('pointer-events', 'none', 'important');
-        el.remove();
-      } catch (e) {}
-    }
+  const arrivalBackdrops = document.querySelectorAll('#riderArrivedModal .fd-modal-backdrop, #riderArrivedModal .modal-backdrop, body > .fd-modal-backdrop[data-arrival-backdrop="true"]');
+  arrivalBackdrops.forEach(el => {
+    try {
+      el.classList.remove('show', 'active');
+      el.style.setProperty('display', 'none', 'important');
+      el.style.setProperty('visibility', 'hidden', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
+      el.style.setProperty('opacity', '0', 'important');
+    } catch (e) {}
   });
 
   dismissLiveRiderBanner(true);

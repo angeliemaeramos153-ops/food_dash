@@ -460,7 +460,7 @@
       modal.style.setProperty('pointer-events', 'none', 'important');
       modal.style.setProperty('opacity', '0', 'important');
 
-      const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop, [onclick*="closeRiderArrivedModal"]');
+      const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop');
       backdrops.forEach(bd => {
         bd.classList.remove('show', 'active');
         bd.style.setProperty('display', 'none', 'important');
@@ -473,18 +473,17 @@
       btns.forEach(b => { b.disabled = true; });
     }
 
-    // Ensure any fixed-position modal backdrops do not linger invisibly in the DOM
+    // Ensure only arrival modal backdrops are targeted, leaving all other backdrops and layouts untouched
     if (typeof document !== 'undefined') {
-      const orphanedBackdrops = document.querySelectorAll('body > .modal-backdrop, body > .fd-modal-backdrop, .modal-backdrop:not(.show), .fd-modal-backdrop:not(.active)');
-      orphanedBackdrops.forEach(ob => {
-        if (!ob.closest('.show, .active, [style*="display: flex"], [style*="display:flex"]')) {
-          try {
-            ob.style.setProperty('display', 'none', 'important');
-            ob.style.setProperty('visibility', 'hidden', 'important');
-            ob.style.setProperty('pointer-events', 'none', 'important');
-            ob.remove();
-          } catch (e) {}
-        }
+      const arrivalBackdrops = document.querySelectorAll('#riderArrivedModal .fd-modal-backdrop, #riderArrivedModal .modal-backdrop, body > .fd-modal-backdrop[data-arrival-backdrop="true"]');
+      arrivalBackdrops.forEach(ob => {
+        try {
+          ob.classList.remove('show', 'active');
+          ob.style.setProperty('display', 'none', 'important');
+          ob.style.setProperty('visibility', 'hidden', 'important');
+          ob.style.setProperty('pointer-events', 'none', 'important');
+          ob.style.setProperty('opacity', '0', 'important');
+        } catch (e) {}
       });
     }
   }

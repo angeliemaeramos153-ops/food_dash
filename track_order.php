@@ -462,31 +462,63 @@ body { background: #f3f0e6; color: var(--ink); min-height: 100vh; display: flex;
   animation: bannerSlideDown 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
 }
 
-/* Inactive arrival banner, modal, and backdrop reset rules to prevent click/touch blocking */
-.live-rider-msg-banner:not(.slide-down):not(.show),
-#liveRiderMessageBanner:not(.slide-down):not(.show),
-.live-rider-msg-banner[style*="display: none"],
-.live-rider-msg-banner[style*="display:none"],
-#liveRiderMessageBanner[style*="display: none"],
-#liveRiderMessageBanner[style*="display:none"],
-#riderArrivedModal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
+/* Ensure underlying tracking layouts, cards, buttons, map controls, and navigation remain fully interactive */
+body, .container, .main-wrap, .card, .btn, button, a, #map, .leaflet-container, .leaflet-control, .nav, .nav.active {
+  pointer-events: auto !important;
+}
+
+/* Targeted arrival modal & backdrop cleanup strictly when inactive/closed */
+#riderArrivedModal:not(.show):not(.active),
 #riderArrivedModal[style*="display: none"],
-#riderArrivedModal[style*="display:none"],
-.fd-modal:not(.show):not(.active):not([style*="display: flex"]):not([style*="display:flex"]),
-.modal-backdrop:not(.show):not(.active),
-.fd-modal-backdrop:not(.show):not(.active) {
+#riderArrivedModal[style*="display:none"] {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
   opacity: 0 !important;
   z-index: -9999 !important;
 }
+
 #riderArrivedModal:not(.show):not(.active) .fd-modal-backdrop,
-#riderArrivedModal:not(.show):not(.active) [onclick*="closeRiderArrivedModal"] {
+#riderArrivedModal[style*="display: none"] .fd-modal-backdrop,
+#riderArrivedModal[style*="display:none"] .fd-modal-backdrop {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
   opacity: 0 !important;
+}
+
+#riderArrivedModal.show,
+#riderArrivedModal.active {
+  display: flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  z-index: 9999999 !important;
+}
+
+#riderArrivedModal.show .fd-modal-backdrop,
+#riderArrivedModal.active .fd-modal-backdrop {
+  display: block !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+
+#liveRiderMessageBanner:not(.show):not(.slide-down),
+#liveRiderMessageBanner[style*="display: none"],
+#liveRiderMessageBanner[style*="display:none"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+
+#liveRiderMessageBanner.show,
+#liveRiderMessageBanner.slide-down {
+  display: flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
 }
 @keyframes bannerSlideDown {
   0% { transform: translate(-50%, -40px); opacity: 0; }
@@ -2071,7 +2103,7 @@ function stopArrivalAlertSound() {
     modal.style.setProperty('visibility', 'hidden', 'important');
     modal.style.setProperty('pointer-events', 'none', 'important');
     modal.style.setProperty('opacity', '0', 'important');
-    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop, [onclick*="closeRiderArrivedModal"]');
+    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop');
     backdrops.forEach(bd => {
       bd.classList.remove('show', 'active');
       bd.style.setProperty('display', 'none', 'important');
@@ -2080,15 +2112,15 @@ function stopArrivalAlertSound() {
       bd.style.setProperty('opacity', '0', 'important');
     });
   }
-  document.querySelectorAll('body > .modal-backdrop, body > .fd-modal-backdrop, .modal-backdrop:not(.show), .fd-modal-backdrop:not(.active)').forEach(el => {
-    if (!el.closest('.show, .active, [style*="display: flex"], [style*="display:flex"]')) {
-      try {
-        el.style.setProperty('display', 'none', 'important');
-        el.style.setProperty('visibility', 'hidden', 'important');
-        el.style.setProperty('pointer-events', 'none', 'important');
-        el.remove();
-      } catch (e) {}
-    }
+  const arrivalBackdrops = document.querySelectorAll('#riderArrivedModal .fd-modal-backdrop, #riderArrivedModal .modal-backdrop, body > .fd-modal-backdrop[data-arrival-backdrop="true"]');
+  arrivalBackdrops.forEach(el => {
+    try {
+      el.classList.remove('show', 'active');
+      el.style.setProperty('display', 'none', 'important');
+      el.style.setProperty('visibility', 'hidden', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
+      el.style.setProperty('opacity', '0', 'important');
+    } catch (e) {}
   });
   if (trackActiveOscillators && trackActiveOscillators.length > 0) {
     const now = trackSynthAudioCtx ? trackSynthAudioCtx.currentTime : 0;
@@ -2175,7 +2207,7 @@ function closeRiderArrivedModal() {
     modal.style.setProperty('visibility', 'hidden', 'important');
     modal.style.setProperty('pointer-events', 'none', 'important');
     modal.style.setProperty('opacity', '0', 'important');
-    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop, [onclick*="closeRiderArrivedModal"]');
+    const backdrops = modal.querySelectorAll('.fd-modal-backdrop, .modal-backdrop');
     backdrops.forEach(bd => {
       bd.classList.remove('show', 'active');
       bd.style.setProperty('display', 'none', 'important');
@@ -2184,15 +2216,15 @@ function closeRiderArrivedModal() {
       bd.style.setProperty('opacity', '0', 'important');
     });
   }
-  document.querySelectorAll('body > .modal-backdrop, body > .fd-modal-backdrop, .modal-backdrop:not(.show), .fd-modal-backdrop:not(.active)').forEach(el => {
-    if (!el.closest('.show, .active, [style*="display: flex"], [style*="display:flex"]')) {
-      try {
-        el.style.setProperty('display', 'none', 'important');
-        el.style.setProperty('visibility', 'hidden', 'important');
-        el.style.setProperty('pointer-events', 'none', 'important');
-        el.remove();
-      } catch (e) {}
-    }
+  const arrivalBackdrops = document.querySelectorAll('#riderArrivedModal .fd-modal-backdrop, #riderArrivedModal .modal-backdrop, body > .fd-modal-backdrop[data-arrival-backdrop="true"]');
+  arrivalBackdrops.forEach(el => {
+    try {
+      el.classList.remove('show', 'active');
+      el.style.setProperty('display', 'none', 'important');
+      el.style.setProperty('visibility', 'hidden', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
+      el.style.setProperty('opacity', '0', 'important');
+    } catch (e) {}
   });
 
   dismissLiveRiderBanner(true);
