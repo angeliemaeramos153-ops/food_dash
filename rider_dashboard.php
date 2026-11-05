@@ -1183,7 +1183,8 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
 .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:18px;z-index:-9999 !important;pointer-events:none !important;visibility:hidden !important;opacity:0 !important}
 .modal:not(.show), .modal[style*="display: none"], .modal[style*="display:none"], .custom-modal-backdrop:not(.show), .modal-backdrop:not(.show), [class*="modal"]:not(.show):not(.active) {display:none !important;pointer-events:none !important;visibility:hidden !important;opacity:0 !important;z-index:-9999 !important}
 .modal.show{display:flex !important;pointer-events:auto !important;visibility:visible !important;opacity:1 !important;z-index:10000 !important}
-#riderConfirmModal.show, #clearDeliveryModal.show{z-index:99999 !important}
+#riderConfirmModal.show, #clearDeliveryModal.show, #riderChatModal.show{z-index:99999 !important}
+#riderChatModal.show{display:block !important;pointer-events:auto !important;visibility:visible !important;opacity:1 !important}
 #riderCompletedOrdersModal.show{z-index:99998 !important}
 #gpsNoticeBanner, .gps-notice-banner, .gps-warning-box, .gps-floating-toast{display:none !important}
 .btn-hdr-history{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);color:#ffffff;padding:6px 12px;border-radius:20px;font-size:0.72rem;font-weight:700;cursor:pointer;backdrop-filter:blur(4px);transition:all 0.2s ease}
@@ -1566,6 +1567,7 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
 /* Chat Drawer / Modal */
 .chat-modal-box {
   width: min(400px, 100%);
+  margin: 30px auto;
   background: #ffffff;
   border: 1.5px solid var(--sandstone);
   border-radius: 20px;
@@ -1574,6 +1576,8 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   flex-direction: column;
   max-height: 85vh;
   overflow: hidden;
+  position: relative;
+  pointer-events: auto;
 }
 .chat-modal-header {
   display: flex;
@@ -1900,7 +1904,7 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   $c_dial = preg_replace('/[^\+0-9]/', '', $c_phone_val);
   if (empty($c_dial)) $c_dial = '+639171234567';
   $c_name_val = !empty($o['customer_name']) ? trim($o['customer_name']) : 'Customer';
-?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div id="rider-map-container" style="width: 100%; height: 300px; position: relative; margin: 10px 0; z-index: 5;">
+?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div id="rider-map-container" style="width: 100%; height: 300px; position: relative; margin: 10px 0; z-index: 5;">
     <div id="delivery-map" style="width: 100%; height: 100%;"></div>
 </div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div class="actions" id="riderOrderActions_<?=(int)$o['order_id']?>" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;position:relative !important;z-index:20 !important;pointer-events:auto !important;"><?php if($is_delivered_state): ?><div class="delivery-complete-summary" id="deliveryCompleteSummary_<?=(int)$o['order_id']?>" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;"><div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;"><i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i><span>Delivery Handover Completed!</span></div><div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">Delivery handover is confirmed. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:</div><button type="button" class="btn success full btn-open-clear" id="btnFinishClearTrigger_<?=(int)$o['order_id']?>" data-action="open-clear-modal" data-order-id="<?=(int)$o['order_id']?>" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(<?=(int)$o['order_id']?>)"><i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order</button></div><?php else: ?><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'near_customer'): ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'arrived'): ?><div style="background:#ecfdf5; border:1.5px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:10px; font-size:0.82rem; font-weight:700; text-align:center;"><i class="fa-solid fa-circle-check"></i> Arrived at Destination • Customer notified outside</div><?php else: ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full btn-open-handover" id="btnPromptHandover_<?=(int)$o['order_id']?>" data-action="prompt-handover" data-order-id="<?=(int)$o['order_id']?>" onclick="promptCompleteDelivery(<?=$o['order_id']?>)"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
@@ -1989,7 +1993,7 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   </div>
 </div>
 <!-- Rider Chat / Quick Message Modal -->
-<div class="modal" id="riderChatModal" style="display: none; pointer-events: none;"><div class="chat-modal-box"><div class="chat-modal-header"><div style="display:flex;align-items:center;gap:8px;"><div class="chat-header-avatar"><i class="fa-solid fa-user"></i></div><div><h4 id="chatCustomerName" style="margin:0;font-size:13px;color:var(--olive-shadow);">Customer</h4><small id="chatCustomerPhone" style="font-size:10px;color:var(--muted);">+63 ...</small></div></div><button class="chat-close-btn" onclick="closeOrderChat()"><i class="fa-solid fa-xmark"></i></button></div><div class="quick-status-section"><div class="quick-title"><i class="fa-solid fa-bolt"></i> Quick Delivery Updates:</div><div class="quick-pills"><button type="button" class="quick-pill" onclick="sendQuickUpdate('I\'ve arrived outside with your order! 🛵')">🛵 I've arrived outside</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Traffic delay, on my way! 🚦')">🚦 Traffic delay, on my way</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Food picked up! Heading to your address now 🍱')">🍱 Heading to your address</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Please be ready at the gate/lobby 🚪')">🚪 Please be ready at gate</button></div></div><div id="chatMessagesList" class="chat-messages-container"><div class="chat-empty-hint">Loading conversation...</div></div><div class="chat-input-bar"><input type="text" id="chatInputText" placeholder="Type delivery message..." oninput="updateChatSmsLink(this.value)" onkeydown="if(event.key==='Enter') sendChatMessage()"><button type="button" class="chat-send-btn" onclick="sendChatMessage()" title="Send in App"><i class="fa-solid fa-paper-plane"></i></button><a href="javascript:void(0)" id="chatSmsLink" class="chat-sms-btn" target="_blank" title="Send via native SMS"><i class="fa-solid fa-comment-dots"></i> SMS</a></div></div></div>
+<div class="modal" id="riderChatModal" style="display: none; pointer-events: none;" onclick="if(event.target===this)closeOrderChat()"><div class="chat-modal-box"><div class="chat-modal-header"><div style="display:flex;align-items:center;gap:8px;"><div class="chat-header-avatar"><i class="fa-solid fa-user"></i></div><div><h4 id="chatCustomerName" style="margin:0;font-size:13px;color:var(--olive-shadow);">Customer</h4><small id="chatCustomerPhone" style="font-size:10px;color:var(--muted);">+63 ...</small></div></div><button class="chat-close-btn" onclick="closeOrderChat()"><i class="fa-solid fa-xmark"></i></button></div><div class="quick-status-section"><div class="quick-title"><i class="fa-solid fa-bolt"></i> Quick Delivery Updates:</div><div class="quick-pills"><button type="button" class="quick-pill" onclick="sendQuickUpdate('I\'ve arrived outside with your order! 🛵')">🛵 I've arrived outside</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Traffic delay, on my way! 🚦')">🚦 Traffic delay, on my way</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Food picked up! Heading to your address now 🍱')">🍱 Heading to your address</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Please be ready at the gate/lobby 🚪')">🚪 Please be ready at gate</button></div></div><div id="chatMessagesList" class="chat-messages-container"><div class="chat-empty-hint">Loading conversation...</div></div><div class="chat-input-bar"><input type="text" id="chatInputText" placeholder="Type delivery message..." oninput="updateChatSmsLink(this.value)" onkeydown="if(event.key==='Enter') sendChatMessage()"><button type="button" class="chat-send-btn" onclick="sendChatMessage()" title="Send in App"><i class="fa-solid fa-paper-plane"></i></button><a href="javascript:void(0)" id="chatSmsLink" class="chat-sms-btn" target="_blank" title="Send via native SMS"><i class="fa-solid fa-comment-dots"></i> SMS</a></div></div></div>
 <!-- Desktop / Simulator Outgoing Call Modal -->
 <div class="modal" id="riderCallModal" style="display: none; pointer-events: none;" onclick="if(event.target===this)endRiderCall()"><div class="box rider-call-box"><div class="call-avatar-pulse"><div class="call-pulse-circle"></div><div class="call-avatar-icon"><i class="fa-solid fa-phone-volume"></i></div></div><div class="call-badge-live"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> IN-APP CALL ACTIVE</div><h3 id="modalCallCustName" style="margin:0 0 4px;font-size:1.25rem;">Customer</h3><div class="modal-call-phone" id="modalCallCustPhone">+63 917 123 4567</div><p id="modalCallStatusText" class="modal-call-status">Ringing customer's device in real-time... (Incoming call banner displayed on customer map)</p><div class="modal-call-timer" id="modalCallTimer" style="display:none;">00:00</div><div class="call-modal-buttons"><button type="button" class="btn call-sim-btn" id="btnSimulateConnect" onclick="simulateCallConnect()"><i class="fa-solid fa-headset"></i> Test Connected Call</button><a href="javascript:void(0)" id="modalCallNativeTelBtn" class="btn call-native-btn" title="Open native phone dialer"><i class="fa-solid fa-mobile-screen-button"></i> Open Native Dialer</a><button type="button" class="btn call-end-btn" onclick="endRiderCall()"><i class="fa-solid fa-phone-slash"></i> End Call</button></div></div></div>
 <!-- PC Testing Simulator Floating Controls Bar -->
@@ -3866,23 +3870,35 @@ let activeChatCustomerPhone = '';
 let chatPollTimer = null;
 let lastKnownMessageId = 0;
 
-function openOrderChat(orderId, customerName, customerPhone) {
+function openOrderChat(orderId, name, phone, dial) {
   activeChatOrderId = orderId;
-  activeChatCustomerPhone = customerPhone || '+639285550148';
+  const targetPhone = dial || phone || '+639285550148';
+  activeChatCustomerPhone = targetPhone;
   lastKnownMessageId = 0;
 
   const nameEl = document.getElementById('chatCustomerName');
-  if (nameEl) nameEl.textContent = customerName || 'Customer';
+  if (nameEl) nameEl.textContent = name || 'Customer';
   const phoneEl = document.getElementById('chatCustomerPhone');
-  if (phoneEl) phoneEl.textContent = activeChatCustomerPhone;
+  if (phoneEl) phoneEl.textContent = phone || targetPhone;
 
   updateChatSmsLink('');
 
   const modal = document.getElementById('riderChatModal');
   if (modal) {
-    modal.style.display = 'flex';
+    modal.style.display = 'block';
+    modal.style.setProperty('display', 'block', 'important');
+    modal.style.zIndex = '99999';
+    modal.style.setProperty('z-index', '99999', 'important');
     modal.style.pointerEvents = 'auto';
+    modal.style.setProperty('pointer-events', 'auto', 'important');
     modal.classList.add('show');
+
+    // Ensure closing properly on backdrop clicks
+    modal.onclick = function(e) {
+      if (e.target === modal) {
+        closeOrderChat();
+      }
+    };
   }
 
   fetchOrderMessages(orderId, true);
@@ -3899,7 +3915,9 @@ function closeOrderChat() {
   const modal = document.getElementById('riderChatModal');
   if (modal) {
     modal.style.display = 'none';
+    modal.style.setProperty('display', 'none', 'important');
     modal.style.pointerEvents = 'none';
+    modal.style.setProperty('pointer-events', 'none', 'important');
     modal.classList.remove('show');
   }
   if (chatPollTimer) {
