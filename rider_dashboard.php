@@ -3228,7 +3228,8 @@ async function initDeliveryMap(data) {
   const targetCustLat = (hasCustomerCoord && cLat) ? cLat : altaVistaLat;
   const targetCustLng = (hasCustomerCoord && cLng) ? cLng : altaVistaLng;
 
-  const activeOriginCoord = (hasRiderCoord && !data.is_initial_shop_origin) ? [rLat, rLng] : (hasStoreCoord ? [sLat, sLng] : null);
+  window.activeOriginCoord = (hasRiderCoord && !data.is_initial_shop_origin) ? [rLat, rLng] : (hasStoreCoord ? [sLat, sLng] : null);
+  let activeOriginCoord = window.activeOriginCoord;
   const initialCenter = (activeOriginCoord)
     ? [(targetCustLat + activeOriginCoord[0]) / 2, (targetCustLng + activeOriginCoord[1]) / 2]
     : [targetCustLat, targetCustLng];
@@ -3337,7 +3338,8 @@ async function initDeliveryMap(data) {
   }
 
   // Route Polyline & Bounds: Between active origin (rider live GPS or store pickup) and customer destination via OSRM
-  const activeOriginCoord = (hasRiderCoord && !data.is_initial_shop_origin) ? [rLat, rLng] : (hasStoreCoord ? [sLat, sLng] : null);
+  window.activeOriginCoord = (hasRiderCoord && !data.is_initial_shop_origin) ? [rLat, rLng] : (hasStoreCoord ? [sLat, sLng] : null);
+  activeOriginCoord = window.activeOriginCoord;
 
   if (activeOriginCoord) {
     const initialBounds = L.latLngBounds([activeOriginCoord, customerCoord]);
