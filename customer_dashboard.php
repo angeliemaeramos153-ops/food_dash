@@ -3148,7 +3148,7 @@ a:active,
 
     <div class="summary">
       <div class="sumrow"><span>Subtotal</span><span id="subtotal">₱0.00</span></div>
-      <div class="sumrow"><span>Delivery Fee</span><span>₱30.00</span></div>
+      <div class="sumrow"><span>Delivery Fee</span><span id="deliveryFee">₱30.00</span></div>
       <div class="sumrow total"><span>Total</span><span id="total">₱30.00</span></div>
     </div>
     <button type="button" class="primary btn-checkout" style="margin-top:12px" id="payActionBtn" onclick="handlePayAction()">Checkout</button>
@@ -4535,13 +4535,21 @@ function renderCart(){
     </div>
   `).join('');
   
-  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-  const deliveryFee = 30;
+  const subtotal = cart.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty || item.quantity) || 1)), 0);
+  const deliveryFee = subtotal > 0 ? 30.00 : 0.00;
   const total = subtotal + deliveryFee;
   
-  document.getElementById('subtotal').textContent = money(subtotal);
-  document.getElementById('total').textContent = money(total);
+  const subEl = document.getElementById('subtotal');
+  if (subEl) subEl.textContent = money(subtotal);
+  const feeEl = document.getElementById('deliveryFee');
+  if (feeEl) feeEl.textContent = money(deliveryFee);
+  const totEl = document.getElementById('total');
+  if (totEl) totEl.textContent = money(total);
   summaryBox.style.display = 'block';
+
+  if (typeof updatePaymentTheme === 'function') {
+    updatePaymentTheme(selectedMethod || 'cod');
+  }
 
   // Delivery address input starts completely blank on page load per user requirement
   const addrInput = document.getElementById('deliveryAddressInput');
@@ -9438,12 +9446,34 @@ if (window.location.hash) {
 </script>
 <script>
 let selectedMethod = 'cod';
-const orderTotal = '₱200.00';
+
+function getCartGrandTotal() {
+    let subtotal = 0;
+    if (Array.isArray(window.cart) && window.cart.length > 0) {
+        subtotal = window.cart.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty || item.quantity) || 1)), 0);
+    } else {
+        try {
+            const raw = localStorage.getItem('foodDashCart');
+            const items = raw ? JSON.parse(raw) : [];
+            if (Array.isArray(items)) {
+                subtotal = items.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty || item.quantity) || 1)), 0);
+            }
+        } catch (e) {}
+    }
+    const fee = subtotal > 0 ? 30.00 : 0.00;
+    return subtotal + fee;
+}
+
+function getFormattedCartTotal() {
+    const total = getCartGrandTotal();
+    return '₱' + Number(total).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 function updatePaymentTheme(method) {
     selectedMethod = method;
     const btn = document.getElementById('payActionBtn') || document.getElementById('btnCheckoutSubmit');
     if (!btn) return;
+    const orderTotal = getFormattedCartTotal();
 
     if (method === 'cod') {
         btn.style.setProperty('background-color', '#283d23', 'important');
@@ -9464,8 +9494,11 @@ function updatePaymentTheme(method) {
     } else if (method === 'apple_pay') {
         btn.style.setProperty('background-color', '#000000', 'important');
         btn.style.setProperty('color', '#ffffff', 'important');
-        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;">ï£¿</span> Pay • ' + orderTotal;
+        btn.innerHTML = '<svg viewBox="0 0 15 16" width="16" height="17" fill="currentColor" style="vertical-align:-2px; margin-right:4px;" aria-hidden="true"><path d="M 8.5,1.2 C 9.5,0.2 10.6,0 10.6,0 C 10.6,0 10.4,1.1 9.4,2.1 C 8.4,3.1 7.4,3 7.4,3 C 7.4,3 7.5,2.1 8.5,1.2 Z"/><path d="M 11.2,6.5 C 11.2,4.8 12.6,3.9 12.7,3.8 C 11.9,2.6 10.6,2.4 10.1,2.4 C 8.9,2.2 7.7,3.1 7.1,3.1 C 6.5,3.1 5.5,2.3 4.5,2.4 C 3.2,2.4 2.0,3.2 1.3,4.4 C -0.1,6.8 0.9,10.3 2.3,12.3 C 3.0,13.3 3.8,14.4 4.9,14.4 C 5.9,14.3 6.3,13.7 7.6,13.7 C 8.8,13.7 9.2,14.4 10.3,14.3 C 11.4,14.3 12.1,13.3 12.8,12.3 C 13.6,11.2 13.9,10.1 14.0,10.0 C 13.9,10.0 11.2,9.0 11.2,6.5 Z"/></svg>' + ' Pay • ' + orderTotal;
     }
+
+    const custAppleTot = document.getElementById('custAppleModalTotal');
+    if (custAppleTot) custAppleTot.textContent = orderTotal;
 }
 
 function handlePayAction(e) {
@@ -9567,9 +9600,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="sim-sheet" style="background:#1c1c1e; color:#ffffff;">
     <div class="sheet-grabber" style="background:#3a3a3c;"></div>
     <div style="display:flex; align-items:center; justify-content:space-between; padding:4px 22px 14px 22px; border-bottom:1px solid #2c2c2e;">
-      <div style="display:flex; align-items:center; gap:6px; font-size:20px; font-weight:700;">
-        <span style="font-size:22px;"></span><span>Pay</span>
-      </div>
+<div style="display:inline-flex; align-items:center; gap:2px; font-size:20px; font-weight:700;"><svg viewBox="0 0 15 16" width="18" height="19" fill="currentColor" style="vertical-align:-1px; margin-right:2px;" aria-hidden="true"><path d="M 8.5,1.2 C 9.5,0.2 10.6,0 10.6,0 C 10.6,0 10.4,1.1 9.4,2.1 C 8.4,3.1 7.4,3 7.4,3 C 7.4,3 7.5,2.1 8.5,1.2 Z"/><path d="M 11.2,6.5 C 11.2,4.8 12.6,3.9 12.7,3.8 C 11.9,2.6 10.6,2.4 10.1,2.4 C 8.9,2.2 7.7,3.1 7.1,3.1 C 6.5,3.1 5.5,2.3 4.5,2.4 C 3.2,2.4 2.0,3.2 1.3,4.4 C -0.1,6.8 0.9,10.3 2.3,12.3 C 3.0,13.3 3.8,14.4 4.9,14.4 C 5.9,14.3 6.3,13.7 7.6,13.7 C 8.8,13.7 9.2,14.4 10.3,14.3 C 11.4,14.3 12.1,13.3 12.8,12.3 C 13.6,11.2 13.9,10.1 14.0,10.0 C 13.9,10.0 11.2,9.0 11.2,6.5 Z"/></svg><span>Pay</span></div>
       <button type="button" onclick="closeCustomerPaymentModal('customerApplePayModal')" style="background:transparent; border:none; color:#0a84ff; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
     </div>
 
@@ -9615,7 +9646,7 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
 
       <button type="button" class="btn-submit-order checkout-btn" id="btnCustApplePayTrigger" onclick="startCustomerApplePayScan()" style="background:#333336; color:#8e8e93; margin-top:16px;" disabled>
-        <span style="font-size:18px;"></span> Scanning Face...
+        <svg viewBox="0 0 15 16" width="16" height="17" fill="currentColor" style="vertical-align:-2px; margin-right:4px;" aria-hidden="true"><path d="M 8.5,1.2 C 9.5,0.2 10.6,0 10.6,0 C 10.6,0 10.4,1.1 9.4,2.1 C 8.4,3.1 7.4,3 7.4,3 C 7.4,3 7.5,2.1 8.5,1.2 Z"/><path d="M 11.2,6.5 C 11.2,4.8 12.6,3.9 12.7,3.8 C 11.9,2.6 10.6,2.4 10.1,2.4 C 8.9,2.2 7.7,3.1 7.1,3.1 C 6.5,3.1 5.5,2.3 4.5,2.4 C 3.2,2.4 2.0,3.2 1.3,4.4 C -0.1,6.8 0.9,10.3 2.3,12.3 C 3.0,13.3 3.8,14.4 4.9,14.4 C 5.9,14.3 6.3,13.7 7.6,13.7 C 8.8,13.7 9.2,14.4 10.3,14.3 C 11.4,14.3 12.1,13.3 12.8,12.3 C 13.6,11.2 13.9,10.1 14.0,10.0 C 13.9,10.0 11.2,9.0 11.2,6.5 Z"/></svg> Scanning Face...
       </button>
     </div>
   </div>
@@ -9841,7 +9872,7 @@ function startCustomerApplePayScan() {
         btn.disabled = true;
         btn.style.background = '#333336';
         btn.style.color = '#8e8e93';
-        btn.innerHTML = '<span style="font-size:18px;"></span> Scanning Face...';
+        btn.innerHTML = '<svg viewBox="0 0 15 16" width="16" height="17" fill="currentColor" style="vertical-align:-2px; margin-right:4px;" aria-hidden="true"><path d="M 8.5,1.2 C 9.5,0.2 10.6,0 10.6,0 C 10.6,0 10.4,1.1 9.4,2.1 C 8.4,3.1 7.4,3 7.4,3 C 7.4,3 7.5,2.1 8.5,1.2 Z"/><path d="M 11.2,6.5 C 11.2,4.8 12.6,3.9 12.7,3.8 C 11.9,2.6 10.6,2.4 10.1,2.4 C 8.9,2.2 7.7,3.1 7.1,3.1 C 6.5,3.1 5.5,2.3 4.5,2.4 C 3.2,2.4 2.0,3.2 1.3,4.4 C -0.1,6.8 0.9,10.3 2.3,12.3 C 3.0,13.3 3.8,14.4 4.9,14.4 C 5.9,14.3 6.3,13.7 7.6,13.7 C 8.8,13.7 9.2,14.4 10.3,14.3 C 11.4,14.3 12.1,13.3 12.8,12.3 C 13.6,11.2 13.9,10.1 14.0,10.0 C 13.9,10.0 11.2,9.0 11.2,6.5 Z"/></svg> Scanning Face...';
     }
     if (scanLine) scanLine.style.display = 'block';
     if (svg) svg.style.display = 'block';

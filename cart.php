@@ -780,9 +780,7 @@ $grand_total = $subtotal + $delivery_fee;
     <div class="sim-sheet-header" style="padding:10px 22px 14px 22px; border-bottom:1px solid #2c2c2e;">
       <div class="sheet-grabber" style="background:#3a3a3c; margin:0 auto 10px auto;"></div>
       <div style="display:flex; align-items:center; justify-content:space-between;">
-        <div style="display:flex; align-items:center; gap:6px; font-size:20px; font-weight:700;">
-          <span style="font-size:22px;"></span><span>Pay</span>
-        </div>
+<div style="display:inline-flex; align-items:center; gap:2px; font-size:20px; font-weight:700;"><svg viewBox="0 0 15 16" width="18" height="19" fill="currentColor" style="vertical-align:-1px; margin-right:2px;" aria-hidden="true"><path d="M 8.5,1.2 C 9.5,0.2 10.6,0 10.6,0 C 10.6,0 10.4,1.1 9.4,2.1 C 8.4,3.1 7.4,3 7.4,3 C 7.4,3 7.5,2.1 8.5,1.2 Z"/><path d="M 11.2,6.5 C 11.2,4.8 12.6,3.9 12.7,3.8 C 11.9,2.6 10.6,2.4 10.1,2.4 C 8.9,2.2 7.7,3.1 7.1,3.1 C 6.5,3.1 5.5,2.3 4.5,2.4 C 3.2,2.4 2.0,3.2 1.3,4.4 C -0.1,6.8 0.9,10.3 2.3,12.3 C 3.0,13.3 3.8,14.4 4.9,14.4 C 5.9,14.3 6.3,13.7 7.6,13.7 C 8.8,13.7 9.2,14.4 10.3,14.3 C 11.4,14.3 12.1,13.3 12.8,12.3 C 13.6,11.2 13.9,10.1 14.0,10.0 C 13.9,10.0 11.2,9.0 11.2,6.5 Z"/></svg><span>Pay</span></div>
         <button type="button" onclick="closeModal('applePayModal')" style="background:transparent; border:none; color:#0a84ff; font-size:15px; font-weight:600; cursor:pointer;">Cancel</button>
       </div>
     </div>
@@ -829,7 +827,7 @@ $grand_total = $subtotal + $delivery_fee;
       </div>
 
       <button type="button" class="btn-submit-order checkout-btn" id="btnApplePayTrigger" onclick="startApplePayScan()" style="background:#333336; color:#8e8e93; margin-top:16px;" disabled>
-        <span style="font-size:18px;"></span> Scanning Face...
+        <svg viewBox="0 0 15 16" width="16" height="17" fill="currentColor" style="vertical-align:-2px; margin-right:4px;" aria-hidden="true"><path d="M 8.5,1.2 C 9.5,0.2 10.6,0 10.6,0 C 10.6,0 10.4,1.1 9.4,2.1 C 8.4,3.1 7.4,3 7.4,3 C 7.4,3 7.5,2.1 8.5,1.2 Z"/><path d="M 11.2,6.5 C 11.2,4.8 12.6,3.9 12.7,3.8 C 11.9,2.6 10.6,2.4 10.1,2.4 C 8.9,2.2 7.7,3.1 7.1,3.1 C 6.5,3.1 5.5,2.3 4.5,2.4 C 3.2,2.4 2.0,3.2 1.3,4.4 C -0.1,6.8 0.9,10.3 2.3,12.3 C 3.0,13.3 3.8,14.4 4.9,14.4 C 5.9,14.3 6.3,13.7 7.6,13.7 C 8.8,13.7 9.2,14.4 10.3,14.3 C 11.4,14.3 12.1,13.3 12.8,12.3 C 13.6,11.2 13.9,10.1 14.0,10.0 C 13.9,10.0 11.2,9.0 11.2,6.5 Z"/></svg> Scanning Face...
       </button>
     </div>
   </div>
@@ -1035,8 +1033,9 @@ function syncCartFromLocalStorage() {
                         '</div>';
                 }
                 currentSubtotal = calcSub;
+                currentDeliveryFee = currentSubtotal > 0 ? 30.00 : 0.00;
                 currentGrandTotal = currentSubtotal + currentDeliveryFee;
-                grandTotalFormatted = '₱' + Number(currentGrandTotal).toLocaleString('en-PH', {minimumFractionDigits: 2});
+                grandTotalFormatted = '₱' + Number(currentGrandTotal).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 
                 var itemsContainer = document.getElementById('orderSummaryItems');
                 if (itemsContainer && html) itemsContainer.innerHTML = html;
@@ -1046,7 +1045,9 @@ function syncCartFromLocalStorage() {
                 if (headCount) headCount.textContent = parsed.length + ' Item(s)';
                 
                 var subEl = document.getElementById('displaySubtotal');
-                if (subEl) subEl.textContent = '₱' + Number(currentSubtotal).toLocaleString('en-PH', {minimumFractionDigits: 2});
+                if (subEl) subEl.textContent = '₱' + Number(currentSubtotal).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                var feeEl = document.getElementById('displayFee');
+                if (feeEl) feeEl.textContent = '₱' + Number(currentDeliveryFee).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 var totEl = document.getElementById('displayTotal');
                 if (totEl) totEl.textContent = grandTotalFormatted;
                 
@@ -1058,6 +1059,8 @@ function syncCartFromLocalStorage() {
                 if (totIn2) totIn2.value = currentGrandTotal;
                 var subIn = document.getElementById('subtotal');
                 if (subIn) subIn.value = currentSubtotal;
+                var feeIn = document.getElementById('delivery_fee');
+                if (feeIn) feeIn.value = currentDeliveryFee;
             }
         }
         
@@ -1188,7 +1191,7 @@ function selectMethod(method) {
     } else if (method === 'apple_pay') {
         btn.style.setProperty('background-color', '#000000', 'important');
         btn.style.setProperty('color', '#ffffff', 'important');
-        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + grandTotalFormatted;
+        btn.innerHTML = '<svg viewBox="0 0 15 16" width="16" height="17" fill="currentColor" style="vertical-align:-2px; margin-right:4px;" aria-hidden="true"><path d="M 8.5,1.2 C 9.5,0.2 10.6,0 10.6,0 C 10.6,0 10.4,1.1 9.4,2.1 C 8.4,3.1 7.4,3 7.4,3 C 7.4,3 7.5,2.1 8.5,1.2 Z"/><path d="M 11.2,6.5 C 11.2,4.8 12.6,3.9 12.7,3.8 C 11.9,2.6 10.6,2.4 10.1,2.4 C 8.9,2.2 7.7,3.1 7.1,3.1 C 6.5,3.1 5.5,2.3 4.5,2.4 C 3.2,2.4 2.0,3.2 1.3,4.4 C -0.1,6.8 0.9,10.3 2.3,12.3 C 3.0,13.3 3.8,14.4 4.9,14.4 C 5.9,14.3 6.3,13.7 7.6,13.7 C 8.8,13.7 9.2,14.4 10.3,14.3 C 11.4,14.3 12.1,13.3 12.8,12.3 C 13.6,11.2 13.9,10.1 14.0,10.0 C 13.9,10.0 11.2,9.0 11.2,6.5 Z"/></svg>' + ' Pay • ' + grandTotalFormatted;
     }
 
     updateWalletModalTheme(method);
@@ -1330,7 +1333,7 @@ function finalizeOrder(method, address, coords) {
         }
     }
 
-    var totalAmt = window.currentGrandTotal || 200.00;
+    var totalAmt = (typeof currentGrandTotal === 'number' && currentGrandTotal > 0) ? currentGrandTotal : (currentSubtotal + currentDeliveryFee);
     fd.append('total_amount', totalAmt);
     fd.append('total', totalAmt);
 
@@ -1381,7 +1384,7 @@ function startApplePayScan() {
         btn.disabled = true;
         btn.style.background = '#333336';
         btn.style.color = '#8e8e93';
-        btn.innerHTML = '<span style="font-size:18px;"></span> Scanning Face...';
+        btn.innerHTML = '<svg viewBox="0 0 15 16" width="16" height="17" fill="currentColor" style="vertical-align:-2px; margin-right:4px;" aria-hidden="true"><path d="M 8.5,1.2 C 9.5,0.2 10.6,0 10.6,0 C 10.6,0 10.4,1.1 9.4,2.1 C 8.4,3.1 7.4,3 7.4,3 C 7.4,3 7.5,2.1 8.5,1.2 Z"/><path d="M 11.2,6.5 C 11.2,4.8 12.6,3.9 12.7,3.8 C 11.9,2.6 10.6,2.4 10.1,2.4 C 8.9,2.2 7.7,3.1 7.1,3.1 C 6.5,3.1 5.5,2.3 4.5,2.4 C 3.2,2.4 2.0,3.2 1.3,4.4 C -0.1,6.8 0.9,10.3 2.3,12.3 C 3.0,13.3 3.8,14.4 4.9,14.4 C 5.9,14.3 6.3,13.7 7.6,13.7 C 8.8,13.7 9.2,14.4 10.3,14.3 C 11.4,14.3 12.1,13.3 12.8,12.3 C 13.6,11.2 13.9,10.1 14.0,10.0 C 13.9,10.0 11.2,9.0 11.2,6.5 Z"/></svg> Scanning Face...';
     }
     if (scanLine) scanLine.style.display = 'block';
     if (svg) svg.style.display = 'block';

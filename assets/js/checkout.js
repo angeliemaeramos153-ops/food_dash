@@ -5,7 +5,7 @@
 
 var activePaymentMethod = 'gcash';
 var currentPayment = 'gcash';
-var totalFormatted = window.grandTotalFormatted || '₱200.00';
+var totalFormatted = window.grandTotalFormatted || (window.currentGrandTotal ? '₱' + Number(window.currentGrandTotal).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '₱0.00');
 
 function setPayment(method) {
     activePaymentMethod = method;
@@ -67,7 +67,7 @@ function setPayment(method) {
     } else if (method === 'apple_pay') {
         btn.style.setProperty('background-color', '#000000', 'important');
         btn.style.setProperty('color', '#ffffff', 'important');
-        btn.innerHTML = '<span style="font-size:18px; margin-right:6px;"></span> Pay • ' + formattedTotal;
+        btn.innerHTML = '<svg viewBox="0 0 15 16" width="16" height="17" fill="currentColor" style="vertical-align:-2px; margin-right:4px;" aria-hidden="true"><path d="M 8.5,1.2 C 9.5,0.2 10.6,0 10.6,0 C 10.6,0 10.4,1.1 9.4,2.1 C 8.4,3.1 7.4,3 7.4,3 C 7.4,3 7.5,2.1 8.5,1.2 Z"/><path d="M 11.2,6.5 C 11.2,4.8 12.6,3.9 12.7,3.8 C 11.9,2.6 10.6,2.4 10.1,2.4 C 8.9,2.2 7.7,3.1 7.1,3.1 C 6.5,3.1 5.5,2.3 4.5,2.4 C 3.2,2.4 2.0,3.2 1.3,4.4 C -0.1,6.8 0.9,10.3 2.3,12.3 C 3.0,13.3 3.8,14.4 4.9,14.4 C 5.9,14.3 6.3,13.7 7.6,13.7 C 8.8,13.7 9.2,14.4 10.3,14.3 C 11.4,14.3 12.1,13.3 12.8,12.3 C 13.6,11.2 13.9,10.1 14.0,10.0 C 13.9,10.0 11.2,9.0 11.2,6.5 Z"/></svg>' + ' Pay • ' + formattedTotal;
     }
 
     updateWalletModalTheme(method);
@@ -203,7 +203,7 @@ function finalizeOrder(method, address, coords) {
         }
     }
 
-    var totalAmt = window.currentGrandTotal || 200.00;
+    var totalAmt = (typeof window.currentGrandTotal === 'number' && window.currentGrandTotal > 0) ? window.currentGrandTotal : 0;
     fd.append('total_amount', totalAmt);
     fd.append('total', totalAmt);
 
@@ -250,7 +250,7 @@ function startApplePayScan() {
         btn.disabled = true;
         btn.style.background = '#333336';
         btn.style.color = '#8e8e93';
-        btn.innerHTML = '<span style="font-size:18px;"></span> Scanning Face...';
+        btn.innerHTML = '<svg viewBox="0 0 15 16" width="16" height="17" fill="currentColor" style="vertical-align:-2px; margin-right:4px;" aria-hidden="true"><path d="M 8.5,1.2 C 9.5,0.2 10.6,0 10.6,0 C 10.6,0 10.4,1.1 9.4,2.1 C 8.4,3.1 7.4,3 7.4,3 C 7.4,3 7.5,2.1 8.5,1.2 Z"/><path d="M 11.2,6.5 C 11.2,4.8 12.6,3.9 12.7,3.8 C 11.9,2.6 10.6,2.4 10.1,2.4 C 8.9,2.2 7.7,3.1 7.1,3.1 C 6.5,3.1 5.5,2.3 4.5,2.4 C 3.2,2.4 2.0,3.2 1.3,4.4 C -0.1,6.8 0.9,10.3 2.3,12.3 C 3.0,13.3 3.8,14.4 4.9,14.4 C 5.9,14.3 6.3,13.7 7.6,13.7 C 8.8,13.7 9.2,14.4 10.3,14.3 C 11.4,14.3 12.1,13.3 12.8,12.3 C 13.6,11.2 13.9,10.1 14.0,10.0 C 13.9,10.0 11.2,9.0 11.2,6.5 Z"/></svg> Scanning Face...';
     }
     if (scanLine) scanLine.style.display = 'block';
     if (svg) svg.style.display = 'block';
