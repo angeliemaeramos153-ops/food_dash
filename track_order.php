@@ -1290,7 +1290,7 @@ async function pollRiderLocation() {
       currentTrackOsrmPath = [];
 
       // Remove premature flags on initial arrival detection so they never block modal execution
-      if (!window._hasTriggeredArrivalModal) {
+      if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem('fd_arrival_ack_' + orderId);
           localStorage.removeItem('fd_arrival_acknowledged_all');
@@ -1307,7 +1307,7 @@ async function pollRiderLocation() {
         const isAck = Boolean(data.arrival_acknowledged) || Boolean(ord.arrival_acknowledged)
           || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
           || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
-        if (isAck) {
+        if (isAck && window._hasTriggeredArrivalModal) {
           if (window.FoodDashCall) {
             FoodDashCall.stopArrivalAlarm();
             FoodDashCall.stopAllTones();
@@ -1318,8 +1318,12 @@ async function pollRiderLocation() {
         }
       }
     } else {
-      const wasArrived = Boolean(window._wasTrackArrived || hasShownArrivedAlert || window._hasTriggeredArrivalModal);
+      const wasArrived = Boolean(window._wasTrackArrived || hasShownArrivedAlert || window._hasTriggeredArrivalModal || window._arrivalModalTimer);
       if (wasArrived) {
+        if (window._arrivalModalTimer) {
+          clearTimeout(window._arrivalModalTimer);
+          window._arrivalModalTimer = null;
+        }
         window._wasTrackArrived = false;
         window._hasTriggeredArrivalModal = false;
         // 1. Rider reset to store or changed status away from arrived (e.g. back to on_delivery)
@@ -1837,6 +1841,13 @@ function showTrackNotificationBanner(title, text, durationMs = 6500, onClick = n
   banner.onclick = (e) => {
     if (e.target.closest('.btn-banner-close')) {
       dismissLiveRiderBanner(true);
+      if (bTitle.includes('ARRIVED')) {
+        if (window._arrivalModalTimer) {
+          clearTimeout(window._arrivalModalTimer);
+          window._arrivalModalTimer = null;
+        }
+        triggerArrivalModal(window._lastArrivalPayload || {});
+      }
       return;
     }
     if (typeof onClick === 'function') {
@@ -1844,13 +1855,11 @@ function showTrackNotificationBanner(title, text, durationMs = 6500, onClick = n
     } else if (bTitle.includes('MESSAGE') || bTitle.includes('CHAT')) {
       openTrackChat();
     } else if (bTitle.includes('ARRIVED')) {
-      const modal = document.getElementById('riderArrivedModal');
-      if (modal) {
-        modal.classList.add('show', 'active');
-        modal.style.setProperty('display', 'flex', 'important');
-        modal.style.setProperty('visibility', 'visible', 'important');
-        modal.style.setProperty('pointer-events', 'auto', 'important');
+      if (window._arrivalModalTimer) {
+        clearTimeout(window._arrivalModalTimer);
+        window._arrivalModalTimer = null;
       }
+      triggerArrivalModal(window._lastArrivalPayload || {});
     }
   };
 
@@ -2051,6 +2060,10 @@ window.stopArrivalAlertSound = stopArrivalAlertSound;
 window.stopArrivalAlarm = stopArrivalAlertSound;
 
 function closeRiderArrivedModal() {
+  if (window._arrivalModalTimer) {
+    clearTimeout(window._arrivalModalTimer);
+    window._arrivalModalTimer = null;
+  }
   const oId = (typeof orderId !== 'undefined' ? orderId : 0)
     || (window.FoodDashCall && typeof window.FoodDashCall.getActiveOrderId === 'function' ? window.FoodDashCall.getActiveOrderId() : 0);
 
@@ -2178,6 +2191,11 @@ function playArrivalAlertSound() {
 window.playArrivalAlertSound = playArrivalAlertSound;
 
 function triggerArrivalModal(data = {}) {
+  if (window._arrivalModalTimer) {
+    clearTimeout(window._arrivalModalTimer);
+    window._arrivalModalTimer = null;
+  }
+
   const modal = document.getElementById('riderArrivedModal');
   if (modal) {
     modal.classList.add('show', 'active');
@@ -2188,8 +2206,10 @@ function triggerArrivalModal(data = {}) {
 
   const rName = (data && data.rider_name) || (data && data.order && data.order.rider_name) || document.getElementById('riderNameDisplay')?.textContent?.trim() || 'Alex';
 
-  if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
-    FoodDashCall.triggerArrivalAlarm(orderId, rName);
+  if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalModalOnly === 'function') {
+    FoodDashCall.triggerArrivalModalOnly(orderId, rName);
+  } else if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
+    FoodDashCall.triggerArrivalAlarm(orderId, rName, true);
   } else if (typeof playSynthArrivalAlarm === 'function') {
     playSynthArrivalAlarm();
   } else if (typeof playArrivalAlertSound === 'function') {
@@ -2246,7 +2266,7 @@ function handleRiderArrivedEvent(data = {}) {
 
   // 2. Remove Premature Flags: Ensure localStorage arrival acknowledgment flags do not prevent
   // the modal function from executing on initial arrival detection.
-  if (!window._hasTriggeredArrivalModal) {
+  if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('fd_arrival_ack_' + orderId);
       localStorage.removeItem('fd_arrival_acknowledged_all');
@@ -2258,7 +2278,7 @@ function handleRiderArrivedEvent(data = {}) {
     if (window.FoodDashCall) {
       window.FoodDashCall.arrivalAcknowledged = false;
     }
-  } else {
+  } else if (window._hasTriggeredArrivalModal) {
     // If already triggered in this arrival cycle, respect customer's actual acknowledgment
     const isAck = Boolean(data.arrival_acknowledged) 
       || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
@@ -2275,19 +2295,36 @@ function handleRiderArrivedEvent(data = {}) {
 
   const rName = (data && data.rider_name) || (data && data.order && data.order.rider_name) || document.getElementById('riderNameDisplay')?.textContent?.trim() || 'Alex';
 
-  // 1. Sequential Execution: Toast notification banner renders first,
-  // and its callback or immediate sequence explicitly triggers triggerArrivalModal() right after
-  showTrackNotificationBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside to receive your order.`, 7000);
+  window._lastArrivalPayload = data;
 
-  const triggerModalSequence = () => {
+  // 1. Staggered Arrival Flow: Trigger ONLY top notification banner first
+  showTrackNotificationBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside to receive your order.`, 7000, () => {
+    // If user clicks the banner, trigger the interactive arrival modal immediately
+    if (window._arrivalModalTimer) {
+      clearTimeout(window._arrivalModalTimer);
+      window._arrivalModalTimer = null;
+    }
     triggerArrivalModal(data);
-  };
+  });
 
-  // Immediate sequence callback ensures the banner renders first, then explicitly triggers triggerArrivalModal()
-  if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(triggerModalSequence);
-  } else {
-    setTimeout(triggerModalSequence, 0);
+  // 2. Delayed Modal Trigger: Let banner stay visible for ~3 seconds, then trigger full interactive modal
+  if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
+    window._arrivalModalTimer = setTimeout(() => {
+      window._arrivalModalTimer = null;
+      triggerArrivalModal(data);
+    }, 3000);
+  } else if (window._hasTriggeredArrivalModal) {
+    // 3. Persistence Fix: Maintain modal stably on screen during 2s polls
+    const modal = document.getElementById('riderArrivedModal');
+    const isAck = Boolean(data.arrival_acknowledged) 
+      || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')
+      || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + orderId) === '1');
+    if (modal && !isAck) {
+      modal.classList.add('show', 'active');
+      modal.style.setProperty('display', 'flex', 'important');
+      modal.style.setProperty('visibility', 'visible', 'important');
+      modal.style.setProperty('pointer-events', 'auto', 'important');
+    }
   }
 }
 window.handleRiderArrivedEvent = handleRiderArrivedEvent;
@@ -2337,7 +2374,7 @@ async function pollOrderCommunication() {
 
     if (isArrivedNow) {
       window._wasTrackArrived = true;
-      if (!window._hasTriggeredArrivalModal) {
+      if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem('fd_arrival_ack_' + orderId);
           localStorage.removeItem('fd_arrival_acknowledged_all');
@@ -2351,14 +2388,20 @@ async function pollOrderCommunication() {
         }
         handleRiderArrivedEvent(data);
       } else if (data.arrival_acknowledged || (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + orderId) === '1')) {
-        if (window.FoodDashCall) FoodDashCall.stopAllTones();
-        stopArrivalAlertSound();
+        if (window._hasTriggeredArrivalModal) {
+          if (window.FoodDashCall) FoodDashCall.stopAllTones();
+          stopArrivalAlertSound();
+        }
       } else {
         handleRiderArrivedEvent(data);
       }
     } else {
-      const wasCommArrived = Boolean(window._wasTrackArrived || hasShownArrivedAlert || window._hasTriggeredArrivalModal);
+      const wasCommArrived = Boolean(window._wasTrackArrived || hasShownArrivedAlert || window._hasTriggeredArrivalModal || window._arrivalModalTimer);
       if (wasCommArrived) {
+        if (window._arrivalModalTimer) {
+          clearTimeout(window._arrivalModalTimer);
+          window._arrivalModalTimer = null;
+        }
         window._wasTrackArrived = false;
         window._hasTriggeredArrivalModal = false;
         // Clear lingering arrival flags if status moved away from arrived

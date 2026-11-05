@@ -6060,13 +6060,13 @@ async function pollCustomerOrdersLive() {
         (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1')
       );
 
-      // Sequential Arrival Notification & Modal Chain
+      // Staggered Arrival Flow & Delayed Modal Trigger
       if (isArrived && !window.isLoggingOut && 
           !(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') &&
           !(typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
 
         // Remove premature flags on initial arrival detection so they never block modal execution
-        if (!window._hasTriggeredArrivalModal) {
+        if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
           try {
             localStorage.removeItem('fd_arrival_ack_' + oId);
             sessionStorage.removeItem('fd_arrival_ack_' + oId);
@@ -6076,7 +6076,7 @@ async function pollCustomerOrdersLive() {
           if (window.FoodDashCall) {
             window.FoodDashCall.arrivalAcknowledged = false;
           }
-        } else if (isArrivalAck) {
+        } else if (isArrivalAck && window._hasTriggeredArrivalModal) {
           if (typeof stopArrivalAlertSound === 'function') stopArrivalAlertSound();
           _customerLastOrderStates[oId] = raw_status;
           return;
@@ -6085,23 +6085,41 @@ async function pollCustomerOrdersLive() {
         sessionStorage.setItem(arrivedKey, '1');
         window.displayedNotificationIds.add('arrived_' + oId);
 
-        // Step 1: Lightweight notification banner appears first
         const rName = ord.rider_name || 'Rider';
         const cleanRef = '#' + String(ord.order_ref || ('FD-' + oId)).replace(/^#+/, '');
-        showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with order ${cleanRef}! Please meet outside.`, null, 7000);
+        window._lastArrivalPayload = { order_id: oId, rider_name: rName, order: ord };
 
-        // Step 2: Immediately chain directly into triggering the arrival alert modal and playing singleton music-box arpeggio without delay
-        const triggerSequence = () => {
+        // 1. Staggered Arrival Flow: Trigger ONLY top notification banner first
+        showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with order ${cleanRef}! Please meet outside.`, () => {
+          if (window._arrivalModalTimer) {
+            clearTimeout(window._arrivalModalTimer);
+            window._arrivalModalTimer = null;
+          }
           triggerArrivalModal({ order_id: oId, rider_name: rName, order: ord });
-        };
-        if (typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(triggerSequence);
-        } else {
-          setTimeout(triggerSequence, 0);
+        }, 7000);
+
+        // 2. Delayed Modal Trigger: Let banner stay visible for ~3 seconds, then trigger interactive modal
+        if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
+          window._arrivalModalTimer = setTimeout(() => {
+            window._arrivalModalTimer = null;
+            triggerArrivalModal({ order_id: oId, rider_name: rName, order: ord });
+          }, 3000);
+        } else if (window._hasTriggeredArrivalModal) {
+          // 3. Persistence Fix: Maintain modal stably on screen during 2s polls
+          if (modal && !isArrivalAck) {
+            modal.classList.add('show', 'active');
+            modal.style.setProperty('display', 'flex', 'important');
+            modal.style.setProperty('visibility', 'visible', 'important');
+            modal.style.setProperty('pointer-events', 'auto', 'important');
+          }
         }
 
         if (typeof loadNotifications === 'function') loadNotifications();
       } else if (wasArrived && !isArrived) {
+        if (window._arrivalModalTimer) {
+          clearTimeout(window._arrivalModalTimer);
+          window._arrivalModalTimer = null;
+        }
         window._hasTriggeredArrivalModal = false;
         // Rider reset to store or changed status away from arrived (e.g. back to on_delivery)
         // Clear lingering arrival acknowledgment flags
@@ -7579,6 +7597,10 @@ async function fetchCustomerLiveTracking(orderId, isInitial) {
     const modal = document.getElementById('riderArrivedModal');
 
 function triggerArrivalModal(data = {}) {
+  if (window._arrivalModalTimer) {
+    clearTimeout(window._arrivalModalTimer);
+    window._arrivalModalTimer = null;
+  }
   const oId = (data && data.order_id) || activeCustomerTrackingOrderId || (typeof orders !== 'undefined' && orders[0] ? (orders[0].order_id || orders[0].id) : 0);
   const rName = (data && data.rider_name) || (data && data.order && data.order.rider_name) || currentTrackingRiderName || 'Rider';
   const modal = document.getElementById('riderArrivedModal');
@@ -7588,8 +7610,10 @@ function triggerArrivalModal(data = {}) {
     modal.style.setProperty('visibility', 'visible', 'important');
     modal.style.setProperty('pointer-events', 'auto', 'important');
   }
-  if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
-    FoodDashCall.triggerArrivalAlarm(oId, rName);
+  if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalModalOnly === 'function') {
+    FoodDashCall.triggerArrivalModalOnly(oId, rName);
+  } else if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
+    FoodDashCall.triggerArrivalAlarm(oId, rName, true);
   } else if (typeof playSynthArrivalAlarm === 'function') {
     playSynthArrivalAlarm();
   } else if (typeof playArrivalAlertSound === 'function') {
@@ -7602,10 +7626,10 @@ function triggerArrivalModal(data = {}) {
 }
 window.triggerArrivalModal = triggerArrivalModal;
 
-    // Sequential Arrival Notification & Modal Chain
+    // Staggered Arrival Flow & Delayed Modal Trigger
     if (isLiveArrived) {
       // Remove premature flags on initial arrival detection so they never block modal execution
-      if (!window._hasTriggeredArrivalModal) {
+      if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem('fd_arrival_ack_' + orderId);
           localStorage.removeItem('fd_arrival_acknowledged_all');
@@ -7617,7 +7641,7 @@ window.triggerArrivalModal = triggerArrivalModal;
         if (window.FoodDashCall) {
           window.FoodDashCall.arrivalAcknowledged = false;
         }
-      } else if (isAck) {
+      } else if (isAck && window._hasTriggeredArrivalModal) {
         if (typeof stopArrivalAlertSound === 'function') stopArrivalAlertSound();
         return;
       }
@@ -7625,20 +7649,38 @@ window.triggerArrivalModal = triggerArrivalModal;
       sessionStorage.setItem(arrivedAlertKey, '1');
       window.displayedNotificationIds.add('arrived_' + orderId);
 
-      // Step 1: Lightweight notification banner appears first
       const rName = currentTrackingRiderName || ord.rider_name || 'Rider';
-      showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside.`, null, 7000);
+      window._lastArrivalPayload = { order_id: orderId, rider_name: rName, order: ord };
 
-      // Step 2: Immediate sequence explicitly triggers triggerArrivalModal() right after
-      const triggerSequence = () => {
+      // 1. Staggered Arrival Flow: Trigger ONLY top notification banner first
+      showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside.`, () => {
+        if (window._arrivalModalTimer) {
+          clearTimeout(window._arrivalModalTimer);
+          window._arrivalModalTimer = null;
+        }
         triggerArrivalModal({ order_id: orderId, rider_name: rName, order: ord });
-      };
-      if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(triggerSequence);
-      } else {
-        setTimeout(triggerSequence, 0);
+      }, 7000);
+
+      // 2. Delayed Modal Trigger: Let banner stay visible for ~3 seconds, then trigger interactive modal
+      if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
+        window._arrivalModalTimer = setTimeout(() => {
+          window._arrivalModalTimer = null;
+          triggerArrivalModal({ order_id: orderId, rider_name: rName, order: ord });
+        }, 3000);
+      } else if (window._hasTriggeredArrivalModal) {
+        // 3. Persistence Fix: Maintain modal stably on screen during 2s polls
+        if (modal && !isAck) {
+          modal.classList.add('show', 'active');
+          modal.style.setProperty('display', 'flex', 'important');
+          modal.style.setProperty('visibility', 'visible', 'important');
+          modal.style.setProperty('pointer-events', 'auto', 'important');
+        }
       }
     } else if (wasTrackArrived && !isLiveArrived) {
+      if (window._arrivalModalTimer) {
+        clearTimeout(window._arrivalModalTimer);
+        window._arrivalModalTimer = null;
+      }
       window._hasTriggeredArrivalModal = false;
       // Rider reset to store or changed status away from arrived
       try {
@@ -8370,12 +8412,25 @@ function showCustomerFloatingBanner(title, text, onClick = null, durationMs = 65
     if (e.target.closest('.rct-close')) {
       window._bannerActiveUntil = 0;
       dismissLiveRiderBanner(true);
+      if (bannerTitle.includes('ARRIVED')) {
+        if (window._arrivalModalTimer) {
+          clearTimeout(window._arrivalModalTimer);
+          window._arrivalModalTimer = null;
+        }
+        triggerArrivalModal(window._lastArrivalPayload || {});
+      }
       return;
     }
     window._bannerActiveUntil = 0;
     if (typeof onClick === 'function') onClick();
     else if (bannerTitle.includes('MESSAGE') || bannerTitle.includes('CHAT')) openChatFromBanner();
-    else if (bannerTitle.includes('ORDER') || bannerTitle.includes('DELIVERY') || bannerTitle.includes('ARRIVED')) {
+    else if (bannerTitle.includes('ARRIVED')) {
+      if (window._arrivalModalTimer) {
+        clearTimeout(window._arrivalModalTimer);
+        window._arrivalModalTimer = null;
+      }
+      triggerArrivalModal(window._lastArrivalPayload || {});
+    } else if (bannerTitle.includes('ORDER') || bannerTitle.includes('DELIVERY')) {
       if (activeCustomerTrackingOrderId) openCustomerTrackingModal(activeCustomerTrackingOrderId);
       else showScreen('orders');
     }
@@ -8753,6 +8808,10 @@ function openChatFromBanner() {
 }
 
 function closeRiderArrivedModal() {
+  if (window._arrivalModalTimer) {
+    clearTimeout(window._arrivalModalTimer);
+    window._arrivalModalTimer = null;
+  }
   const oId = activeCustomerTrackingOrderId 
     || (window.FoodDashCall && typeof window.FoodDashCall.getActiveOrderId === 'function' ? window.FoodDashCall.getActiveOrderId() : 0);
 
@@ -8965,7 +9024,7 @@ function handleRiderArrivedEvent(data) {
   const isAck = Boolean(data.arrival_acknowledged) 
     || (oId && typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + oId) === '1')
     || (oId && typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1');
-  if (isAck) {
+  if (isAck && window._hasTriggeredArrivalModal) {
     if (window.FoodDashCall) {
       FoodDashCall.stopArrivalAlarm();
       FoodDashCall.stopAllTones();
@@ -8974,22 +9033,33 @@ function handleRiderArrivedEvent(data) {
     return;
   }
 
-  const modal = document.getElementById('riderArrivedModal');
-  // Instant Modal Pop-up on Arrival: bypass lagging checks and immediately invoke modal & sound
-  if (modal) {
-    modal.classList.add('show', 'active');
-    modal.style.setProperty('display', 'flex', 'important');
-    modal.style.setProperty('visibility', 'visible', 'important');
-    modal.style.setProperty('pointer-events', 'auto', 'important');
-  }
   const rName = (data.rider_name || currentTrackingRiderName || 'Rider');
-  // Persistent arrival notification banner alongside center arrival modal
-  showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside.`, null, 7000);
+  window._lastArrivalPayload = { order_id: oId, rider_name: rName, order: data.order || data };
 
-  if (window.FoodDashCall && typeof FoodDashCall.triggerArrivalAlarm === 'function') {
-    FoodDashCall.triggerArrivalAlarm(oId, rName);
-  } else if (typeof playArrivalAlertSound === 'function') {
-    playArrivalAlertSound();
+  // 1. Staggered Arrival Flow: Trigger ONLY top notification banner first
+  showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside.`, () => {
+    if (window._arrivalModalTimer) {
+      clearTimeout(window._arrivalModalTimer);
+      window._arrivalModalTimer = null;
+    }
+    triggerArrivalModal({ order_id: oId, rider_name: rName, order: data.order || data });
+  }, 7000);
+
+  // 2. Delayed Modal Trigger: Let banner stay visible for ~3 seconds, then trigger interactive modal
+  if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
+    window._arrivalModalTimer = setTimeout(() => {
+      window._arrivalModalTimer = null;
+      triggerArrivalModal({ order_id: oId, rider_name: rName, order: data.order || data });
+    }, 3000);
+  } else if (window._hasTriggeredArrivalModal) {
+    // 3. Persistence Fix: Maintain modal stably on screen during 2s polls
+    const modal = document.getElementById('riderArrivedModal');
+    if (modal && !isAck) {
+      modal.classList.add('show', 'active');
+      modal.style.setProperty('display', 'flex', 'important');
+      modal.style.setProperty('visibility', 'visible', 'important');
+      modal.style.setProperty('pointer-events', 'auto', 'important');
+    }
   }
 
   updateOrderStatusToArrived(oId);

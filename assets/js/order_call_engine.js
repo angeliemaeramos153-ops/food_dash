@@ -31,6 +31,7 @@
   // Arrival Alarm State
   let arrivalAcknowledged = false;
   let arrivalAlarmActive = false;
+  let arrivalModalTimer = null;
 
   // =============================================================
   // STRICT SINGLETON AUDIO ENGINE
@@ -493,6 +494,14 @@
     const oId = orderId || activeOrderId || (typeof window !== 'undefined' && (window.activeCustomerTrackingOrderId || window.orderId)) || 0;
     arrivalAcknowledged = false;
     arrivalAlarmActive = false;
+    if (arrivalModalTimer) {
+      clearTimeout(arrivalModalTimer);
+      arrivalModalTimer = null;
+    }
+    if (typeof window !== 'undefined' && window._arrivalModalTimer) {
+      clearTimeout(window._arrivalModalTimer);
+      window._arrivalModalTimer = null;
+    }
     stopSynthLoop();
     if (arrivalAudio) {
       try {
@@ -1272,67 +1281,17 @@
     });
   }
 
-  function triggerArrivalAlarm(orderId, riderName) {
+  function triggerArrivalNotification(orderId, riderName) {
     if (window.isLoggingOut || 
         (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
         (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
       return;
     }
     const oId = orderId || activeOrderId;
-    if (oId) {
-      if (
-        (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + oId) === '1') ||
-        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1')
-      ) {
-        // Ensure premature localStorage arrival acknowledgment flags do not prevent modal execution on initial arrival
-        if (typeof window !== 'undefined' && !window._hasTriggeredArrivalModal) {
-          try {
-            localStorage.removeItem('fd_arrival_ack_' + oId);
-            sessionStorage.removeItem('fd_arrival_ack_' + oId);
-          } catch (e) {}
-          arrivalAcknowledged = false;
-        } else {
-          arrivalAcknowledged = true;
-          return;
-        }
-      }
-    } else {
-      if (
-        (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_acknowledged_all') === '1') ||
-        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_acknowledged_all') === '1')
-      ) {
-        if (typeof window !== 'undefined' && !window._hasTriggeredArrivalModal) {
-          try {
-            localStorage.removeItem('fd_arrival_acknowledged_all');
-            sessionStorage.removeItem('fd_arrival_acknowledged_all');
-          } catch (e) {}
-          arrivalAcknowledged = false;
-        } else {
-          arrivalAcknowledged = true;
-          return;
-        }
-      }
-    }
-    if (arrivalAcknowledged && activeOrderId === oId) return;
-    if (oId && oId !== activeOrderId) {
-      arrivalAcknowledged = false;
-    }
-    initAudioContext();
-    activeOrderId = oId;
-
-    const modal = document.getElementById('riderArrivedModal');
-    const msgEl = document.getElementById('riderArrivedModalMsg');
     const rName = riderName || 'Rider';
     const rFirst = rName.split(' ')[0];
 
-    if (msgEl) {
-      msgEl.innerHTML = `📍 <b>Your rider has arrived outside with your order!</b><br>Please select a quick response so ${rFirst} knows you are coming:`;
-    }
-
-    // Ensure buttons and close controls are injected
-    injectArrivalButtons(orderId);
-
-    // Sequential Arrival Notification & Modal Chain: Lightweight notification banner appears first
+    // 1. Staggered Arrival Flow: Trigger ONLY top notification banner first
     const topBanner = document.getElementById('liveRiderMessageBanner');
     const titleEl = document.getElementById('liveMsgBannerTitle');
     const textEl = document.getElementById('liveMsgBannerText');
@@ -1353,7 +1312,42 @@
       }
     }
 
-    // Immediately chains directly into triggering the arrival alert modal
+    if (typeof window.playCustomerChime === 'function') {
+      try { window.playCustomerChime(); } catch (e) {}
+    }
+  }
+
+  function triggerArrivalModalOnly(orderId, riderName) {
+    if (window.isLoggingOut || 
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
+        (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
+      return;
+    }
+    const oId = orderId || activeOrderId;
+    if (oId) {
+      const isAck = (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + oId) === '1') ||
+                    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1');
+      if (isAck && (typeof window !== 'undefined' && window._hasTriggeredArrivalModal)) {
+        arrivalAcknowledged = true;
+        return;
+      }
+    }
+    initAudioContext();
+    activeOrderId = oId;
+
+    const modal = document.getElementById('riderArrivedModal');
+    const msgEl = document.getElementById('riderArrivedModalMsg');
+    const rName = riderName || 'Rider';
+    const rFirst = rName.split(' ')[0];
+
+    if (msgEl) {
+      msgEl.innerHTML = `📍 <b>Your rider has arrived outside with your order!</b><br>Please select a quick response so ${rFirst} knows you are coming:`;
+    }
+
+    // Ensure buttons and close controls are injected
+    injectArrivalButtons(orderId);
+
+    // 3. Persistence Fix: Trigger full interactive arrival modal with persistent display
     if (modal) {
       modal.classList.add('show', 'active');
       modal.style.setProperty('display', 'flex', 'important');
@@ -1374,10 +1368,49 @@
       bindArrivalModalListeners(modal);
     }
 
-    // Immediately play the singleton music-box arpeggio without delay
+    // Play singleton music-box arpeggio alarm loop
     if (!arrivalAlarmActive || !synthLoopInterval) {
       playSynthArrivalAlarm();
     }
+
+    if (typeof window !== 'undefined') {
+      window._hasTriggeredArrivalModal = true;
+    }
+  }
+
+  function triggerArrivalAlarm(orderId, riderName, immediateModal = false) {
+    if (window.isLoggingOut || 
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') ||
+        (typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
+      return;
+    }
+    const oId = orderId || activeOrderId;
+    if (oId) {
+      const isAck = (typeof localStorage !== 'undefined' && localStorage.getItem('fd_arrival_ack_' + oId) === '1') ||
+                    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1');
+      if (isAck && (typeof window !== 'undefined' && window._hasTriggeredArrivalModal)) {
+        arrivalAcknowledged = true;
+        return;
+      }
+    }
+
+    if (immediateModal) {
+      triggerArrivalModalOnly(oId, riderName);
+      return;
+    }
+
+    // 1. Staggered Arrival Flow: Trigger ONLY top notification banner first
+    triggerArrivalNotification(oId, riderName);
+
+    // 2. Delayed Modal Trigger: Let banner stay visible for ~3 seconds, then trigger interactive modal
+    if (arrivalModalTimer) {
+      clearTimeout(arrivalModalTimer);
+      arrivalModalTimer = null;
+    }
+    arrivalModalTimer = setTimeout(() => {
+      arrivalModalTimer = null;
+      triggerArrivalModalOnly(oId, riderName);
+    }, 3000);
   }
 
   function injectArrivalButtons(orderId) {
@@ -1564,6 +1597,8 @@
     endCall,
     toggleMute,
     syncCallStatus,
+    triggerArrivalNotification,
+    triggerArrivalModalOnly,
     triggerArrivalAlarm,
     triggerArrivalModal: (data) => {
       if (typeof window !== 'undefined' && typeof window.triggerArrivalModal === 'function') {
