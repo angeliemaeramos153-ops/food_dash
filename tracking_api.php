@@ -53,10 +53,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($order_id <= 0) {
         try {
-            $q_act = $conn->query("SELECT order_id FROM food_orders WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived') ORDER BY order_id DESC LIMIT 1");
+            $q_act = $conn->prepare("SELECT order_id FROM food_orders WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived') ORDER BY order_id DESC LIMIT 1");
+            $q_act->execute();
             $order_id = (int)($q_act ? $q_act->fetchColumn() : 0);
             if ($order_id <= 0) {
-                $q_latest = $conn->query("SELECT order_id FROM food_orders ORDER BY order_id DESC LIMIT 1");
+                $q_latest = $conn->prepare("SELECT order_id FROM food_orders ORDER BY order_id DESC LIMIT 1");
+                $q_latest->execute();
                 $order_id = (int)($q_latest ? $q_latest->fetchColumn() : 0);
             }
         } catch (Throwable $e) {}
@@ -309,7 +311,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
     // 2. Query active dispatched riders (status = 'on_delivery' or current_order != 'None')
     $raw_riders = [];
     try {
-        $rider_stmt = $conn->query("SELECT 
+        $rider_stmt = $conn->prepare("SELECT 
             r.rider_id, r.user_id, r.rider_name,
             COALESCE(r.phone, u.phone, '+63 917 555 0192') AS rider_phone,
             r.status AS rider_status,
@@ -325,9 +327,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
            OR (r.current_order IS NOT NULL AND r.current_order != 'None' AND r.current_order != '')
            OR EXISTS (SELECT 1 FROM food_orders fo WHERE fo.rider_id = r.rider_id AND LOWER(TRIM(fo.status)) IN ('on_delivery', 'out_for_delivery', 'on_the_way', 'near_customer', 'arrived'))
         ORDER BY r.rider_id ASC");
-        if ($rider_stmt) $raw_riders = $rider_stmt->fetchAll(PDO::FETCH_ASSOC);
+        $rider_stmt->execute();
+        $raw_riders = $rider_stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
-        $rider_stmt = $conn->query("SELECT 
+        $rider_stmt = $conn->prepare("SELECT 
             r.rider_id, r.user_id, r.rider_name,
             '+63 917 555 0192' AS rider_phone,
             r.status AS rider_status,
@@ -342,7 +345,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && (in_array(($_GET['action'] ?? ''), [
            OR (r.current_order IS NOT NULL AND r.current_order != 'None' AND r.current_order != '')
            OR EXISTS (SELECT 1 FROM food_orders fo WHERE fo.rider_id = r.rider_id AND LOWER(TRIM(fo.status)) IN ('on_delivery', 'out_for_delivery', 'on_the_way', 'near_customer', 'arrived'))
         ORDER BY r.rider_id ASC");
-        if ($rider_stmt) $raw_riders = $rider_stmt->fetchAll(PDO::FETCH_ASSOC);
+        $rider_stmt->execute();
+        $raw_riders = $rider_stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
     $riders = [];

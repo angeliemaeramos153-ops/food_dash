@@ -55,7 +55,8 @@ try {
             $u_stmt = $conn->prepare($unread_sql);
             $u_stmt->execute([':em' => $filter_email]);
         } else {
-            $u_stmt = $conn->query($unread_sql);
+            $u_stmt = $conn->prepare($unread_sql);
+            $u_stmt->execute();
         }
         $unread_count = (int)$u_stmt->fetchColumn();
 
@@ -141,7 +142,8 @@ try {
             $stmt = $conn->prepare($sql);
             $stmt->execute([':em' => $filter_email]);
         } else {
-            $stmt = $conn->query($sql);
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
         }
         $count = (int)$stmt->fetchColumn();
         echo json_encode(['success' => true, 'unread_count' => $count]);

@@ -147,7 +147,8 @@ if (!$r) {
     $r = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 if (!$r) {
-    $q = $conn->query("SELECT $rider_cols FROM riders ORDER BY rider_id ASC LIMIT 1");
+    $q = $conn->prepare("SELECT $rider_cols FROM riders ORDER BY rider_id ASC LIMIT 1");
+    $q->execute();
     $r = $q ? $q->fetch(PDO::FETCH_ASSOC) : null;
 }
 if ($r) {

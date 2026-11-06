@@ -649,7 +649,8 @@ if ($method === 'GET') {
         $dateSql = $isPg 
             ? "TO_CHAR(s.reconciled_at, 'Mon DD, YYYY • HH12:MI AM') AS formatted_reconciled_at" 
             : "DATE_FORMAT(s.reconciled_at, '%b %d, %Y • %h:%i %p') AS formatted_reconciled_at";
-        $stmt = $conn->query("SELECT s.*, o.order_ref, o.store_name, o.customer_name, u.full_name AS admin_name, {$dateSql} FROM settlements s LEFT JOIN food_orders o ON s.order_id = o.order_id LEFT JOIN users u ON s.admin_id = u.user_id ORDER BY s.settlement_id DESC LIMIT 100");
+        $stmt = $conn->prepare("SELECT s.*, o.order_ref, o.store_name, o.customer_name, u.full_name AS admin_name, {$dateSql} FROM settlements s LEFT JOIN food_orders o ON s.order_id = o.order_id LEFT JOIN users u ON s.admin_id = u.user_id ORDER BY s.settlement_id DESC LIMIT 100");
+        $stmt->execute();
         $settlements = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
         respond(true, '', ['settlements' => $settlements]);
     }

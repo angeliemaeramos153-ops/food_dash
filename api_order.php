@@ -48,13 +48,15 @@ if ($order_id <= 0) {
 }
 if ($order_id <= 0) {
     try {
-        $q_act2 = $conn->query("SELECT order_id FROM food_orders WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived') ORDER BY order_id DESC LIMIT 1");
+        $q_act2 = $conn->prepare("SELECT order_id FROM food_orders WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'assigned', 'out_for_delivery', 'on_delivery', 'on_the_way', 'near_customer', 'arrived') ORDER BY order_id DESC LIMIT 1");
+        $q_act2->execute();
         $order_id = (int)($q_act2 ? $q_act2->fetchColumn() : 0);
     } catch (Throwable $e) {}
 }
 if ($order_id <= 0) {
     try {
-        $q_act3 = $conn->query("SELECT order_id FROM food_orders ORDER BY order_id DESC LIMIT 1");
+        $q_act3 = $conn->prepare("SELECT order_id FROM food_orders ORDER BY order_id DESC LIMIT 1");
+        $q_act3->execute();
         $order_id = (int)($q_act3 ? $q_act3->fetchColumn() : 0);
     } catch (Throwable $e) {}
 }

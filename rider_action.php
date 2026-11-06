@@ -64,8 +64,9 @@ if (!$rider && $user_id > 0) {
 }
 
 if (!$rider) {
-    $q = $conn->query("SELECT rider_id, user_id, rider_name, phone, status, current_order FROM riders ORDER BY rider_id ASC LIMIT 1");
-    $rider = $q ? $q->fetch(PDO::FETCH_ASSOC) : null;
+    $q = $conn->prepare("SELECT rider_id, user_id, rider_name, phone, status, current_order FROM riders ORDER BY rider_id ASC LIMIT 1");
+    $q->execute();
+    $rider = $q->fetch(PDO::FETCH_ASSOC);
 }
 
 $rid = $rider ? (int)$rider['rider_id'] : 1;
@@ -100,7 +101,8 @@ if ($order_id <= 0) {
     }
     if ($order_id <= 0 && in_array($action, ['accept', 'claim', 'pickup', 'accept_order', 'on_delivery'], true)) {
         // Pick the oldest ready/pending order waiting for delivery
-        $q_wait = $conn->query("SELECT order_id FROM food_orders WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'preparing', 'pending') ORDER BY order_id ASC LIMIT 1");
+        $q_wait = $conn->prepare("SELECT order_id FROM food_orders WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'preparing', 'pending') ORDER BY order_id ASC LIMIT 1");
+        $q_wait->execute();
         $order_id = (int)($q_wait ? $q_wait->fetchColumn() : 0);
     }
 }
@@ -110,7 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && empty($action)) {
     // Return active rider state and ready orders
     $ready_orders = [];
     try {
-        $q_r = $conn->query("SELECT order_id, order_ref, customer_name, store_name, total_amount, payment_method, delivery_address, status FROM food_orders WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'pending', 'preparing') ORDER BY order_id ASC LIMIT 10");
+        $q_r = $conn->prepare("SELECT order_id, order_ref, customer_name, store_name, total_amount, payment_method, delivery_address, status FROM food_orders WHERE LOWER(TRIM(status)) IN ('ready_for_pickup', 'ready', 'pending', 'preparing') ORDER BY order_id ASC LIMIT 10");
+        $q_r->execute();
         $ready_orders = $q_r ? $q_r->fetchAll(PDO::FETCH_ASSOC) : [];
     } catch (Throwable $e) {}
 

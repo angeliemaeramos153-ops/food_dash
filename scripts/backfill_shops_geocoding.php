@@ -94,7 +94,7 @@ $updated_count = 0;
 $skipped_count = 0;
 $failed_count = 0;
 
-$update_stmt = $conn->prepare("UPDATE shops SET lat = ?, lng = ?, lat = ?, lng = ?, address = ? WHERE shop_id = ?");
+$update_stmt = $conn->prepare("UPDATE shops SET lat = ?, lng = ?, latitude = ?, longitude = ?, address = ? WHERE shop_id = ?");
 
 foreach ($shops_to_process as $idx => $shop) {
     $shop_id = (int)$shop['shop_id'];
