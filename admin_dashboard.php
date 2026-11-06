@@ -1334,17 +1334,18 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       margin: 0 auto;
       z-index: 1000;
     }
-    .sidebar > div {
+    .sidebar > div, .dock-inner, .sidebar-inner {
       width: 100%;
       max-width: 1400px;
       display: flex;
       justify-content: center;
       align-items: center;
       margin: 0 auto;
-      padding: 6px 16px;
-      gap: 8px;
+      padding: 8px 16px;
+      overflow-x: auto;
+      scrollbar-width: none;
     }
-    .sidebar-brand, .user-panel {
+    .sidebar > div::-webkit-scrollbar, .dock-inner::-webkit-scrollbar {
       display: none;
     }
     .nav-links {
@@ -1352,6 +1353,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       justify-content: center;
       align-items: center;
       margin: 0 auto;
+      width: 100%;
       gap: 6px;
       list-style: none;
       padding: 0;
@@ -1388,13 +1390,13 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
     }
 
     @media (max-width: 991px) {
-      .sidebar-brand, .user-panel { display: none; }
-      .sidebar > div {
+      .sidebar > div, .dock-inner, .sidebar-inner {
         display: flex;
         justify-content: center;
         align-items: center;
         margin: 0 auto;
         padding: 4px 8px;
+        width: 100%;
       }
       .nav-links {
         display: flex;
@@ -2245,14 +2247,9 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
   </main>
 
-  <!-- BOTTOM NAVIGATION / SIDEBAR -->
+  <!-- BOTTOM NAVIGATION DOCK (HORIZONTALLY CENTERED, MATCHING BACKUP_RECOVERY.PHP) -->
   <aside class="sidebar">
-    <div>
-      <div class="sidebar-brand">
-        <img src="logo.jpg" onerror="this.onerror=null; this.src='dad0d42c-954c-4d2d-ae59-f772e34dcf5b.jpg';" alt="Logo" class="brand-logo-img">
-        <h2>FOOD DASH</h2>
-      </div>
-
+    <div class="dock-inner">
       <ul class="nav-links">
         <li><a onclick="switchTab('analytics')" id="nav-analytics" class="active"><i class="fa-solid fa-chart-line"></i> Analytics</a></li>
         <li><a onclick="switchTab('dispatch-map')" id="nav-dispatch-map"><i class="fa-solid fa-map-location-dot"></i> Dispatch Map</a></li>
@@ -2265,16 +2262,6 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
         <li><a href="backup_recovery.php" id="nav-backup"><i class="fa-solid fa-database"></i> Database Backup</a></li>
         <li><a onclick="openModal('msgModal')"><i class="fa-solid fa-bullhorn"></i> Broadcast</a></li>
       </ul>
-    </div>
-
-    <div class="user-panel">
-      <div class="user-info">
-        <p><?php echo htmlspecialchars($user_name); ?></p>
-        <span><?php echo htmlspecialchars($user_role); ?> Access</span>
-      </div>
-      <button type="button" onclick="openModal('logoutModal')" class="logout-btn" title="Logout">
-        <i class="fa-solid fa-right-from-bracket"></i>
-      </button>
     </div>
   </aside>
 

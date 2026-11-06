@@ -1022,6 +1022,9 @@ $latest_backup_str   = $latest_backup_time > 0 ? date('M d, Y • h:i A', $lates
     /* BOTTOM / SIDEBAR NAVIGATION BAR */
     .sidebar-dock {
       position: fixed;
+      width: 100%;
+      margin: 0 auto;
+      align-items: center;
       bottom: 0;
       left: 0;
       right: 0;
