@@ -8,6 +8,7 @@ if (isset($_GET['msg']) && $_GET['msg'] === 'logged_out') {
 }
 require_once __DIR__ . '/db_connect.php';
 require_once __DIR__ . '/notification_lib.php';
+require_once __DIR__ . '/captcha_lib.php';
 
 function redirect_after_auth_cart_reset(string $destination): void {
     $safe_destination = json_encode($destination, JSON_UNESCAPED_SLASHES);
@@ -58,6 +59,10 @@ if (!empty($_SESSION['lockout_remaining_seconds'])) {
     unset($_SESSION['lockout_remaining_seconds']);
 }
 
+// Evaluate CAPTCHA activation threshold & active lockout
+$captcha_required = is_captcha_required($conn, null, $lockout_remaining_seconds);
+$captcha_challenge = $captcha_required ? generate_captcha_challenge(false) : [];
+
 // 1. Handle URL Query Alerts
 if (isset($_GET['msg'])) {
     if ($_GET['msg'] === 'forgot_sent') {
@@ -85,119 +90,161 @@ if (isset($_GET['tab']) && $_GET['tab'] === 'register') {
 // 2. Handle Form Submissions
 if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     
-    // LOGIN ACTION WITH BRUTE-FORCE LOCKOUT & PROGRESSIVE DURATION
+    // LOGIN ACTION WITH BRUTE-FORCE LOCKOUT & PROGRESSIVE DURATION & CUSTOM CAPTCHA
     if (isset($_POST['login']) && empty($login_handled)) {
         $active_tab = 'login';
         $username_input = trim($_POST['username'] ?? '');
         $password_input = (string)($_POST['password'] ?? '');
+        $captcha_input = trim((string)($_POST['captcha_response'] ?? ($_POST['captcha_answer'] ?? '')));
 
-        if (empty($username_input) || empty($password_input)) {
-            $error_msg = "Please enter both username and password.";
-        } else {
-            $stmt = $conn->prepare("SELECT user_id, username, full_name, email, password, role, failed_login_attempts, failed_attempts, lockout_until FROM users WHERE username = :u OR email = :e LIMIT 1");
-            $stmt->execute([':u' => $username_input, ':e' => $username_input]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        // 1. Determine if CAPTCHA verification is required
+        $captcha_needed = is_captcha_required($conn, $username_input, $lockout_remaining_seconds);
 
-            if (!$user) {
-                $error_msg = "Account does not exist.";
-                log_activity($conn, null, 'LOGIN_FAILED', "Failed login attempt for non-existent account: {$username_input}", $username_input, null);
+        // 2. Validate CAPTCHA response if required
+        if ($captcha_needed) {
+            if (empty($captcha_input) || !verify_captcha_submission($captcha_input)) {
+                record_failed_login_attempt();
+                $error_msg = "Security verification failed. Please enter the correct CAPTCHA response.";
+                generate_captcha_challenge(true);
+
+                log_activity(
+                    $conn,
+                    null,
+                    'LOGIN_FAILED',
+                    "Login blocked due to invalid or missing CAPTCHA challenge for username: {$username_input}",
+                    $username_input,
+                    null
+                );
+
+                $captcha_required = true;
+                $captcha_challenge = generate_captcha_challenge(false);
+            }
+        }
+
+        if (empty($error_msg)) {
+            if (empty($username_input) || empty($password_input)) {
+                $error_msg = "Please enter both username and password.";
             } else {
-                $user_id = (int)$user['user_id'];
-                $curr_failed = (int)($user['failed_login_attempts'] ?? $user['failed_attempts'] ?? 0);
-                $lockout_until = $user['lockout_until'] ?? null;
-                $now = time();
-                $lockout_time = !empty($lockout_until) ? strtotime($lockout_until) : 0;
+                $stmt = $conn->prepare("SELECT user_id, username, full_name, email, password, role, failed_login_attempts, failed_attempts, lockout_until FROM users WHERE username = :u OR email = :e LIMIT 1");
+                $stmt->execute([':u' => $username_input, ':e' => $username_input]);
+                $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-                // 1. Check if account is currently locked out BEFORE verifying credentials
-                if ($lockout_time > $now) {
-                    $diff_sec = $lockout_time - $now;
-                    $rem_min = intdiv($diff_sec, 60);
-                    $rem_sec = $diff_sec % 60;
-                    $time_text = ($rem_min > 0) ? sprintf("%d minute(s) %02d second(s)", $rem_min, $rem_sec) : sprintf("%d second(s)", $rem_sec);
-
-                    $lockout_remaining_seconds = max(1, $diff_sec);
-                    $error_msg = "Account is temporarily locked due to consecutive failed login attempts. Try again in {$time_text}.";
-                    log_activity($conn, $user_id, 'LOGIN_FAILED', "Login blocked by active lockout until {$lockout_until} ({$diff_sec}s remaining).", $user['username'], $user['role']);
-                } else {
-                    // Password verification (BCrypt + Plaintext backward compatibility + Demo accounts)
-                    $password = $password_input;
-                    $password_valid = password_verify($password, $user['password']) || ($password === $user['password']) || ($password === 'man123' && in_array($user['role'], ['chef', 'manager']));
-                    if (!$password_valid) {
-                        if ($password === 'rider123' && $user['role'] === 'rider') {
-                            $password_valid = true;
-                        } elseif (in_array($password, ['@SWEDNfpAu5RJ6', 'cust123']) && $user['role'] === 'customer') {
-                            $password_valid = true;
-                        } elseif ($password === 'admin123' && $user['role'] === 'admin') {
-                            $password_valid = true;
-                        }
+                if (!$user) {
+                    record_failed_login_attempt();
+                    if ((int)($_SESSION['login_attempts'] ?? 0) >= CAPTCHA_FAILURE_THRESHOLD) {
+                        generate_captcha_challenge(true);
                     }
+                    $error_msg = "Account does not exist.";
+                    log_activity($conn, null, 'LOGIN_FAILED', "Failed login attempt for non-existent account: {$username_input}", $username_input, null);
+                } else {
+                    $user_id = (int)$user['user_id'];
+                    $curr_failed = (int)($user['failed_login_attempts'] ?? $user['failed_attempts'] ?? 0);
+                    $lockout_until = $user['lockout_until'] ?? null;
+                    $now = time();
+                    $lockout_time = !empty($lockout_until) ? strtotime($lockout_until) : 0;
 
-                    if ($password_valid) {
-                        $_SESSION['login_attempts'] = 0;
-                        // Reset failed attempts & lockout counter on successful login
-                        $reset_stmt = $conn->prepare("UPDATE users SET failed_login_attempts = 0, failed_attempts = 0, lockout_until = NULL WHERE user_id = :uid");
-                        $reset_stmt->execute([':uid' => $user_id]);
+                    // Check if account is currently locked out BEFORE verifying credentials
+                    if ($lockout_time > $now) {
+                        $diff_sec = $lockout_time - $now;
+                        $rem_min = intdiv($diff_sec, 60);
+                        $rem_sec = $diff_sec % 60;
+                        $time_text = ($rem_min > 0) ? sprintf("%d minute(s) %02d second(s)", $rem_min, $rem_sec) : sprintf("%d second(s)", $rem_sec);
 
-                        // Secure session regeneration
-                        session_regenerate_id(true);
-                        $_SESSION['user_id'] = $user_id;
-                        $_SESSION['username'] = $user['username'];
-                        $_SESSION['full_name'] = $user['full_name'];
-                        $_SESSION['role'] = $user['role'];
-                        $_SESSION['last_activity'] = time();
-
-                        log_activity($conn, $user_id, 'LOGIN_SUCCESS', "User authenticated successfully.", $user['username'], $user['role']);
-
-                        if (in_array($user['role'], ['chef', 'manager'])) {
-                            redirect_after_auth_cart_reset('chef_dashboard.php');
-                        } elseif ($user['role'] === 'rider') {
-                            redirect_after_auth_cart_reset('rider_dashboard.php');
-                        } elseif ($user['role'] === 'customer') {
-                            redirect_after_auth_cart_reset('customer_dashboard.php');
-                        } else {
-                            redirect_after_auth_cart_reset('admin_dashboard.php');
-                        }
+                        $lockout_remaining_seconds = max(1, $diff_sec);
+                        $error_msg = "Account is temporarily locked due to consecutive failed login attempts. Try again in {$time_text}.";
+                        generate_captcha_challenge(true);
+                        log_activity($conn, $user_id, 'LOGIN_FAILED', "Login blocked by active lockout until {$lockout_until} ({$diff_sec}s remaining).", $user['username'], $user['role']);
                     } else {
-                        // Failed attempt: increment counter
-                        if ($lockout_time > 0 && $lockout_time <= $now && $curr_failed >= 3) {
-                            $new_failed = 1;
-                        } else {
-                            $new_failed = $curr_failed + 1;
+                        // Password verification (BCrypt + Plaintext backward compatibility + Demo accounts)
+                        $password = $password_input;
+                        $password_valid = password_verify($password, $user['password']) || ($password === $user['password']) || ($password === 'man123' && in_array($user['role'], ['chef', 'manager']));
+                        if (!$password_valid) {
+                            if ($password === 'rider123' && $user['role'] === 'rider') {
+                                $password_valid = true;
+                            } elseif (in_array($password, ['@SWEDNfpAu5RJ6', 'cust123']) && $user['role'] === 'customer') {
+                                $password_valid = true;
+                            } elseif ($password === 'admin123' && $user['role'] === 'admin') {
+                                $password_valid = true;
+                            }
                         }
 
-                        if ($new_failed >= 3) {
-                            // 3 consecutive failures: trigger temporary account lockout for 5 to 15 minutes
-                            if ($new_failed === 3) {
-                                $lockout_mins = 5;
-                            } elseif ($new_failed === 4) {
-                                $lockout_mins = 10;
+                        if ($password_valid) {
+                            reset_captcha_and_attempts();
+                            // Reset failed attempts & lockout counter on successful login
+                            $reset_stmt = $conn->prepare("UPDATE users SET failed_login_attempts = 0, failed_attempts = 0, lockout_until = NULL WHERE user_id = :uid");
+                            $reset_stmt->execute([':uid' => $user_id]);
+
+                            // Secure session regeneration
+                            session_regenerate_id(true);
+                            $_SESSION['user_id'] = $user_id;
+                            $_SESSION['username'] = $user['username'];
+                            $_SESSION['full_name'] = $user['full_name'];
+                            $_SESSION['role'] = $user['role'];
+                            $_SESSION['last_activity'] = time();
+
+                            log_activity($conn, $user_id, 'LOGIN_SUCCESS', "User authenticated successfully.", $user['username'], $user['role']);
+
+                            if (in_array($user['role'], ['chef', 'manager'])) {
+                                redirect_after_auth_cart_reset('chef_dashboard.php');
+                            } elseif ($user['role'] === 'rider') {
+                                redirect_after_auth_cart_reset('rider_dashboard.php');
+                            } elseif ($user['role'] === 'customer') {
+                                redirect_after_auth_cart_reset('customer_dashboard.php');
                             } else {
-                                $lockout_mins = 15;
+                                redirect_after_auth_cart_reset('admin_dashboard.php');
+                            }
+                        } else {
+                            // Failed attempt: increment counters
+                            record_failed_login_attempt();
+
+                            if ($lockout_time > 0 && $lockout_time <= $now && $curr_failed >= 3) {
+                                $new_failed = 1;
+                            } else {
+                                $new_failed = $curr_failed + 1;
                             }
 
-                            $new_lockout_until = date('Y-m-d H:i:s', $now + ($lockout_mins * 60));
-                            $lockout_remaining_seconds = $lockout_mins * 60;
+                            if ($new_failed >= 3) {
+                                // 3 consecutive failures: trigger temporary account lockout for 5 to 15 minutes
+                                if ($new_failed === 3) {
+                                    $lockout_mins = 5;
+                                } elseif ($new_failed === 4) {
+                                    $lockout_mins = 10;
+                                } else {
+                                    $lockout_mins = 15;
+                                }
 
-                            $up_lock = $conn->prepare("UPDATE users SET failed_login_attempts = :fla, failed_attempts = :fa, lockout_until = :lu WHERE user_id = :uid");
-                            $up_lock->execute([':fla' => $new_failed, ':fa' => $new_failed, ':lu' => $new_lockout_until, ':uid' => $user_id]);
+                                $new_lockout_until = date('Y-m-d H:i:s', $now + ($lockout_mins * 60));
+                                $lockout_remaining_seconds = $lockout_mins * 60;
 
-                            $time_text = "{$lockout_mins} minute(s) 00 second(s)";
-                            $error_msg = "Account is temporarily locked due to consecutive failed login attempts. Try again in {$time_text}.";
+                                $up_lock = $conn->prepare("UPDATE users SET failed_login_attempts = :fla, failed_attempts = :fa, lockout_until = :lu WHERE user_id = :uid");
+                                $up_lock->execute([':fla' => $new_failed, ':fa' => $new_failed, ':lu' => $new_lockout_until, ':uid' => $user_id]);
 
-                            // Log LOCKOUT_TRIGGERED event to system_audit_logs table
-                            log_activity($conn, $user_id, 'LOCKOUT_TRIGGERED', "Account locked for {$lockout_mins} minutes after {$new_failed} consecutive failed login attempts.", $user['username'], $user['role']);
-                            log_activity($conn, $user_id, 'LOGIN_FAILED', "Failed login attempt ({$new_failed}/3) triggered account lockout for {$lockout_mins} minutes.", $user['username'], $user['role']);
-                        } else {
-                            $attempts_left = 3 - $new_failed;
-                            $up_lock = $conn->prepare("UPDATE users SET failed_login_attempts = :fla, failed_attempts = :fa, lockout_until = NULL WHERE user_id = :uid");
-                            $up_lock->execute([':fla' => $new_failed, ':fa' => $new_failed, ':uid' => $user_id]);
-                            $error_msg = "Incorrect username or password. {$attempts_left} attempt(s) remaining before account lockout.";
-                            log_activity($conn, $user_id, 'LOGIN_FAILED', "Failed login attempt ({$new_failed}/3). {$attempts_left} attempt(s) remaining.", $user['username'], $user['role']);
+                                $time_text = "{$lockout_mins} minute(s) 00 second(s)";
+                                $error_msg = "Account is temporarily locked due to consecutive failed login attempts. Try again in {$time_text}.";
+                                generate_captcha_challenge(true);
+
+                                // Log LOCKOUT_TRIGGERED event to system_audit_logs table
+                                log_activity($conn, $user_id, 'LOCKOUT_TRIGGERED', "Account locked for {$lockout_mins} minutes after {$new_failed} consecutive failed login attempts.", $user['username'], $user['role']);
+                                log_activity($conn, $user_id, 'LOGIN_FAILED', "Failed login attempt ({$new_failed}/3) triggered account lockout for {$lockout_mins} minutes.", $user['username'], $user['role']);
+                            } else {
+                                $attempts_left = 3 - $new_failed;
+                                $up_lock = $conn->prepare("UPDATE users SET failed_login_attempts = :fla, failed_attempts = :fa, lockout_until = NULL WHERE user_id = :uid");
+                                $up_lock->execute([':fla' => $new_failed, ':fa' => $new_failed, ':uid' => $user_id]);
+                                $error_msg = "Incorrect username or password. {$attempts_left} attempt(s) remaining before account lockout.";
+
+                                if ($new_failed >= CAPTCHA_FAILURE_THRESHOLD || (int)($_SESSION['login_attempts'] ?? 0) >= CAPTCHA_FAILURE_THRESHOLD) {
+                                    generate_captcha_challenge(true);
+                                }
+
+                                log_activity($conn, $user_id, 'LOGIN_FAILED', "Failed login attempt ({$new_failed}/3). {$attempts_left} attempt(s) remaining.", $user['username'], $user['role']);
+                            }
                         }
                     }
                 }
             }
         }
+        $captcha_required = is_captcha_required($conn, $username_input ?? null, $lockout_remaining_seconds);
+        $captcha_challenge = $captcha_required ? generate_captcha_challenge(false) : [];
     }
     // REGISTER ACTION WITH STRONG PASSWORD POLICY & CONFIRM PASSWORD
     if (isset($_POST['register'])) {
@@ -662,6 +709,141 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       pointer-events: none !important;
       box-shadow: none !important;
       opacity: 0.6 !important;
+    }
+
+    /* ================================================================
+       CUSTOM "I'M NOT A ROBOT" CAPTCHA SECURITY COMPONENT
+       Warm Food Dash theme: #4B5320, #D88F2A, #D4C5A5, #fffdf7
+    ================================================================ */
+    .captcha-wrapper {
+      margin: 12px 0 16px 0;
+      width: 100%;
+      transition: all 0.3s ease;
+      animation: alertSlideDown 0.3s ease-out;
+    }
+    .captcha-card {
+      background: linear-gradient(135deg, #fffdf7 0%, #f7f3e6 100%);
+      border: 1.5px solid #dcd3b8;
+      border-radius: 14px;
+      padding: 12px 14px;
+      box-shadow: 0 4px 14px rgba(75, 83, 32, 0.08);
+      text-align: left;
+    }
+    .captcha-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed #dcd3b8;
+    }
+    .captcha-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--fd-olive-dark, #373e16);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .captcha-shield-icon {
+      color: var(--fd-gold, #D88F2A);
+      font-size: 0.88rem;
+    }
+    .captcha-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      background: #ece7d5;
+      color: var(--fd-olive, #4B5320);
+      padding: 3px 8px;
+      border-radius: 12px;
+      letter-spacing: 0.2px;
+    }
+    .captcha-challenge-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .captcha-challenge-badge {
+      position: relative;
+      flex: 1;
+      background: #2b2e1b;
+      color: #fff9e6;
+      border-radius: 10px;
+      padding: 10px 14px;
+      text-align: center;
+      overflow: hidden;
+      box-shadow: inset 0 2px 5px rgba(0,0,0,0.3);
+      user-select: none;
+    }
+    .captcha-challenge-text {
+      position: relative;
+      z-index: 2;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 1.18rem;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: #f7e2a9;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    }
+    .captcha-challenge-pattern {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.04) 0, rgba(255,255,255,0.04) 2px, transparent 0, transparent 6px);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .captcha-controls {
+      display: flex;
+      gap: 6px;
+    }
+    .captcha-action-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid #d3caaf;
+      background: #fffdf7;
+      color: var(--fd-olive, #4B5320);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 0.88rem;
+      transition: all 0.2s ease;
+    }
+    .captcha-action-btn:hover {
+      background: var(--fd-olive, #4B5320);
+      color: #fff;
+      border-color: var(--fd-olive, #4B5320);
+      transform: translateY(-1px);
+    }
+    .captcha-action-btn.spinning i {
+      animation: captchaSpin 0.6s linear infinite;
+    }
+    @keyframes captchaSpin {
+      100% { transform: rotate(360deg); }
+    }
+    .captcha-instruction {
+      font-size: 0.72rem;
+      color: #6d7355;
+      font-weight: 500;
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+    .captcha-input-box {
+      margin: 8px 0 4px 0 !important;
+    }
+    .captcha-error-msg {
+      font-size: 0.72rem;
+      color: var(--fd-rust, #923D32);
+      margin-top: 5px;
+      font-weight: 600;
     }
 
     .modal { 
@@ -1317,6 +1499,45 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
             <span class="forgot-pass" onclick="openForgotModal()">Forgot Password?</span>
           </div>
 
+          <!-- DYNAMIC CUSTOM "I'M NOT A ROBOT" CAPTCHA CHALLENGE -->
+          <div class="captcha-wrapper" id="captchaWrapper" style="<?php echo $captcha_required ? 'display: block;' : 'display: none;'; ?>">
+            <div class="captcha-card">
+              <div class="captcha-header">
+                <div class="captcha-title">
+                  <i class="fa-solid fa-shield-halved captcha-shield-icon"></i>
+                  <span>Security Verification</span>
+                </div>
+                <span class="captcha-badge"><i class="fa-solid fa-robot"></i> I'm not a robot</span>
+              </div>
+              
+              <div class="captcha-challenge-row">
+                <div class="captcha-challenge-badge" id="captchaChallengeDisplay" title="Solve this security challenge">
+                  <span class="captcha-challenge-text" id="captchaChallengeText"><?php echo htmlspecialchars($captcha_challenge['display'] ?? ''); ?></span>
+                  <div class="captcha-challenge-pattern"></div>
+                </div>
+                <div class="captcha-controls">
+                  <button type="button" class="captcha-action-btn" id="captchaRefreshBtn" title="Get a new challenge" aria-label="Refresh challenge">
+                    <i class="fa-solid fa-rotate-right"></i>
+                  </button>
+                  <button type="button" class="captcha-action-btn" id="captchaAudioBtn" title="Listen to challenge" aria-label="Audio challenge">
+                    <i class="fa-solid fa-volume-high"></i>
+                  </button>
+                </div>
+              </div>
+              
+              <div class="captcha-instruction" id="captchaInstruction">
+                <?php echo htmlspecialchars($captcha_challenge['question'] ?? 'Please solve the challenge above to verify you are human.'); ?>
+              </div>
+
+              <div class="input-box captcha-input-box <?php echo ($lockout_remaining_seconds > 0) ? 'disabled' : ''; ?>" id="captchaInputBox">
+                <i class="fa-solid fa-puzzle-piece field-icon"></i>
+                <input type="text" name="captcha_response" id="login_captcha" autocomplete="off" value="" <?php echo $captcha_required ? 'required' : ''; ?> <?php echo ($lockout_remaining_seconds > 0) ? 'disabled' : ''; ?>>
+                <label for="login_captcha">Your Answer</label>
+              </div>
+              <div class="captcha-error-msg" id="captchaClientError" style="display: none;"></div>
+            </div>
+          </div>
+
           <!-- DEV HELPER BADGE / TOGGLE LINK BENEATH PASSWORD ROW -->
           <div class="demo-helper-bar">
             <button type="button" class="demo-helper-toggle" id="quickDemoBtn" title="Open demo test accounts &amp; credentials autofill" aria-haspopup="dialog" aria-expanded="false">
@@ -1719,6 +1940,15 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
             else passBox.classList.remove('disabled');
           }
         }
+        const captchaInput = document.getElementById('login_captcha');
+        const captchaBox = document.getElementById('captchaInputBox');
+        if (captchaInput) {
+          captchaInput.disabled = isLocked;
+          if (captchaBox) {
+            if (isLocked) captchaBox.classList.add('disabled');
+            else captchaBox.classList.remove('disabled');
+          }
+        }
         if (loginBtn) {
           loginBtn.disabled = isLocked;
           if (isLocked) {
@@ -1906,6 +2136,107 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
               return false;
             }
           }
+
+          // CAPTCHA client-side verification
+          const captchaWrap = document.getElementById('captchaWrapper');
+          const captchaInput = document.getElementById('login_captcha');
+          const captchaErr = document.getElementById('captchaClientError');
+          if (captchaWrap && captchaWrap.style.display !== 'none' && captchaInput && !captchaInput.disabled) {
+            if (!captchaInput.value.trim()) {
+              e.preventDefault();
+              if (captchaErr) {
+                captchaErr.textContent = 'Please enter the CAPTCHA response above.';
+                captchaErr.style.display = 'block';
+              }
+              captchaInput.focus();
+              return false;
+            } else if (captchaErr) {
+              captchaErr.style.display = 'none';
+            }
+          }
+        });
+      }
+
+      // ================================================================
+      // CUSTOM CAPTCHA EVENT LISTENERS & INTERACTIVITY
+      // ================================================================
+      const captchaRefreshBtn = document.getElementById('captchaRefreshBtn');
+      const captchaAudioBtn = document.getElementById('captchaAudioBtn');
+      let currentCaptchaAudioText = <?php echo json_encode($captcha_challenge['audio_text'] ?? ($captcha_challenge['question'] ?? '')); ?>;
+
+      if (captchaRefreshBtn) {
+        captchaRefreshBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          captchaRefreshBtn.classList.add('spinning');
+          fetch('captcha_api.php?action=refresh')
+            .then(res => res.json())
+            .then(data => {
+              if (data && data.status === 'success') {
+                const textEl = document.getElementById('captchaChallengeText');
+                const instructEl = document.getElementById('captchaInstruction');
+                const inputEl = document.getElementById('login_captcha');
+                const errEl = document.getElementById('captchaClientError');
+                if (textEl) textEl.textContent = data.display;
+                if (instructEl) instructEl.textContent = data.question;
+                if (errEl) errEl.style.display = 'none';
+                if (inputEl) {
+                  inputEl.value = '';
+                  inputEl.focus();
+                }
+                currentCaptchaAudioText = data.audio_text || data.question;
+              }
+            })
+            .catch(err => {
+              console.error('Failed to refresh CAPTCHA:', err);
+            })
+            .finally(() => {
+              setTimeout(() => {
+                captchaRefreshBtn.classList.remove('spinning');
+              }, 400);
+            });
+        });
+      }
+
+      if (captchaAudioBtn) {
+        captchaAudioBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const textToSpeak = currentCaptchaAudioText || 'Please solve the security challenge shown on screen.';
+            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            window.speechSynthesis.speak(utterance);
+          } else {
+            alert(currentCaptchaAudioText || 'Audio speech synthesis not supported in this browser.');
+          }
+        });
+      }
+
+      // Dynamic check on username blur: if account is locked out or has >= 2 failed attempts, render CAPTCHA
+      const loginUserInput = document.getElementById('login_username');
+      if (loginUserInput) {
+        loginUserInput.addEventListener('blur', function() {
+          const u = this.value.trim();
+          if (!u) return;
+          fetch('captcha_api.php?action=check&username=' + encodeURIComponent(u))
+            .then(res => res.json())
+            .then(data => {
+              if (data && data.status === 'success' && data.captcha_required) {
+                const wrap = document.getElementById('captchaWrapper');
+                const textEl = document.getElementById('captchaChallengeText');
+                const instructEl = document.getElementById('captchaInstruction');
+                const inputEl = document.getElementById('login_captcha');
+                if (wrap) wrap.style.display = 'block';
+                if (inputEl) inputEl.required = true;
+                if (data.challenge) {
+                  if (textEl) textEl.textContent = data.challenge.display;
+                  if (instructEl) instructEl.textContent = data.challenge.question;
+                  currentCaptchaAudioText = data.challenge.audio_text || data.challenge.question;
+                }
+              }
+            })
+            .catch(() => {});
         });
       }
 
