@@ -344,9 +344,11 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     body {
       background: #F4F1EA !important;
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       justify-content: center;
       align-items: center;
+      align-items: safe center;
       margin: 0;
       padding: 24px 16px;
       position: relative;
@@ -369,6 +371,8 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       z-index: 10 !important;
       width: 100%;
       max-width: 440px;
+      height: auto;
+      min-height: auto;
       background: #FFFFFF !important;
       border-radius: 28px;
       padding: 32px 24px;
@@ -378,9 +382,10 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       visibility: visible !important;
       opacity: 1 !important;
       border: 1px solid #ddd3ad;
-      margin: 0 auto;
-      overflow: hidden;
+      margin: auto;
+      overflow: visible;
       color: var(--fd-ink);
+      transition: all 0.3s ease;
     }
 
     .brand-header { text-align: center; margin-bottom: 8px; }
@@ -490,8 +495,9 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     .forms-wrapper {
       position: relative;
       width: 100%;
-      min-height: 380px;
-      transition: min-height 0.35s ease;
+      min-height: 340px;
+      height: auto;
+      transition: min-height 0.35s ease, height 0.35s ease;
       overflow: visible;
     }
     .mobile-card.show-register .forms-wrapper {
@@ -518,6 +524,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       width: 100%;
       opacity: 0;
       visibility: hidden;
+      pointer-events: none;
       transform: translateX(-30px);
       transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
                   opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
@@ -525,12 +532,30 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     }
 
     .form-section.active {
+      position: relative;
+      top: auto;
+      left: auto;
+      width: 100%;
+      height: auto;
       opacity: 1;
       visibility: visible;
+      pointer-events: auto;
       transform: translateX(0);
       transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
                   opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
                   visibility 0.4s step-start;
+    }
+
+    #login-section.active {
+      position: relative;
+      width: 100%;
+      height: auto;
+    }
+
+    #login-form {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
     }
 
     #register-section { transform: translateX(30px); }
@@ -592,7 +617,10 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     .btn {
       width: 100%; height: 44px; background: var(--fd-olive); border: none; outline: none;
       border-radius: 25px; cursor: pointer; font-size: 0.92rem; color: #fff;
-      font-weight: 600; box-shadow: 0 10px 22px rgba(77, 90, 32, 0.22); transition: 0.3s; margin-top: 6px;
+      font-weight: 600; box-shadow: 0 10px 22px rgba(77, 90, 32, 0.22); transition: 0.3s;
+      margin-top: 10px; margin-bottom: 4px;
+      position: relative; z-index: 5; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
     }
     .btn:hover { background: var(--fd-olive-dark); box-shadow: 0 12px 25px rgba(77, 90, 32, 0.28); }
 
@@ -716,10 +744,13 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
        Warm Food Dash theme: #4B5320, #D88F2A, #D4C5A5, #fffdf7
     ================================================================ */
     .captcha-wrapper {
-      margin: 12px 0 16px 0;
+      margin: 10px 0 14px 0;
       width: 100%;
+      box-sizing: border-box;
       transition: all 0.3s ease;
       animation: alertSlideDown 0.3s ease-out;
+      position: relative;
+      z-index: 2;
     }
     .captcha-card {
       background: linear-gradient(135deg, #fffdf7 0%, #f7f3e6 100%);
@@ -728,6 +759,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       padding: 12px 14px;
       box-shadow: 0 4px 14px rgba(75, 83, 32, 0.08);
       text-align: left;
+      box-sizing: border-box;
     }
     .captcha-header {
       display: flex;
@@ -1314,8 +1346,10 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
         width: 100%;
         max-width: 100%;
         min-height: 100vh;
+        height: auto;
         box-shadow: none !important;
         background: #FFFFFF !important;
+        overflow: visible;
       }
       .brand-logo-img { width: 72px; height: 72px; }
       .brand-header h2 { font-size: 1.22rem; }
@@ -1557,7 +1591,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
           <!-- SUBTLE AUTOFILL TOAST CONFIRMATION -->
           <div class="demo-autofill-toast" id="demoAutofillToast" aria-live="polite"></div>
 
-          <button type="submit" name="login" id="login-btn" class="btn <?php echo ($lockout_remaining_seconds > 0) ? 'btn-disabled' : ''; ?>" <?php echo ($lockout_remaining_seconds > 0) ? 'disabled' : ''; ?>><span>Login</span></button>
+          <button type="submit" name="login" id="login-btn" class="btn <?php echo ($lockout_remaining_seconds > 0) ? 'btn-disabled' : ''; ?>" <?php echo ($lockout_remaining_seconds > 0) ? 'disabled' : ''; ?> aria-label="Sign In"><span>Sign In</span></button>
         </form>
       </div>
 
