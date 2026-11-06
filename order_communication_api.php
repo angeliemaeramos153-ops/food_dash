@@ -523,7 +523,7 @@ if ($action === 'get_updates' || $method === 'GET') {
     }
 
     // Fetch new messages since after_id strictly scoped to this order
-    $m_sql = "SELECT message_id, order_id, sender_role, sender_id, receiver_id, sender_name, message_text, created_at 
+    $m_sql = "SELECT message_id, order_id, sender_role, sender_id, receiver_id, COALESCE(receiver_role, 'customer') AS receiver_role, sender_name, message_text, created_at 
               FROM order_messages 
               WHERE order_id = :oid ";
     $m_params = [':oid' => $order_id];

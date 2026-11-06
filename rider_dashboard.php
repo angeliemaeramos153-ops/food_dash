@@ -757,13 +757,14 @@ if ($rid > 0) {
     // 1. Orders Ready for Pickup: Joined with shops table for real store coordinates
     $stmt_ready = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.customer_id, o.customer_name, 
-            '+63 917 123 4567' AS customer_phone,
+            COALESCE(NULLIF(TRIM(o.customer_phone), ''), NULLIF(TRIM(cu.phone), ''), '+63 917 123 4567') AS customer_phone,
             o.store_name, o.items_summary, o.total_amount, o.payment_method,
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.order_id AS id, o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, o.created_at, o.shop_id,
             o.store_lat, o.store_lng,
             s.shop_name AS shop_record_name
         FROM food_orders o
+        LEFT JOIN users cu ON (o.customer_id = cu.user_id)
         LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name))))
         WHERE LOWER(TRIM(o.status)) IN ('ready_for_pickup', 'ready', 'assigned') 
           AND (o.rider_id IS NULL OR o.rider_id = 0) 
@@ -774,7 +775,7 @@ if ($rid > 0) {
     // 2. My Delivery: Joined with shops table for real store coordinates and riders table for true live rider GPS
     $stmt_my = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.customer_id, o.customer_name, 
-            '+63 917 123 4567' AS customer_phone,
+            COALESCE(NULLIF(TRIM(o.customer_phone), ''), NULLIF(TRIM(cu.phone), ''), '+63 917 123 4567') AS customer_phone,
             o.store_name, o.items_summary, o.total_amount, o.payment_method,
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.order_id AS id, o.delivery_lat, o.delivery_lng, o.customer_lat, o.customer_lng, 
@@ -785,6 +786,7 @@ if ($rid > 0) {
             COALESCE(o.rider_lat, 0) AS rider_current_lat,
             COALESCE(o.rider_lng, 0) AS rider_current_lng
         FROM food_orders o
+        LEFT JOIN users cu ON (o.customer_id = cu.user_id)
         LEFT JOIN shops s ON (o.shop_id = s.shop_id OR (o.shop_id = 0 AND LOWER(TRIM(o.store_name)) = LOWER(TRIM(s.shop_name))))
         LEFT JOIN riders r ON (o.rider_id = r.rider_id)
         WHERE o.rider_id = :rid 
@@ -816,11 +818,12 @@ if ($rid > 0) {
     // 3. Completed Orders: delivered by this rider
     $stmt_comp = $conn->prepare("SELECT 
             o.order_id, o.order_ref, o.customer_id, o.customer_name, 
-            '+63 917 123 4567' AS customer_phone,
+            COALESCE(NULLIF(TRIM(o.customer_phone), ''), NULLIF(TRIM(cu.phone), ''), '+63 917 123 4567') AS customer_phone,
             o.store_name, o.items_summary, o.total_amount, o.payment_method,
             o.status, o.delivery_status, o.rider_id, o.delivery_address, 
             o.created_at, o.updated_at
         FROM food_orders o
+        LEFT JOIN users cu ON (o.customer_id = cu.user_id)
         WHERE o.rider_id = :rid 
           AND LOWER(TRIM(o.status)) = 'delivered'
         ORDER BY COALESCE(o.updated_at, o.created_at) DESC LIMIT 50");
@@ -1185,7 +1188,7 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
 .modal:not(.show), .modal[style*="display: none"], .modal[style*="display:none"], .custom-modal-backdrop:not(.show), .modal-backdrop:not(.show), [class*="modal"]:not(.show):not(.active) {display:none !important;pointer-events:none !important;visibility:hidden !important;opacity:0 !important;z-index:-9999 !important}
 .modal.show{display:flex !important;pointer-events:auto !important;visibility:visible !important;opacity:1 !important;z-index:10000 !important}
 #riderConfirmModal.show, #clearDeliveryModal.show, #riderChatModal.show{z-index:99999 !important}
-#riderChatModal.show{display:block !important;pointer-events:auto !important;visibility:visible !important;opacity:1 !important}
+#riderChatModal.show{display:flex !important;align-items:center;justify-content:center;pointer-events:auto !important;visibility:visible !important;opacity:1 !important}
 #riderCompletedOrdersModal.show{z-index:99998 !important}
 #gpsNoticeBanner, .gps-notice-banner, .gps-warning-box, .gps-floating-toast{display:none !important}
 .btn-hdr-history{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);color:#ffffff;padding:6px 12px;border-radius:20px;font-size:0.72rem;font-weight:700;cursor:pointer;backdrop-filter:blur(4px);transition:all 0.2s ease}
@@ -1567,8 +1570,8 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
 
 /* Chat Drawer / Modal */
 .chat-modal-box {
-  width: min(400px, 100%);
-  margin: 30px auto;
+  width: min(420px, calc(100% - 24px));
+  margin: auto;
   background: #ffffff;
   border: 1.5px solid var(--sandstone);
   border-radius: 20px;
@@ -1579,6 +1582,11 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   overflow: hidden;
   position: relative;
   pointer-events: auto;
+  animation: chatModalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes chatModalPop {
+  0% { transform: scale(0.92) translateY(12px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
 }
 .chat-modal-header {
   display: flex;
@@ -1589,23 +1597,79 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   border-bottom: 1px solid var(--line);
 }
 .chat-header-avatar {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: rgba(75, 83, 32, 0.15);
   color: var(--olive-shadow);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.chat-header-avatar.manager-mode {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.chat-ref-badge {
+  display: inline-block;
+  background: #f1ebd8;
+  color: var(--olive-shadow);
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 6px;
+  margin-left: 6px;
+  letter-spacing: 0.3px;
 }
 .chat-close-btn {
   background: transparent;
   border: none;
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: var(--muted);
   cursor: pointer;
   padding: 4px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+.chat-close-btn:hover {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+.chat-channel-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #f8f6f0;
+  border-bottom: 1px solid var(--line);
+}
+.chat-tab-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1.5px solid var(--sandstone);
+  color: var(--muted);
+  padding: 7px 10px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.chat-tab-btn.active {
+  background: var(--olive-shadow);
+  color: #ffffff;
+  border-color: var(--olive-shadow);
+  box-shadow: 0 2px 8px rgba(75, 83, 32, 0.22);
+}
+.chat-tab-btn:hover:not(.active) {
+  border-color: var(--harvest-sun);
+  color: var(--olive-shadow);
 }
 .quick-status-section {
   padding: 10px 14px 6px;
@@ -1653,9 +1717,10 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 180px;
-  max-height: 280px;
+  min-height: 200px;
+  max-height: 320px;
   background: #fffdf9;
+  scroll-behavior: smooth;
 }
 .chat-empty-hint {
   font-size: 0.7rem;
@@ -1666,17 +1731,19 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
 }
 .msg-bubble {
   max-width: 82%;
-  padding: 7px 11px;
-  border-radius: 12px;
-  font-size: 0.72rem;
-  line-height: 1.4;
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: 0.74rem;
+  line-height: 1.42;
   word-break: break-word;
+  transition: all 0.15s ease;
 }
 .msg-bubble.me {
   align-self: flex-end;
   background: var(--olive-shadow);
   color: #ffffff;
   border-bottom-right-radius: 2px;
+  box-shadow: 0 1px 4px rgba(75, 83, 32, 0.2);
 }
 .msg-bubble.them {
   align-self: flex-start;
@@ -1684,14 +1751,55 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   color: var(--ink);
   border-bottom-left-radius: 2px;
 }
+.msg-bubble.them.manager {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  border-bottom-left-radius: 2px;
+}
+.msg-bubble.them.manager .msg-meta {
+  color: #1d4ed8;
+}
+.msg-bubble.system {
+  align-self: center;
+  background: #f1f5f9;
+  border: 1px dashed #cbd5e1;
+  color: #475569;
+  font-size: 0.68rem;
+  max-width: 90%;
+  border-radius: 12px;
+  text-align: center;
+  padding: 5px 12px;
+}
+.msg-bubble.optimistic {
+  opacity: 0.7;
+}
+.msg-tag-pill {
+  display: inline-block;
+  font-size: 0.58rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-right: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.msg-tag-cust { background: rgba(216, 143, 42, 0.25); color: #9a6700; }
+.msg-tag-mgr { background: #dbeafe; color: #1e40af; }
+.msg-tag-rider { background: rgba(255, 255, 255, 0.25); color: #ffffff; }
 .msg-meta {
   font-size: 0.58rem;
-  margin-top: 3px;
-  opacity: 0.8;
+  margin-top: 4px;
+  opacity: 0.82;
   text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
 }
 .msg-bubble.them .msg-meta {
   text-align: left;
+  justify-content: flex-start;
 }
 .chat-input-bar {
   display: flex;
@@ -1700,14 +1808,17 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   padding: 10px 14px;
   background: #ffffff;
   border-top: 1px solid var(--line);
+  margin: 0;
 }
 .chat-input-bar input {
   flex: 1;
   border: 1.5px solid var(--sandstone);
   border-radius: 20px;
-  padding: 8px 12px;
-  font-size: 0.72rem;
+  padding: 9px 13px;
+  font-size: 0.74rem;
   outline: none;
+  background: #ffffff;
+  transition: border-color 0.15s ease;
 }
 .chat-input-bar input:focus {
   border-color: var(--olive-shadow);
@@ -1717,23 +1828,27 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   color: #ffffff;
   border: none;
   border-radius: 50%;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  transition: transform 0.15s ease;
+  transition: all 0.15s ease;
 }
-.chat-send-btn:hover {
+.chat-send-btn:hover:not(:disabled) {
   transform: scale(1.08);
+}
+.chat-send-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 .chat-sms-btn {
   background: #15803d;
   color: #ffffff;
   border-radius: 16px;
-  padding: 6px 10px;
+  padding: 7px 11px;
   font-size: 0.68rem;
   font-weight: 700;
   text-decoration: none;
@@ -1742,6 +1857,10 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   gap: 4px;
   flex-shrink: 0;
   box-shadow: 0 2px 6px rgba(21, 128, 61, 0.25);
+  transition: all 0.15s ease;
+}
+.chat-sms-btn:hover {
+  background: #166534;
 }
 /* Outgoing Call Modal */
 .rider-call-box {
@@ -1905,7 +2024,8 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   $c_dial = preg_replace('/[^\+0-9]/', '', $c_phone_val);
   if (empty($c_dial)) $c_dial = '+639171234567';
   $c_name_val = !empty($o['customer_name']) ? trim($o['customer_name']) : 'Customer';
-?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div></div><div id="rider-map-container" style="width: 100%; height: 300px; position: relative; margin: 10px 0; z-index: 5;">
+  $c_store_val = !empty($o['store_name']) ? trim($o['store_name']) : 'Store';
+?><div class="rider-contact-card"><div class="rider-contact-header"><div class="contact-user-info"><div class="contact-avatar"><i class="fa-solid fa-user"></i></div><div class="contact-details"><div class="contact-name"><?=htmlspecialchars($c_name_val)?></div><div class="contact-phone"><i class="fa-solid fa-phone-volume"></i> <?=htmlspecialchars($c_phone_val)?></div></div></div><span class="contact-badge"><i class="fa-solid fa-circle-user"></i> Customer</span></div><div class="rider-contact-actions"><button type="button" class="contact-action-btn call-action-btn" id="btnCallCustomer_<?=(int)$o['order_id']?>" data-action="call-customer" data-order-id="<?=(int)$o['order_id']?>" onclick="initiateCustomerCall(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>')" title="Call customer directly or test in-app incoming call"><i class="fa-solid fa-phone"></i> Call Customer</button><button type="button" class="contact-action-btn msg-action-btn btn-open-chat" id="btnChatOrder_<?=(int)$o['order_id']?>" data-action="open-chat" data-channel="customer" data-order-id="<?=(int)$o['order_id']?>" data-order-ref="<?=htmlspecialchars($disp_ref)?>" data-customer-name="<?=htmlspecialchars($c_name_val)?>" data-customer-phone="<?=htmlspecialchars($c_phone_val)?>" data-customer-dial="<?=htmlspecialchars($c_dial)?>" data-store-name="<?=htmlspecialchars($c_store_val)?>" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>', 'customer', '<?=htmlspecialchars(addslashes($c_store_val))?>')"><i class="fa-solid fa-comment-dots"></i> Message / Chat</button></div><div style="display:flex;gap:8px;margin-top:6px;"><button type="button" class="contact-action-btn mgr-action-btn btn-open-chat-mgr" id="btnChatMgr_<?=(int)$o['order_id']?>" style="flex:1;background:#f8fafc;border:1.5px solid #cbd5e1;color:#334155;padding:6px 10px;font-size:0.7rem;font-weight:600;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;" data-action="open-chat-mgr" data-channel="manager" data-order-id="<?=(int)$o['order_id']?>" data-order-ref="<?=htmlspecialchars($disp_ref)?>" data-customer-name="<?=htmlspecialchars($c_name_val)?>" data-customer-phone="<?=htmlspecialchars($c_phone_val)?>" data-customer-dial="<?=htmlspecialchars($c_dial)?>" data-store-name="<?=htmlspecialchars($c_store_val)?>" onclick="openOrderChat(<?=(int)$o['order_id']?>, '<?=htmlspecialchars(addslashes($c_name_val))?>', '<?=htmlspecialchars(addslashes($c_phone_val))?>', '<?=htmlspecialchars(addslashes($c_dial))?>', 'manager', '<?=htmlspecialchars(addslashes($c_store_val))?>')"><i class="fa-solid fa-headset" style="color:#0284c7;"></i> Chat Store / Dispatch Support</button></div></div><div id="rider-map-container" style="width: 100%; height: 300px; position: relative; margin: 10px 0; z-index: 5;">
     <div id="delivery-map" style="width: 100%; height: 100%;"></div>
 </div><div class="map-status-bar"><span><i class="fa-solid fa-route" style="color:var(--harvest-sun)"></i> <b id="mapRouteDistance">Calculating route...</b></span><span id="mapGpsLiveTag" style="font-weight:600; color:#2e7d32; display:none;"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> Live GPS Tracking</span></div><div class="actions" id="riderOrderActions_<?=(int)$o['order_id']?>" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;position:relative !important;z-index:20 !important;pointer-events:auto !important;"><?php if($is_delivered_state): ?><div class="delivery-complete-summary" id="deliveryCompleteSummary_<?=(int)$o['order_id']?>" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:13px; margin-top:4px;"><div style="display:flex; align-items:center; gap:8px; color:#15803d; font-weight:700; font-size:0.88rem;"><i class="fa-solid fa-circle-check" style="font-size:1.15rem; color:#16a34a;"></i><span>Delivery Handover Completed!</span></div><div style="font-size:0.73rem; color:#166534; margin:7px 0 12px; line-height:1.45;">Delivery handover is confirmed. Chat, navigation, and customer details remain active so you can finish communicating with the customer. When you are ready for your next delivery, click below:</div><button type="button" class="btn success full btn-open-clear" id="btnFinishClearTrigger_<?=(int)$o['order_id']?>" data-action="open-clear-modal" data-order-id="<?=(int)$o['order_id']?>" style="background:#16a34a; font-weight:700; padding:11px; box-shadow:0 3px 12px rgba(22,163,74,0.35); font-size:0.76rem;" onclick="doFinishAndClearDelivery(<?=(int)$o['order_id']?>)"><i class="fa-solid fa-flag-checkered"></i> Finish &amp; Clear / Next Order</button></div><?php else: ?><?php if($is_ready_pickup): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')"><i class="fa-solid fa-box-open"></i> Pick Up / Confirm Order</button><?php else: ?><button type="button" class="btn secondary full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'pickup')" title="Order is picked up and on delivery"><i class="fa-solid fa-check"></i> Order Picked Up (On Delivery)</button><?php if($del_st === 'on_the_way'): ?><button type="button" class="btn warn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'near')"><i class="fa-solid fa-location-dot"></i> I'm Near Customer</button><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'near_customer'): ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php elseif($del_st === 'arrived'): ?><div style="background:#ecfdf5; border:1.5px solid #6ee7b7; color:#065f46; padding:10px 14px; border-radius:10px; font-size:0.82rem; font-weight:700; text-align:center;"><i class="fa-solid fa-circle-check"></i> Arrived at Destination • Customer notified outside</div><?php else: ?><button type="button" class="btn full" onclick="doDeliveryAction(<?=$o['order_id']?>, 'arrived')" style="background:#e11d48; color:#ffffff; font-weight:700; box-shadow:0 3px 10px rgba(225,29,72,0.3);"><i class="fa-solid fa-location-pin-lock"></i> I've Arrived at Destination</button><?php endif; ?><?php endif; ?><button type="button" id="gpsToggleBtn_<?=$o['order_id']?>" class="btn secondary full gps-toggle-btn" onclick="toggleLiveLocation(<?=$o['order_id']?>)"><i class="fa-solid fa-satellite-dish"></i> <span id="gpsToggleText_<?=$o['order_id']?>">Share Live Location / GPS</span></button><button type="button" class="btn success full btn-open-handover" id="btnPromptHandover_<?=(int)$o['order_id']?>" data-action="prompt-handover" data-order-id="<?=(int)$o['order_id']?>" onclick="promptCompleteDelivery(<?=$o['order_id']?>)"><i class="fa-solid fa-circle-check"></i> Complete Delivery</button><?php endif; ?></div></div><?php endforeach; else: ?><div class="empty">No active delivery yet. Accept a ready order below.</div><?php endif; ?></div></section>
 <section class="section" id="available"><div class="section-title"><h2>Orders Ready for Pickup</h2></div><div class="card"><?php if($ready_orders): foreach($ready_orders as $o): 
@@ -1994,7 +2114,62 @@ main{padding:16px 16px 84px;flex:1;overflow-x:hidden}
   </div>
 </div>
 <!-- Rider Chat / Quick Message Modal -->
-<div class="modal" id="riderChatModal" style="display: none; pointer-events: none;" onclick="if(event.target===this)closeOrderChat()"><div class="chat-modal-box"><div class="chat-modal-header"><div style="display:flex;align-items:center;gap:8px;"><div class="chat-header-avatar"><i class="fa-solid fa-user"></i></div><div><h4 id="chatCustomerName" style="margin:0;font-size:13px;color:var(--olive-shadow);">Customer</h4><small id="chatCustomerPhone" style="font-size:10px;color:var(--muted);">+63 ...</small></div></div><button class="chat-close-btn" onclick="closeOrderChat()"><i class="fa-solid fa-xmark"></i></button></div><div class="quick-status-section"><div class="quick-title"><i class="fa-solid fa-bolt"></i> Quick Delivery Updates:</div><div class="quick-pills"><button type="button" class="quick-pill" onclick="sendQuickUpdate('I\'ve arrived outside with your order! 🛵')">🛵 I've arrived outside</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Traffic delay, on my way! 🚦')">🚦 Traffic delay, on my way</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Food picked up! Heading to your address now 🍱')">🍱 Heading to your address</button><button type="button" class="quick-pill" onclick="sendQuickUpdate('Please be ready at the gate/lobby 🚪')">🚪 Please be ready at gate</button></div></div><div id="chatMessagesList" class="chat-messages-container"><div class="chat-empty-hint">Loading conversation...</div></div><div class="chat-input-bar"><input type="text" id="chatInputText" placeholder="Type delivery message..." oninput="updateChatSmsLink(this.value)" onkeydown="if(event.key==='Enter') sendChatMessage()"><button type="button" class="chat-send-btn" onclick="sendChatMessage()" title="Send in App"><i class="fa-solid fa-paper-plane"></i></button><a href="javascript:void(0)" id="chatSmsLink" class="chat-sms-btn" target="_blank" title="Send via native SMS"><i class="fa-solid fa-comment-dots"></i> SMS</a></div></div></div>
+<div class="modal" id="riderChatModal" style="display: none; pointer-events: none;" role="dialog" aria-modal="true" aria-labelledby="chatCustomerName" onclick="if(event.target===this)closeOrderChat()">
+  <div class="chat-modal-box">
+    <div class="chat-modal-header">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div class="chat-header-avatar" id="chatHeaderAvatar"><i class="fa-solid fa-user"></i></div>
+        <div>
+          <div style="display: flex; align-items: center;">
+            <h4 id="chatCustomerName" style="margin: 0; font-size: 13px; font-weight: 700; color: var(--olive-shadow);">Customer</h4>
+            <span id="chatOrderRefBadge" class="chat-ref-badge">#FD-000</span>
+          </div>
+          <small id="chatCustomerPhone" style="font-size: 11px; color: var(--muted); font-weight: 500;">+63 ...</small>
+        </div>
+      </div>
+      <button type="button" class="chat-close-btn" data-action="close-chat" onclick="closeOrderChat()" aria-label="Close Chat">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <!-- Recipient Channel Switcher (Customer vs Store / Support) -->
+    <div class="chat-channel-bar" id="chatChannelBar">
+      <button type="button" class="chat-tab-btn active" id="chatTabCustomer" onclick="switchChatChannel('customer')">
+        <i class="fa-solid fa-user"></i> Customer
+      </button>
+      <button type="button" class="chat-tab-btn" id="chatTabManager" onclick="switchChatChannel('manager')">
+        <i class="fa-solid fa-shield-halved"></i> Store / Support
+      </button>
+    </div>
+
+    <!-- Dynamic Quick Delivery Update Pills -->
+    <div class="quick-status-section">
+      <div class="quick-title" id="chatQuickTitle"><i class="fa-solid fa-bolt"></i> Quick Delivery Updates:</div>
+      <div class="quick-pills" id="chatQuickPills">
+        <button type="button" class="quick-pill" onclick="sendQuickUpdate('I\'ve arrived outside with your order! 🛵')">🛵 I've arrived outside</button>
+        <button type="button" class="quick-pill" onclick="sendQuickUpdate('Traffic delay, on my way! 🚦')">🚦 Traffic delay, on my way</button>
+        <button type="button" class="quick-pill" onclick="sendQuickUpdate('Food picked up! Heading to your address now 🍱')">🍱 Heading to your address</button>
+        <button type="button" class="quick-pill" onclick="sendQuickUpdate('Please be ready at the gate/lobby 🚪')">🚪 Please be ready at gate</button>
+      </div>
+    </div>
+
+    <!-- Scrollable Message List Container -->
+    <div id="chatMessagesList" class="chat-messages-container">
+      <div class="chat-empty-hint">Loading conversation...</div>
+    </div>
+
+    <!-- Message Submission Form -->
+    <form class="chat-input-bar" id="chatInputForm" onsubmit="event.preventDefault(); sendChatMessage();">
+      <input type="text" id="chatInputText" placeholder="Type delivery message..." autocomplete="off" oninput="updateChatSmsLink(this.value)">
+      <button type="submit" class="chat-send-btn" id="chatSendBtn" title="Send in App">
+        <i class="fa-solid fa-paper-plane"></i>
+      </button>
+      <a href="javascript:void(0)" id="chatSmsLink" class="chat-sms-btn" target="_blank" title="Send via native SMS">
+        <i class="fa-solid fa-comment-dots"></i> SMS
+      </a>
+    </form>
+  </div>
+</div>
 <!-- Desktop / Simulator Outgoing Call Modal -->
 <div class="modal" id="riderCallModal" style="display: none; pointer-events: none;" onclick="if(event.target===this)endRiderCall()"><div class="box rider-call-box"><div class="call-avatar-pulse"><div class="call-pulse-circle"></div><div class="call-avatar-icon"><i class="fa-solid fa-phone-volume"></i></div></div><div class="call-badge-live"><i class="fa-solid fa-circle-dot fa-beat-fade"></i> IN-APP CALL ACTIVE</div><h3 id="modalCallCustName" style="margin:0 0 4px;font-size:1.25rem;">Customer</h3><div class="modal-call-phone" id="modalCallCustPhone">+63 917 123 4567</div><p id="modalCallStatusText" class="modal-call-status">Ringing customer's device in real-time... (Incoming call banner displayed on customer map)</p><div class="modal-call-timer" id="modalCallTimer" style="display:none;">00:00</div><div class="call-modal-buttons"><button type="button" class="btn call-sim-btn" id="btnSimulateConnect" onclick="simulateCallConnect()"><i class="fa-solid fa-headset"></i> Test Connected Call</button><a href="javascript:void(0)" id="modalCallNativeTelBtn" class="btn call-native-btn" title="Open native phone dialer"><i class="fa-solid fa-mobile-screen-button"></i> Open Native Dialer</a><button type="button" class="btn call-end-btn" onclick="endRiderCall()"><i class="fa-solid fa-phone-slash"></i> End Call</button></div></div></div>
 <!-- PC Testing Simulator Floating Controls Bar -->
@@ -2130,7 +2305,7 @@ async function readNote(id){await fetch('notification_api.php',{method:'POST',he
 async function markAllRead(){await fetch('notification_api.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_all_read'})});loadNotifications()}
 function openNotifications(){const m=document.getElementById('noteModal');if(m){m.style.display='flex';m.style.pointerEvents='auto';m.classList.add('show');}loadNotifications()}function closeNotifications(){const m=document.getElementById('noteModal');if(m){m.style.display='none';m.style.pointerEvents='none';m.classList.remove('show');}}
 function openLogout(){window.isLoggingOut = true; try { localStorage.setItem('fd_logging_out', '1'); sessionStorage.setItem('fd_logging_out', '1'); localStorage.setItem('fd_arrival_acknowledged_all', '1'); } catch(e) {} if (window.FoodDashCall && typeof window.FoodDashCall.stopArrivalAlarm === 'function') { window.FoodDashCall.stopArrivalAlarm(); window.FoodDashCall.stopAllTones(); } const m=document.getElementById('logoutModal');if(m){m.style.display='flex';m.style.pointerEvents='auto';m.classList.add('show');}}function closeLogout(){window.isLoggingOut = false; try { localStorage.removeItem('fd_logging_out'); sessionStorage.removeItem('fd_logging_out'); } catch(e) {} const m=document.getElementById('logoutModal');if(m){m.style.display='none';m.style.pointerEvents='none';m.classList.remove('show');}}
-loadNotifications();setInterval(loadNotifications,5000);document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNotifications();closeLogout()}});
+loadNotifications();setInterval(loadNotifications,5000);document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNotifications();closeLogout();if(typeof closeOrderChat==='function')closeOrderChat();}});
 
 // Active Delivery Data passed from backend
 const activeDeliveryData = <?= $active_delivery_json ?>;
@@ -3865,44 +4040,137 @@ document.addEventListener('DOMContentLoaded', () => {
   setupRiderMapObservers();
 });
 window.addEventListener('beforeunload', () => stopLiveLocation());
-// Rider & Customer Chat Integration
+// Rider & Customer / Manager Chat Integration
 let activeChatOrderId = null;
+let activeChatCustomerName = '';
 let activeChatCustomerPhone = '';
+let activeChatStoreName = '';
+let activeChatChannel = 'customer'; // 'customer' or 'manager'
 let chatPollTimer = null;
 let lastKnownMessageId = 0;
+let isChatSubmitting = false;
 
-function openOrderChat(orderId, name, phone, dial) {
-  activeChatOrderId = orderId;
-  const targetPhone = dial || phone || '+639285550148';
-  activeChatCustomerPhone = targetPhone;
+const CUSTOMER_QUICK_PILLS = [
+  { icon: '🛵', label: "I've arrived outside", text: "I've arrived outside with your order! 🛵" },
+  { icon: '🚦', label: "Traffic delay, on my way", text: "Traffic delay, on my way! 🚦" },
+  { icon: '🍱', label: "Heading to your address", text: "Food picked up! Heading to your address now 🍱" },
+  { icon: '🚪', label: "Please be ready at gate", text: "Please be ready at the gate/lobby 🚪" }
+];
+
+const MANAGER_QUICK_PILLS = [
+  { icon: '📦', label: "Order ready for pickup?", text: "Hi! Is order ready for pickup? Rider is here. 📦" },
+  { icon: '⏳', label: "Delay at store", text: "Kitchen preparation delay, waiting at restaurant. ⏳" },
+  { icon: '📍', label: "Customer unreachable", text: "Customer phone unattended / unreachable at address. 📍" },
+  { icon: '✅', label: "Handover completed", text: "Delivery handover completed smoothly with customer! ✅" }
+];
+
+function switchChatChannel(channel) {
+  activeChatChannel = (channel === 'manager' || channel === 'support') ? 'manager' : 'customer';
+  updateChatChannelUI();
+}
+
+function updateChatChannelUI() {
+  const tabCust = document.getElementById('chatTabCustomer');
+  const tabMgr = document.getElementById('chatTabManager');
+  const headerAvatar = document.getElementById('chatHeaderAvatar');
+  const nameEl = document.getElementById('chatCustomerName');
+  const phoneEl = document.getElementById('chatCustomerPhone');
+  const smsBtn = document.getElementById('chatSmsLink');
+  const inputEl = document.getElementById('chatInputText');
+  const pillsContainer = document.getElementById('chatQuickPills');
+  const quickTitle = document.getElementById('chatQuickTitle');
+
+  if (activeChatChannel === 'manager') {
+    if (tabCust) tabCust.classList.remove('active');
+    if (tabMgr) tabMgr.classList.add('active');
+    if (headerAvatar) {
+      headerAvatar.innerHTML = '<i class="fa-solid fa-headset"></i>';
+      headerAvatar.classList.add('manager-mode');
+    }
+    if (nameEl) nameEl.textContent = (activeChatStoreName ? activeChatStoreName + ' & Support' : 'Store & Dispatch Support');
+    if (phoneEl) phoneEl.textContent = 'Platform & Store Operational Channel';
+    if (smsBtn) smsBtn.style.display = 'none';
+    if (inputEl) inputEl.placeholder = 'Message store manager / dispatcher...';
+    if (quickTitle) quickTitle.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Operational Dispatch Updates:';
+
+    if (pillsContainer) {
+      pillsContainer.innerHTML = MANAGER_QUICK_PILLS.map(p => 
+        `<button type="button" class="quick-pill" onclick="sendQuickUpdate(${JSON.stringify(p.text)})">${escapeHtml(p.icon + ' ' + p.label)}</button>`
+      ).join('');
+    }
+  } else {
+    if (tabCust) tabCust.classList.add('active');
+    if (tabMgr) tabMgr.classList.remove('active');
+    if (headerAvatar) {
+      headerAvatar.innerHTML = '<i class="fa-solid fa-user"></i>';
+      headerAvatar.classList.remove('manager-mode');
+    }
+    if (nameEl) nameEl.textContent = activeChatCustomerName || currentActiveCustomerName || 'Customer';
+    if (phoneEl) phoneEl.textContent = activeChatCustomerPhone || currentActiveCustomerPhone || '+63 917 123 4567';
+    if (smsBtn) smsBtn.style.display = 'inline-flex';
+    if (inputEl) inputEl.placeholder = 'Type delivery message to customer...';
+    if (quickTitle) quickTitle.innerHTML = '<i class="fa-solid fa-bolt"></i> Quick Delivery Updates:';
+
+    if (pillsContainer) {
+      pillsContainer.innerHTML = CUSTOMER_QUICK_PILLS.map(p => 
+        `<button type="button" class="quick-pill" onclick="sendQuickUpdate(${JSON.stringify(p.text)})">${escapeHtml(p.icon + ' ' + p.label)}</button>`
+      ).join('');
+    }
+  }
+
+  updateChatSmsLink(inputEl ? inputEl.value : '');
+}
+
+function openOrderChat(orderId, name, phone, dial, initialChannel, storeName) {
+  const resolvedOrderId = orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? (activeDeliveryData.order_id || activeDeliveryData.id) : null);
+  if (!resolvedOrderId) {
+    toastRider('No active delivery selected for chat', true);
+    return;
+  }
+  activeChatOrderId = parseInt(resolvedOrderId, 10);
   lastKnownMessageId = 0;
 
-  const nameEl = document.getElementById('chatCustomerName');
-  if (nameEl) nameEl.textContent = name || 'Customer';
-  const phoneEl = document.getElementById('chatCustomerPhone');
-  if (phoneEl) phoneEl.textContent = phone || targetPhone;
+  activeChatCustomerName = name || currentActiveCustomerName || 'Customer';
+  const targetPhone = dial || phone || currentActiveCustomerPhone || '+63 917 123 4567';
+  activeChatCustomerPhone = targetPhone;
+  activeChatStoreName = storeName || (activeDeliveryData ? activeDeliveryData.store_name : '') || 'Store';
+  activeChatChannel = (initialChannel === 'manager' || initialChannel === 'support') ? 'manager' : 'customer';
 
-  updateChatSmsLink('');
+  const refBadge = document.getElementById('chatOrderRefBadge');
+  if (refBadge) {
+    const dispRef = (activeDeliveryData && activeDeliveryData.order_ref) 
+      ? ('#' + String(activeDeliveryData.order_ref).replace(/^#+/, '')) 
+      : ('#FD-' + activeChatOrderId);
+    refBadge.textContent = dispRef;
+  }
+
+  updateChatChannelUI();
 
   const modal = document.getElementById('riderChatModal');
   if (modal) {
-    modal.style.display = 'block';
-    modal.style.setProperty('display', 'block', 'important');
-    modal.style.zIndex = '99999';
-    modal.style.setProperty('z-index', '99999', 'important');
+    modal.style.removeProperty('display');
+    modal.style.removeProperty('pointer-events');
+    modal.style.removeProperty('visibility');
+    modal.style.removeProperty('opacity');
+    modal.style.display = 'flex';
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.visibility = 'visible';
+    modal.style.setProperty('visibility', 'visible', 'important');
+    modal.style.opacity = '1';
+    modal.style.setProperty('opacity', '1', 'important');
     modal.style.pointerEvents = 'auto';
     modal.style.setProperty('pointer-events', 'auto', 'important');
+    modal.style.zIndex = '99999';
+    modal.style.setProperty('z-index', '99999', 'important');
     modal.classList.add('show');
-
-    // Ensure closing properly on backdrop clicks
-    modal.onclick = function(e) {
-      if (e.target === modal) {
-        closeOrderChat();
-      }
-    };
   }
 
-  fetchOrderMessages(orderId, true);
+  setTimeout(() => {
+    const input = document.getElementById('chatInputText');
+    if (input) input.focus();
+  }, 120);
+
+  fetchOrderMessages(activeChatOrderId, true);
 
   if (chatPollTimer) clearInterval(chatPollTimer);
   chatPollTimer = setInterval(() => {
@@ -3919,6 +4187,10 @@ function closeOrderChat() {
     modal.style.setProperty('display', 'none', 'important');
     modal.style.pointerEvents = 'none';
     modal.style.setProperty('pointer-events', 'none', 'important');
+    modal.style.visibility = 'hidden';
+    modal.style.setProperty('visibility', 'hidden', 'important');
+    modal.style.opacity = '0';
+    modal.style.setProperty('opacity', '0', 'important');
     modal.classList.remove('show');
   }
   if (chatPollTimer) {
@@ -3936,9 +4208,56 @@ function updateChatSmsLink(text) {
   smsBtn.href = `sms:${activeChatCustomerPhone}?body=${body}`;
 }
 
+function renderMessageBubble(msg) {
+  const sRole = String(msg.sender_role || '').toLowerCase();
+  const rRole = String(msg.receiver_role || 'customer').toLowerCase();
+  const isMe = (sRole === 'rider');
+  const isSystem = (sRole === 'system');
+  const isManager = (sRole === 'manager' || sRole === 'admin');
+
+  const bubble = document.createElement('div');
+  const msgId = msg.message_id || 0;
+  if (msgId > 0) bubble.setAttribute('data-msg-id', msgId);
+
+  if (isSystem) {
+    bubble.className = 'msg-bubble system';
+    bubble.innerHTML = `<div><i class="fa-solid fa-circle-info"></i> ${escapeHtml(msg.message_text)}</div>`;
+    return bubble;
+  }
+
+  bubble.className = `msg-bubble ${isMe ? 'me' : 'them'}${isManager ? ' manager' : ''}`;
+
+  let tagHtml = '';
+  if (isMe) {
+    if (rRole === 'manager' || rRole === 'admin') {
+      tagHtml = `<span class="msg-tag-pill msg-tag-mgr"><i class="fa-solid fa-shield-halved"></i> To Manager</span>`;
+    } else {
+      tagHtml = `<span class="msg-tag-pill msg-tag-rider">To Customer</span>`;
+    }
+  } else if (isManager) {
+    tagHtml = `<span class="msg-tag-pill msg-tag-mgr"><i class="fa-solid fa-shield-halved"></i> Manager</span>`;
+  } else {
+    tagHtml = `<span class="msg-tag-pill msg-tag-cust"><i class="fa-solid fa-user"></i> Customer</span>`;
+  }
+
+  const senderName = isMe ? 'You' : (msg.sender_name || (isManager ? 'Support Dispatcher' : 'Customer'));
+  const timeStr = msg.time_formatted || (new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  bubble.innerHTML = `
+    <div>${escapeHtml(msg.message_text)}</div>
+    <div class="msg-meta">
+      ${tagHtml}
+      <span>${escapeHtml(senderName)} • ${escapeHtml(timeStr)}</span>
+    </div>
+  `;
+  return bubble;
+}
+
 async function fetchOrderMessages(orderId, scrollToBottom) {
+  if (!orderId) return;
   try {
-    const res = await fetch(`order_messages_api.php?order_id=${orderId}&after_id=${lastKnownMessageId}`);
+    const res = await fetch(`order_messages_api.php?order_id=${orderId}&after_id=${lastKnownMessageId}&_t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
     const data = await res.json();
     if (data.success && Array.isArray(data.messages)) {
       const container = document.getElementById('chatMessagesList');
@@ -3948,35 +4267,39 @@ async function fetchOrderMessages(orderId, scrollToBottom) {
         container.innerHTML = '';
       }
 
+      if (data.customer_phone && data.customer_phone !== activeChatCustomerPhone) {
+        activeChatCustomerPhone = data.customer_phone;
+        const phoneEl = document.getElementById('chatCustomerPhone');
+        if (phoneEl && activeChatChannel === 'customer') {
+          phoneEl.textContent = data.customer_phone;
+        }
+      }
+
       if (data.messages.length > 0) {
         const hint = container.querySelector('.chat-empty-hint');
         if (hint) hint.remove();
 
+        let hasNew = false;
         data.messages.forEach(msg => {
-          if (msg.message_id > lastKnownMessageId) {
-            lastKnownMessageId = msg.message_id;
-            if (msg.message_id > highestSeenMessageId) highestSeenMessageId = msg.message_id;
-            seenRiderMessageIds.add(msg.message_id);
+          const mId = msg.message_id;
+          if (mId > lastKnownMessageId) {
+            lastKnownMessageId = mId;
+            if (mId > highestSeenMessageId) highestSeenMessageId = mId;
+            seenRiderMessageIds.add(mId);
 
-            if (container.querySelector(`[data-msg-id="${msg.message_id}"]`)) return;
+            if (container.querySelector(`[data-msg-id="${mId}"]`)) return;
 
-            const isMe = msg.sender_role === 'rider';
-            const bubble = document.createElement('div');
-            bubble.className = `msg-bubble ${isMe ? 'me' : 'them'}`;
-            bubble.setAttribute('data-msg-id', msg.message_id);
-            bubble.innerHTML = `
-              <div>${escapeHtml(msg.message_text)}</div>
-              <div class="msg-meta">${escapeHtml(msg.sender_name)} • ${escapeHtml(msg.time_formatted || '')}</div>
-            `;
+            const bubble = renderMessageBubble(msg);
             container.appendChild(bubble);
+            hasNew = true;
           }
         });
 
-        if (scrollToBottom || data.messages.length > 0) {
+        if (scrollToBottom || hasNew) {
           container.scrollTop = container.scrollHeight;
         }
-      } else if (lastKnownMessageId === 0) {
-        container.innerHTML = '<div class="chat-empty-hint">No messages yet. Send a quick update or custom note!</div>';
+      } else if (lastKnownMessageId === 0 && !container.querySelector('.msg-bubble')) {
+        container.innerHTML = '<div class="chat-empty-hint">No messages yet. Send a quick update or message below!</div>';
       }
     }
   } catch (err) {
@@ -3988,34 +4311,84 @@ async function sendChatMessage() {
   const input = document.getElementById('chatInputText');
   if (!input) return;
   const text = input.value.trim();
-  if (!text || !activeChatOrderId) return;
+  if (!text || !activeChatOrderId || isChatSubmitting) return;
 
   input.value = '';
   await submitMessageToServer(activeChatOrderId, text);
 }
 
 function sendQuickUpdate(text) {
-  if (!activeChatOrderId) return;
+  if (!activeChatOrderId || !text || isChatSubmitting) return;
   updateChatSmsLink(text);
   submitMessageToServer(activeChatOrderId, text);
 }
 
 async function submitMessageToServer(orderId, text) {
+  if (!orderId || !text || isChatSubmitting) return;
+  isChatSubmitting = true;
+
+  const sendBtn = document.getElementById('chatSendBtn');
+  const input = document.getElementById('chatInputText');
+  if (sendBtn) sendBtn.disabled = true;
+
+  const container = document.getElementById('chatMessagesList');
+  let tempBubble = null;
+
+  if (container) {
+    const hint = container.querySelector('.chat-empty-hint');
+    if (hint) hint.remove();
+
+    tempBubble = renderMessageBubble({
+      message_id: 0,
+      sender_role: 'rider',
+      receiver_role: activeChatChannel,
+      sender_name: 'You',
+      message_text: text,
+      time_formatted: 'Sending...'
+    });
+    tempBubble.classList.add('optimistic');
+    container.appendChild(tempBubble);
+    container.scrollTop = container.scrollHeight;
+  }
+
   try {
     const res = await fetch('order_messages_api.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_id: orderId, message_text: text })
+      body: JSON.stringify({
+        order_id: orderId,
+        message_text: text,
+        recipient: activeChatChannel
+      })
     });
     const data = await res.json();
+
     if (data.success) {
-      fetchOrderMessages(orderId, true);
+      if (tempBubble) {
+        tempBubble.classList.remove('optimistic');
+        tempBubble.setAttribute('data-msg-id', data.message_id);
+        const metaSpan = tempBubble.querySelector('.msg-meta span');
+        if (metaSpan) metaSpan.textContent = `You • ${data.time_formatted || 'Just now'}`;
+      }
+      if (data.message_id) {
+        lastKnownMessageId = Math.max(lastKnownMessageId, data.message_id);
+        highestSeenMessageId = Math.max(highestSeenMessageId, data.message_id);
+        seenRiderMessageIds.add(data.message_id);
+      }
+      if (input) input.focus();
     } else {
+      if (tempBubble) tempBubble.remove();
+      if (input) input.value = text;
       toastRider(data.message || 'Failed to send message', true);
     }
   } catch (err) {
     console.error('Error sending message:', err);
+    if (tempBubble) tempBubble.remove();
+    if (input) input.value = text;
     toastRider('Network error sending message', true);
+  } finally {
+    isChatSubmitting = false;
+    if (sendBtn) sendBtn.disabled = false;
   }
 }
 
@@ -4392,27 +4765,77 @@ document.addEventListener('click', function(e) {
     return;
   }
 
-  // Backdrop click on clearDeliveryModal, riderConfirmModal, or riderCompletedOrdersModal
-  if (e.target && (e.target.id === 'clearDeliveryModal' || e.target.id === 'riderConfirmModal' || e.target.id === 'riderCompletedOrdersModal')) {
-    e.target.style.display = 'none';
-    e.target.classList.remove('show');
+  // Chat modal open triggers (from active delivery, cards, or buttons)
+  const openChatTrigger = e.target.closest('.btn-open-chat, .msg-action-btn, [data-action="open-chat"]');
+  if (openChatTrigger && !e.target.closest('#riderChatModal')) {
+    e.preventDefault();
+    e.stopPropagation();
+    const orderId = openChatTrigger.dataset.orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
+    const name = openChatTrigger.dataset.customerName || currentActiveCustomerName || 'Customer';
+    const phone = openChatTrigger.dataset.customerPhone || currentActiveCustomerPhone || '+63 917 123 4567';
+    const dial = openChatTrigger.dataset.customerDial || phone;
+    const store = openChatTrigger.dataset.storeName || (activeDeliveryData ? activeDeliveryData.store_name : '') || 'Store';
+    const channel = openChatTrigger.dataset.channel || 'customer';
+    openOrderChat(orderId, name, phone, dial, channel, store);
+    return;
+  }
+
+  // Support / Manager chat trigger
+  const openChatMgrTrigger = e.target.closest('.btn-open-chat-mgr, .mgr-action-btn, [data-action="open-chat-mgr"]');
+  if (openChatMgrTrigger && !e.target.closest('#riderChatModal')) {
+    e.preventDefault();
+    e.stopPropagation();
+    const orderId = openChatMgrTrigger.dataset.orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
+    const name = openChatMgrTrigger.dataset.customerName || currentActiveCustomerName || 'Customer';
+    const phone = openChatMgrTrigger.dataset.customerPhone || currentActiveCustomerPhone || '+63 917 123 4567';
+    const dial = openChatMgrTrigger.dataset.customerDial || phone;
+    const store = openChatMgrTrigger.dataset.storeName || (activeDeliveryData ? activeDeliveryData.store_name : '') || 'Store';
+    openOrderChat(orderId, name, phone, dial, 'manager', store);
+    return;
+  }
+
+  // Chat close trigger
+  const closeChatTrigger = e.target.closest('.chat-close-btn, [data-action="close-chat"]');
+  if (closeChatTrigger && closeChatTrigger.closest('#riderChatModal')) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeOrderChat();
+    return;
+  }
+
+  // Backdrop click on riderChatModal, clearDeliveryModal, riderConfirmModal, or riderCompletedOrdersModal
+  if (e.target && (e.target.id === 'riderChatModal' || e.target.id === 'clearDeliveryModal' || e.target.id === 'riderConfirmModal' || e.target.id === 'riderCompletedOrdersModal')) {
+    if (e.target.id === 'riderChatModal') {
+      closeOrderChat();
+    } else {
+      e.target.style.display = 'none';
+      e.target.classList.remove('show');
+    }
     return;
   }
 });
 
 let _riderCustToastTimer = null;
-function showRiderCustomerMessageToast(displayText, senderName) {
+let _lastToastSenderRole = 'customer';
+function showRiderCustomerMessageToast(displayText, senderName, senderRole) {
+  _lastToastSenderRole = senderRole || 'customer';
   const toast = document.getElementById('riderCustomerToast');
   const titleEl = document.getElementById('rctTitle');
   const textEl = document.getElementById('rctText');
   if (toast && textEl) {
-    if (titleEl) titleEl.textContent = 'Message from ' + (senderName || 'Customer');
+    if (titleEl) {
+      if (senderRole === 'manager' || senderRole === 'admin') {
+        titleEl.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Manager Message';
+      } else {
+        titleEl.innerHTML = '<i class="fa-solid fa-comment-dots"></i> Customer Message';
+      }
+    }
     textEl.textContent = displayText;
     toast.classList.add('show');
     clearTimeout(_riderCustToastTimer);
     _riderCustToastTimer = setTimeout(() => {
       toast.classList.remove('show');
-    }, 3000);
+    }, 4500);
   }
   toastRider(displayText);
 }
@@ -4425,7 +4848,7 @@ function dismissRiderCustomerToast() {
 function openOrderChatFromToast() {
   dismissRiderCustomerToast();
   if (activeRiderDeliveryOrderId) {
-    openOrderChat(activeRiderDeliveryOrderId, currentActiveCustomerName || 'Customer', currentActiveCustomerPhone || '+639171234567');
+    openOrderChat(activeRiderDeliveryOrderId, currentActiveCustomerName || 'Customer', currentActiveCustomerPhone || '+639171234567', null, _lastToastSenderRole);
   }
 }
 
@@ -4479,17 +4902,7 @@ function appendCustomerMessageToRiderChat(msg) {
   const hint = container.querySelector('.chat-empty-hint');
   if (hint) hint.remove();
 
-  const isMe = msg.sender_role === 'rider';
-  const bubble = document.createElement('div');
-  bubble.className = `msg-bubble ${isMe ? 'me' : 'them'}`;
-  if (msgId > 0) bubble.setAttribute('data-msg-id', msgId);
-  const timeFormatted = msg.time_formatted || (new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const senderName = msg.sender_name || (isMe ? 'You' : 'Customer');
-
-  bubble.innerHTML = `
-    <div>${escapeHtml(msg.message_text)}</div>
-    <div class="msg-meta">${escapeHtml(senderName)} • ${escapeHtml(timeFormatted)}</div>
-  `;
+  const bubble = renderMessageBubble(msg);
   container.appendChild(bubble);
   container.scrollTop = container.scrollHeight;
 }
@@ -4573,14 +4986,19 @@ async function pollRiderOrderCommunication() {
 
           if (msg.sender_role === 'customer' || msg.sender_role !== 'rider') {
             let displayText = msg.message_text || '';
-            if (!displayText.toLowerCase().startsWith('customer:')) {
+            const sRole = String(msg.sender_role || '').toLowerCase();
+            if (sRole === 'manager' || sRole === 'admin') {
+              if (!displayText.toLowerCase().startsWith('manager:')) {
+                displayText = 'Manager: ' + displayText;
+              }
+            } else if (!displayText.toLowerCase().startsWith('customer:')) {
               displayText = 'Customer: ' + displayText;
             }
-            // a. Instantly display floating toast alert: "Customer: [Message]"
-            showRiderCustomerMessageToast(displayText, msg.sender_name);
+            // a. Instantly display floating toast alert: "Customer: [Message]" or "Manager: [Message]"
+            showRiderCustomerMessageToast(displayText, msg.sender_name, sRole);
             // b. Play audio chime alert
             playRiderChime();
-            // c. Automatically append customer's message into rider's chat box without page refresh
+            // c. Automatically append customer's / manager's message into rider's chat box without page refresh
             appendCustomerMessageToRiderChat(msg);
           } else {
             appendCustomerMessageToRiderChat(msg);
