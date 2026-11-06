@@ -425,12 +425,12 @@ $latest_backup_str   = $latest_backup_time > 0 ? date('M d, Y • h:i A', $lates
 
     /* RESPONSIVE APP SHELL */
     .app {
-      width: 100%;
-      max-width: 980px;
-      min-height: 800px;
+      width: 96%;
+      max-width: 1400px;
+      min-height: 860px;
       background: #fffdf7;
       position: relative;
-      box-shadow: 0 10px 30px rgba(75,83,32,.12);
+      box-shadow: 0 14px 40px rgba(75,83,32,.12);
       display: flex;
       flex-direction: column;
       margin: 0 auto;
@@ -440,7 +440,7 @@ $latest_backup_str   = $latest_backup_time > 0 ? date('M d, Y • h:i A', $lates
     }
 
     @media (max-width: 991px) {
-      .app { max-width: 720px; }
+      .app { width: 98%; max-width: 100%; border-radius: 20px; }
     }
 
     @media (max-width: 767px) {
@@ -1036,7 +1036,7 @@ $latest_backup_str   = $latest_backup_time > 0 ? date('M d, Y • h:i A', $lates
     }
     .dock-inner {
       width: 100%;
-      max-width: 980px;
+      max-width: 1400px;
       display: flex;
       justify-content: space-around;
       align-items: center;
