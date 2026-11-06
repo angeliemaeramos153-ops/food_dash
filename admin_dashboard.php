@@ -802,7 +802,7 @@ $txn_count = count($transactions);
 $total_revenue = number_format($total_revenue, 2);
 
 $active_tab = 'analytics';
-if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditlogs', 'riders', 'stores', 'menus', 'transactions', 'dispatch-map'], true)) {
+if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditlogs', 'riders', 'stores', 'menus', 'transactions', 'dispatch-map', 'backup'], true)) {
     $active_tab = $_GET['tab'];
 } elseif (isset($_POST['active_tab'])) {
     $active_tab = $_POST['active_tab'];
@@ -1296,6 +1296,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       <div class="action-header-btns">
         <button type="button" class="mobile-logout" onclick="openModal('logoutModal')"><i class="fa-solid fa-right-from-bracket"></i></button>
         <button class="btn-action" onclick="switchTab('dispatch-map')" style="background:var(--fd-gold);"><i class="fa-solid fa-map-location-dot"></i> Fleet Map</button>
+        <a href="backup_recovery.php" class="btn-action" style="background:#5a6e4d; text-decoration:none;"><i class="fa-solid fa-database"></i> Backup & Restore</a>
         <button class="btn-action" onclick="openModal('addUserModal')" style="background:var(--fd-olive);"><i class="fa-solid fa-user-plus"></i> New User</button>
         <button class="btn-action" onclick="openModal('addRiderModal')"><i class="fa-solid fa-motorcycle"></i> New Rider</button>
         <button class="btn-action" onclick="openModal('addShopModal')"><i class="fa-solid fa-plus"></i> New Shop</button>
@@ -1350,6 +1351,13 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
             <p>Fleet Riders (Live GPS)</p>
           </div>
           <i class="fa-solid fa-motorcycle metric-icon" style="color:#4B5320;"></i>
+        </div>
+        <div class="metric-card" onclick="location.href='backup_recovery.php';" style="cursor:pointer;" title="Requirement H: Database Backup & Recovery">
+          <div class="metric-data">
+            <h3>DB Backup</h3>
+            <p>Database Recovery (Req H)</p>
+          </div>
+          <i class="fa-solid fa-database metric-icon" style="color:var(--fd-olive);"></i>
         </div>
       </div>
     </div>
@@ -2076,6 +2084,36 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       </div>
     </div>
 
+    <!-- TAB: DATABASE BACKUP & RECOVERY (REQUIREMENT H) -->
+    <div id="tab-backup" class="tab-section">
+      <div class="dashboard-section" style="border-left: 4px solid var(--fd-olive);">
+        <div class="section-title">
+          <span><i class="fa-solid fa-database" style="color:var(--fd-olive);"></i> Requirement H: Database Backup and Recovery</span>
+          <a href="backup_recovery.php" class="btn-action" style="padding: 6px 12px; font-size: 0.75rem; background: var(--fd-olive); color: white; text-decoration: none;">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Backup Module
+          </a>
+        </div>
+        <p style="font-size:11px; color:#74776a; margin-bottom:14px;">
+          Food Dash provides automated database snapshots using <code>mysqldump</code>, protected local storage in <code>/backups/</code> with <code>.htaccess</code> access denial, and one-click database restoration with safety verification prompts.
+        </p>
+
+        <div style="background:linear-gradient(135deg, #FAF6EE 0%, #FFFFFF 100%); border:1px solid #D4C5A5; border-radius:16px; padding:18px; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div>
+              <span style="display:inline-block; font-size:9.5px; font-weight:700; color:#D88F2A; background:#FFF4E5; border:1px solid #D88F2A; padding:2px 8px; border-radius:10px; margin-bottom:6px; text-transform:uppercase;">Requirement H Module</span>
+              <h4 style="font-size:13px; color:#344016; margin-bottom:4px;">MySQL Database Snapshots & Recovery Console</h4>
+              <p style="font-size:10.5px; color:#6a6e60;">Target: <code>food_dash</code> on MySQL localhost • Protected storage in <code>/backups/</code></p>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <a href="backup_recovery.php" class="btn-action" style="background:var(--fd-olive); text-decoration:none; padding:10px 16px; font-size:11px;">
+                <i class="fa-solid fa-database"></i> Launch Backup & Recovery Panel
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <!-- BOTTOM NAVIGATION / SIDEBAR -->
@@ -2095,6 +2133,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
         <li><a onclick="switchTab('stores')" id="nav-stores"><i class="fa-solid fa-store"></i> Stores</a></li>
         <li><a onclick="switchTab('menus')" id="nav-menus"><i class="fa-solid fa-utensils"></i> Menus</a></li>
         <li><a onclick="switchTab('transactions')" id="nav-transactions"><i class="fa-solid fa-receipt"></i> Orders</a></li>
+        <li><a href="backup_recovery.php" id="nav-backup"><i class="fa-solid fa-database"></i> Database Backup</a></li>
         <li><a onclick="openModal('msgModal')"><i class="fa-solid fa-bullhorn"></i> Broadcast</a></li>
       </ul>
     </div>
