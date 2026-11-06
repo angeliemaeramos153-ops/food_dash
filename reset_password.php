@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_update_passwor
         try {
             $up_stmt = $conn->prepare("
                 UPDATE users 
-                SET password = :pwd, failed_attempts = 0, lockout_until = NULL 
+                SET password = :pwd, failed_login_attempts = 0, failed_attempts = 0, lockout_until = NULL 
                 WHERE user_id = :uid
             ");
             $up_stmt->execute([

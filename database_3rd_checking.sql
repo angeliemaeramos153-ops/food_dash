@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) DEFAULT NULL,
     password VARCHAR(255) NOT NULL,
     role VARCHAR(20) DEFAULT 'customer',
+    failed_login_attempts INT DEFAULT 0,
     failed_attempts INT DEFAULT 0,
     lockout_until DATETIME NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

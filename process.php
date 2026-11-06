@@ -66,7 +66,7 @@ if ($action === 'admin_reset_password' || $action === 'action_reset_password_unl
     $hashed = password_hash($new_password, PASSWORD_BCRYPT);
 
     if ($unlock_account) {
-        $upd = $pdo->prepare("UPDATE users SET password = :pwd, failed_attempts = 0, lockout_until = NULL WHERE user_id = :uid");
+        $upd = $pdo->prepare("UPDATE users SET password = :pwd, failed_login_attempts = 0, failed_attempts = 0, lockout_until = NULL WHERE user_id = :uid");
         $upd->execute([':pwd' => $hashed, ':uid' => $target_user_id]);
     } else {
         $upd = $pdo->prepare("UPDATE users SET password = :pwd WHERE user_id = :uid");

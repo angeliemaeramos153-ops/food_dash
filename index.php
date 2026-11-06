@@ -42,16 +42,20 @@ function redirectUserByRole($role) {
     exit();
 }
 
-$error_msg = "";
-$success_msg = "";
+$error_msg = $error_msg ?? "";
+$success_msg = $success_msg ?? "";
 $active_tab = "login";
-$lockout_remaining_seconds = 0;
+$lockout_remaining_seconds = $lockout_remaining_seconds ?? 0;
 $saved_demo_user_js = null;
 $clear_cart_on_load = false;
 
 if (empty($error_msg) && !empty($_SESSION['login_error'])) {
     $error_msg = $_SESSION['login_error'];
     unset($_SESSION['login_error']);
+}
+if (!empty($_SESSION['lockout_remaining_seconds'])) {
+    $lockout_remaining_seconds = (int)$_SESSION['lockout_remaining_seconds'];
+    unset($_SESSION['lockout_remaining_seconds']);
 }
 
 // 1. Handle URL Query Alerts
@@ -82,15 +86,15 @@ if (isset($_GET['tab']) && $_GET['tab'] === 'register') {
 if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     
     // LOGIN ACTION WITH BRUTE-FORCE LOCKOUT & PROGRESSIVE DURATION
-    if (isset($_POST['login'])) {
+    if (isset($_POST['login']) && empty($login_handled)) {
         $active_tab = 'login';
         $username_input = trim($_POST['username'] ?? '');
-        $password_input = trim($_POST['password'] ?? '');
+        $password_input = (string)($_POST['password'] ?? '');
 
         if (empty($username_input) || empty($password_input)) {
             $error_msg = "Please enter both username and password.";
         } else {
-            $stmt = $conn->prepare("SELECT user_id, username, full_name, email, password, role, failed_attempts, lockout_until FROM users WHERE username = :u OR email = :e LIMIT 1");
+            $stmt = $conn->prepare("SELECT user_id, username, full_name, email, password, role, failed_login_attempts, failed_attempts, lockout_until FROM users WHERE username = :u OR email = :e LIMIT 1");
             $stmt->execute([':u' => $username_input, ':e' => $username_input]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -99,17 +103,17 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
                 log_activity($conn, null, 'LOGIN_FAILED', "Failed login attempt for non-existent account: {$username_input}", $username_input, null);
             } else {
                 $user_id = (int)$user['user_id'];
-                $curr_failed = (int)($user['failed_attempts'] ?? 0);
-                $lockout_until = $user['lockout_until'];
+                $curr_failed = (int)($user['failed_login_attempts'] ?? $user['failed_attempts'] ?? 0);
+                $lockout_until = $user['lockout_until'] ?? null;
                 $now = time();
                 $lockout_time = !empty($lockout_until) ? strtotime($lockout_until) : 0;
 
-                // Check active lockout
+                // 1. Check if account is currently locked out BEFORE verifying credentials
                 if ($lockout_time > $now) {
                     $diff_sec = $lockout_time - $now;
                     $rem_min = intdiv($diff_sec, 60);
                     $rem_sec = $diff_sec % 60;
-                    $time_text = ($rem_min > 0) ? "{$rem_min} minute(s) {$rem_sec} second(s)" : "{$rem_sec} second(s)";
+                    $time_text = ($rem_min > 0) ? sprintf("%d minute(s) %02d second(s)", $rem_min, $rem_sec) : sprintf("%d second(s)", $rem_sec);
 
                     $lockout_remaining_seconds = max(1, $diff_sec);
                     $error_msg = "Account is temporarily locked due to consecutive failed login attempts. Try again in {$time_text}.";
@@ -130,8 +134,8 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
 
                     if ($password_valid) {
                         $_SESSION['login_attempts'] = 0;
-                        // Reset failed attempts & lockout counter
-                        $reset_stmt = $conn->prepare("UPDATE users SET failed_attempts = 0, lockout_until = NULL WHERE user_id = :uid");
+                        // Reset failed attempts & lockout counter on successful login
+                        $reset_stmt = $conn->prepare("UPDATE users SET failed_login_attempts = 0, failed_attempts = 0, lockout_until = NULL WHERE user_id = :uid");
                         $reset_stmt->execute([':uid' => $user_id]);
 
                         // Secure session regeneration
@@ -155,41 +159,46 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
                         }
                     } else {
                         // Failed attempt: increment counter
-                        $new_failed = $curr_failed + 1;
-                        $lockout_mins = 0;
-
-                        // Progressive Lockout Duration: 3rd fail = 1 min, 4th = 5 min, 5th+ = 15 min
-                        if ($new_failed == 3) {
-                            $lockout_mins = 1;
-                        } elseif ($new_failed == 4) {
-                            $lockout_mins = 5;
-                        } elseif ($new_failed >= 5) {
-                            $lockout_mins = 15;
+                        if ($lockout_time > 0 && $lockout_time <= $now && $curr_failed >= 3) {
+                            $new_failed = 1;
+                        } else {
+                            $new_failed = $curr_failed + 1;
                         }
 
-                        if ($lockout_mins > 0) {
+                        if ($new_failed >= 3) {
+                            // 3 consecutive failures: trigger temporary account lockout for 5 to 15 minutes
+                            if ($new_failed === 3) {
+                                $lockout_mins = 5;
+                            } elseif ($new_failed === 4) {
+                                $lockout_mins = 10;
+                            } else {
+                                $lockout_mins = 15;
+                            }
+
                             $new_lockout_until = date('Y-m-d H:i:s', $now + ($lockout_mins * 60));
-                            $up_lock = $conn->prepare("UPDATE users SET failed_attempts = :f, lockout_until = :lu WHERE user_id = :uid");
-                            $up_lock->execute([':f' => $new_failed, ':lu' => $new_lockout_until, ':uid' => $user_id]);
                             $lockout_remaining_seconds = $lockout_mins * 60;
-                            $rem_min = $lockout_mins;
-                            $rem_sec = 0;
-                            $time_text = "{$rem_min} minute(s) 00 second(s)";
+
+                            $up_lock = $conn->prepare("UPDATE users SET failed_login_attempts = :fla, failed_attempts = :fa, lockout_until = :lu WHERE user_id = :uid");
+                            $up_lock->execute([':fla' => $new_failed, ':fa' => $new_failed, ':lu' => $new_lockout_until, ':uid' => $user_id]);
+
+                            $time_text = "{$lockout_mins} minute(s) 00 second(s)";
                             $error_msg = "Account is temporarily locked due to consecutive failed login attempts. Try again in {$time_text}.";
-                            log_activity($conn, $user_id, 'LOGIN_FAILED', "Account locked for {$lockout_mins}m after {$new_failed} consecutive failed attempts.", $user['username'], $user['role']);
+
+                            // Log LOCKOUT_TRIGGERED event to system_audit_logs table
+                            log_activity($conn, $user_id, 'LOCKOUT_TRIGGERED', "Account locked for {$lockout_mins} minutes after {$new_failed} consecutive failed login attempts.", $user['username'], $user['role']);
+                            log_activity($conn, $user_id, 'LOGIN_FAILED', "Failed login attempt ({$new_failed}/3) triggered account lockout for {$lockout_mins} minutes.", $user['username'], $user['role']);
                         } else {
                             $attempts_left = 3 - $new_failed;
-                            $up_lock = $conn->prepare("UPDATE users SET failed_attempts = :f, lockout_until = NULL WHERE user_id = :uid");
-                            $up_lock->execute([':f' => $new_failed, ':uid' => $user_id]);
+                            $up_lock = $conn->prepare("UPDATE users SET failed_login_attempts = :fla, failed_attempts = :fa, lockout_until = NULL WHERE user_id = :uid");
+                            $up_lock->execute([':fla' => $new_failed, ':fa' => $new_failed, ':uid' => $user_id]);
                             $error_msg = "Incorrect username or password. {$attempts_left} attempt(s) remaining before account lockout.";
-                            log_activity($conn, $user_id, 'LOGIN_FAILED', "Failed login attempt ({$new_failed}/3). {$attempts_left} attempts remaining.", $user['username'], $user['role']);
+                            log_activity($conn, $user_id, 'LOGIN_FAILED', "Failed login attempt ({$new_failed}/3). {$attempts_left} attempt(s) remaining.", $user['username'], $user['role']);
                         }
                     }
                 }
             }
         }
     }
-
     // REGISTER ACTION WITH STRONG PASSWORD POLICY & CONFIRM PASSWORD
     if (isset($_POST['register'])) {
         $active_tab = 'register';
@@ -222,7 +231,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
                     $error_msg = "Username or Email is already registered.";
                 } else {
                     $hashed_pass = password_hash($reg_pass, PASSWORD_BCRYPT);
-                    $stmt = $conn->prepare("INSERT INTO users (username, full_name, email, password, role, failed_attempts, lockout_until, created_at) VALUES (:u, :fn, :em, :p, :r, 0, NULL, NOW())");
+                    $stmt = $conn->prepare("INSERT INTO users (username, full_name, email, password, role, failed_login_attempts, failed_attempts, lockout_until, created_at) VALUES (:u, :fn, :em, :p, :r, 0, 0, NULL, NOW())");
                     
                     if ($stmt->execute([
                         ':u'  => $reg_user,

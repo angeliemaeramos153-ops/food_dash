@@ -508,7 +508,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $action_msg = "Error: Username or Email is already taken by another account.";
                 } else {
                     $hashed = password_hash($u_password, PASSWORD_BCRYPT);
-                    $ins = $conn->prepare("INSERT INTO users (username, full_name, email, password, role, failed_attempts, lockout_until, created_at) VALUES (?, ?, ?, ?, ?, 0, NULL, NOW())");
+                    $ins = $conn->prepare("INSERT INTO users (username, full_name, email, password, role, failed_login_attempts, failed_attempts, lockout_until, created_at) VALUES (?, ?, ?, ?, ?, 0, 0, NULL, NOW())");
                     if ($ins->execute([$u_username, $u_fullname, $u_email, $hashed, $u_role])) {
                         $new_user_id = (int)$conn->lastInsertId();
                         if ($u_role === 'rider') {
@@ -581,7 +581,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     }
 
                     if ($reset_lockout) {
-                        $rst = $conn->prepare("UPDATE users SET failed_attempts = 0, lockout_until = NULL WHERE user_id = ?");
+                        $rst = $conn->prepare("UPDATE users SET failed_login_attempts = 0, failed_attempts = 0, lockout_until = NULL WHERE user_id = ?");
                         $rst->execute([$edit_id]);
                     }
 
@@ -731,7 +731,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $u_stmt->execute([$unlock_id]);
             $u_row = $u_stmt->fetch(PDO::FETCH_ASSOC);
 
-            $unl = $conn->prepare("UPDATE users SET failed_attempts = 0, lockout_until = NULL WHERE user_id = ?");
+            $unl = $conn->prepare("UPDATE users SET failed_login_attempts = 0, failed_attempts = 0, lockout_until = NULL WHERE user_id = ?");
             $unl->execute([$unlock_id]);
 
             $unl_name = $u_row['username'] ?? "User #{$unlock_id}";
@@ -776,7 +776,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $hashed = password_hash($new_password, PASSWORD_BCRYPT);
 
                     if ($unlock_account) {
-                        $upd = $conn->prepare("UPDATE users SET password = ?, failed_attempts = 0, lockout_until = NULL WHERE user_id = ?");
+                        $upd = $conn->prepare("UPDATE users SET password = ?, failed_login_attempts = 0, failed_attempts = 0, lockout_until = NULL WHERE user_id = ?");
                         $executed = $upd->execute([$hashed, $target_user_id]);
                     } else {
                         $upd = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
@@ -833,7 +833,7 @@ require_once 'notification_lib.php';
 
 // Fetch Users for User CRUD (excluding soft-deleted)
 $users_list = [];
-$users_res = $conn->query("SELECT user_id, username, full_name, email, role, failed_attempts, lockout_until, created_at, status, is_deleted FROM users WHERE (is_deleted = 0 OR is_deleted IS NULL) AND (status != 'inactive' OR status IS NULL) ORDER BY user_id DESC");
+$users_res = $conn->query("SELECT user_id, username, full_name, email, role, COALESCE(failed_login_attempts, failed_attempts, 0) AS failed_login_attempts, failed_attempts, lockout_until, created_at, status, is_deleted FROM users WHERE (is_deleted = 0 OR is_deleted IS NULL) AND (status != 'inactive' OR status IS NULL) ORDER BY user_id DESC");
 $user_counts = ['customer' => 0, 'chef' => 0, 'rider' => 0, 'admin' => 0, 'locked' => 0];
 if ($users_res) {
     $now_ts = time();
