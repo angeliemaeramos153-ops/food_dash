@@ -1313,7 +1313,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
     .admin-store-cat { display: inline-block; font-size: 8.5px; color: #788A6E; background: #FAF6EE; padding: 2px 7px; border-radius: 6px; border: 1px solid rgba(212,197,165,.6); margin-top: 2px; }
     .admin-store-actions { display: flex; gap: 8px; align-items: center; flex: none; }
 
-    /* BOTTOM NAVIGATION DOCK (WIDE DESKTOP & MOBILE) */
+    /* BOTTOM NAVIGATION BAR / MENU CONTAINER (HORIZONTALLY CENTERED) */
     .sidebar {
       position: fixed;
       bottom: 0;
@@ -1322,84 +1322,38 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       width: 100%;
       min-height: 64px;
       padding: 0;
-      background: rgba(255,253,247,.98);
+      background: rgba(255, 253, 247, 0.98);
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
       border: 0;
       border-top: 1px solid #e7dfc4;
-      box-shadow: 0 -4px 18px rgba(75,83,32,.08);
+      box-shadow: 0 -4px 18px rgba(75, 83, 32, 0.08);
       display: flex;
       justify-content: center;
       align-items: center;
+      margin: 0 auto;
       z-index: 1000;
     }
     .sidebar > div {
       width: 100%;
       max-width: 1400px;
       display: flex;
+      justify-content: center;
       align-items: center;
-      justify-content: space-between;
-      padding: 6px 24px;
+      margin: 0 auto;
+      padding: 6px 16px;
+      gap: 8px;
     }
-    .sidebar-brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-shrink: 0;
-    }
-    .sidebar-brand h2 {
-      font-size: 13px;
-      color: #344016;
-      font-weight: 800;
-      letter-spacing: 0.5px;
-    }
-    .brand-logo-img {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      object-fit: cover;
-    }
-    .user-panel {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-shrink: 0;
-    }
-    .user-info p {
-      font-size: 11px;
-      font-weight: 700;
-      color: #344016;
-      line-height: 1.2;
-    }
-    .user-info span {
-      font-size: 9px;
-      color: #788A6E;
-      font-weight: 600;
-    }
-    .logout-btn {
-      width: 34px;
-      height: 34px;
-      border-radius: 10px;
-      border: 1px solid #f3bcba;
-      background: #fcedec;
-      color: #923D32;
-      display: grid;
-      place-items: center;
-      font-size: 13px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .logout-btn:hover {
-      background: #923D32;
-      color: #fff;
+    .sidebar-brand, .user-panel {
+      display: none;
     }
     .nav-links {
       display: flex;
-      align-items: center;
       justify-content: center;
-      gap: 4px;
+      align-items: center;
+      margin: 0 auto;
+      gap: 6px;
       list-style: none;
-      margin: 0;
       padding: 0;
       overflow-x: auto;
       scrollbar-width: none;
@@ -1408,10 +1362,10 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
     .nav-links li { flex: 0 0 auto; margin: 0; display: block; }
     .nav-links a {
       height: auto;
-      padding: 8px 12px;
+      padding: 8px 14px;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 7px;
       border-radius: 10px;
       color: #74776a;
       background: transparent;
@@ -1422,7 +1376,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       cursor: pointer;
       transition: all 0.2s;
     }
-    .nav-links a i { font-size: 13px; }
+    .nav-links a i { font-size: 14px; }
     .nav-links a:hover, .nav-links a.active {
       background: #eef3ec;
       color: #4B5320;
@@ -1435,8 +1389,19 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
     @media (max-width: 991px) {
       .sidebar-brand, .user-panel { display: none; }
-      .sidebar > div { justify-content: center; padding: 4px 8px; }
-      .nav-links { justify-content: flex-start; }
+      .sidebar > div {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0 auto;
+        padding: 4px 8px;
+      }
+      .nav-links {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        margin: 0 auto;
+      }
       .nav-links a {
         flex-direction: column;
         gap: 3px;

@@ -1038,8 +1038,9 @@ $latest_backup_str   = $latest_backup_time > 0 ? date('M d, Y • h:i A', $lates
       width: 100%;
       max-width: 1400px;
       display: flex;
-      justify-content: space-around;
+      justify-content: center;
       align-items: center;
+      margin: 0 auto;
       padding: 8px 12px;
       overflow-x: auto;
       scrollbar-width: none;
