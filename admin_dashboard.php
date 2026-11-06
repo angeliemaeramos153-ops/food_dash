@@ -62,6 +62,10 @@ $username = $_SESSION['username'] ?? $_SESSION['user']['username'] ?? $_SESSION[
 $user_name = $_SESSION['full_name'] ?? $_SESSION['username'] ?? $_SESSION['user']['username'] ?? 'Admin';
 $user_role = ucfirst($_SESSION['role'] ?? 'Admin');
 $action_msg = "";
+if (!empty($_SESSION['action_msg'])) {
+    $action_msg = $_SESSION['action_msg'];
+    unset($_SESSION['action_msg']);
+}
 
 // 2. HANDLE FORM ACTIONS (CRUD Operations)
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -180,9 +184,28 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
 
         if (!empty($shop_name)) {
-            $stmt = $conn->prepare("INSERT INTO shops (shop_name, category, address, lat, lng, lat, lng, logo_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt = $conn->prepare("INSERT INTO shops (shop_name, category, address, latitude, longitude, lat, lng, logo_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([$shop_name, $category, $address, $lat, $lng, $lat, $lng, $logo_url]);
+            $admin_uid = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+            log_activity($conn, $admin_uid, 'STORE_CREATED', "Admin added partner store '{$shop_name}' ({$category}).");
             $action_msg = "Store added successfully with verified coordinates!";
+        } else {
+            $action_msg = "Error: Store name is required.";
+        }
+
+        $is_ajax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_POST['ajax']) && $_POST['ajax'] == 1);
+        if ($is_ajax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => !empty($shop_name),
+                'message' => $action_msg,
+                'tab' => 'stores'
+            ]);
+            exit;
+        } else {
+            $_SESSION['action_msg'] = $action_msg;
+            header("Location: admin_dashboard.php?tab=stores");
+            exit;
         }
     }
 
@@ -218,22 +241,70 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         if ($shop_id > 0 && !empty($shop_name)) {
             try {
+                $stmt = $conn->prepare("UPDATE shops SET shop_name = ?, category = ?, address = ?, latitude = ?, longitude = ?, lat = ?, lng = ?, logo_url = ? WHERE shop_id = ?");
+                $stmt->execute([$shop_name, $category, $address, $lat, $lng, $lat, $lng, $logo_url, $shop_id]);
+            } catch (Throwable $e) {
                 $stmt = $conn->prepare("UPDATE shops SET shop_name = ?, category = ?, address = ?, lat = ?, lng = ?, logo_url = ? WHERE shop_id = ?");
                 $stmt->execute([$shop_name, $category, $address, $lat, $lng, $logo_url, $shop_id]);
-            } catch (Throwable $e) {
-                $stmt = $conn->prepare("UPDATE shops SET shop_name = ?, category = ?, logo_url = ? WHERE shop_id = ?");
-                $stmt->execute([$shop_name, $category, $logo_url, $shop_id]);
             }
+            $admin_uid = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+            log_activity($conn, $admin_uid, 'STORE_UPDATED', "Admin updated store #{$shop_id} ({$shop_name}, {$category}).");
             $action_msg = "Store updated successfully!";
+        } else {
+            $action_msg = "Error: Store name is required.";
+        }
+
+        $is_ajax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_POST['ajax']) && $_POST['ajax'] == 1);
+        if ($is_ajax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => ($shop_id > 0 && !empty($shop_name)),
+                'message' => $action_msg,
+                'tab' => 'stores',
+                'shop_id' => $shop_id,
+                'shop_name' => $shop_name,
+                'category' => $category,
+                'address' => $address,
+                'logo_url' => $logo_url,
+                'lat' => $lat,
+                'lng' => $lng
+            ]);
+            exit;
+        } else {
+            $_SESSION['action_msg'] = $action_msg;
+            header("Location: admin_dashboard.php?tab=stores");
+            exit;
         }
     }
 
     // DELETE SHOP
     if (isset($_POST['action_delete_shop'])) {
         $shop_id = intval($_POST['shop_id']);
-        $stmt = $conn->prepare("DELETE FROM shops WHERE shop_id = ?");
-        $stmt->execute([$shop_id]);
-        $action_msg = "Store removed successfully!";
+        if ($shop_id > 0) {
+            $stmt = $conn->prepare("DELETE FROM shops WHERE shop_id = ?");
+            $stmt->execute([$shop_id]);
+            $admin_uid = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+            log_activity($conn, $admin_uid, 'STORE_DELETED', "Admin deleted store #{$shop_id}.");
+            $action_msg = "Store removed successfully!";
+        } else {
+            $action_msg = "Error: Invalid store ID.";
+        }
+
+        $is_ajax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_POST['ajax']) && $_POST['ajax'] == 1);
+        if ($is_ajax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => ($shop_id > 0),
+                'message' => $action_msg,
+                'tab' => 'stores',
+                'shop_id' => $shop_id
+            ]);
+            exit;
+        } else {
+            $_SESSION['action_msg'] = $action_msg;
+            header("Location: admin_dashboard.php?tab=stores");
+            exit;
+        }
     }
 
     // ADD MENU ITEM
@@ -250,7 +321,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $stmt->bindValue(3, $price);
             $stmt->bindValue(4, $is_recommended, PDO::PARAM_BOOL);
             $stmt->execute();
+            $admin_uid = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+            log_activity($conn, $admin_uid, 'MENU_CREATED', "Admin added menu item '{$item_name}' (Store #{$shop_id}, Price: ₱{$price}).");
             $action_msg = "Menu item added!";
+        } else {
+            $action_msg = "Error: Valid item name, store, and price are required.";
+        }
+
+        $is_ajax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_POST['ajax']) && $_POST['ajax'] == 1);
+        if ($is_ajax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => (!empty($item_name) && $shop_id > 0 && $price > 0),
+                'message' => $action_msg,
+                'tab' => 'menus'
+            ]);
+            exit;
+        } else {
+            $_SESSION['action_msg'] = $action_msg;
+            header("Location: admin_dashboard.php?tab=menus");
+            exit;
         }
     }
 
@@ -270,16 +360,67 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $stmt->bindValue(4, $is_recommended, PDO::PARAM_BOOL);
             $stmt->bindValue(5, $item_id, PDO::PARAM_INT);
             $stmt->execute();
+            $admin_uid = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+            log_activity($conn, $admin_uid, 'MENU_UPDATED', "Admin updated menu item #{$item_id} ({$item_name}, Price: ₱{$price}).");
             $action_msg = "Menu item updated!";
+
+            $s_stmt = $conn->prepare("SELECT shop_name FROM shops WHERE shop_id = ? LIMIT 1");
+            $s_stmt->execute([$shop_id]);
+            $shop_name = $s_stmt->fetchColumn() ?: 'Partner Store';
+        } else {
+            $action_msg = "Error: Invalid menu item details.";
+        }
+
+        $is_ajax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_POST['ajax']) && $_POST['ajax'] == 1);
+        if ($is_ajax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => ($item_id > 0 && !empty($item_name) && $shop_id > 0 && $price > 0),
+                'message' => $action_msg,
+                'tab' => 'menus',
+                'item_id' => $item_id,
+                'item_name' => $item_name,
+                'shop_id' => $shop_id,
+                'shop_name' => $shop_name ?? '',
+                'price' => $price,
+                'is_recommended' => $is_recommended ? 1 : 0
+            ]);
+            exit;
+        } else {
+            $_SESSION['action_msg'] = $action_msg;
+            header("Location: admin_dashboard.php?tab=menus");
+            exit;
         }
     }
 
     // DELETE MENU ITEM
     if (isset($_POST['action_delete_item'])) {
         $item_id = intval($_POST['item_id']);
-        $stmt = $conn->prepare("DELETE FROM menu_items WHERE item_id = ?");
-        $stmt->execute([$item_id]);
-        $action_msg = "Item removed from menu!";
+        if ($item_id > 0) {
+            $stmt = $conn->prepare("DELETE FROM menu_items WHERE item_id = ?");
+            $stmt->execute([$item_id]);
+            $admin_uid = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+            log_activity($conn, $admin_uid, 'MENU_DELETED', "Admin deleted menu item #{$item_id}.");
+            $action_msg = "Item removed from menu!";
+        } else {
+            $action_msg = "Error: Invalid menu item ID.";
+        }
+
+        $is_ajax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_POST['ajax']) && $_POST['ajax'] == 1);
+        if ($is_ajax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => ($item_id > 0),
+                'message' => $action_msg,
+                'tab' => 'menus',
+                'item_id' => $item_id
+            ]);
+            exit;
+        } else {
+            $_SESSION['action_msg'] = $action_msg;
+            header("Location: admin_dashboard.php?tab=menus");
+            exit;
+        }
     }
 
     // BROADCAST DELIVERED MESSAGE
@@ -804,9 +945,11 @@ $txn_count = count($transactions);
 $total_revenue = number_format($total_revenue, 2);
 
 $active_tab = 'analytics';
-if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditlogs', 'riders', 'stores', 'menus', 'transactions', 'dispatch-map', 'backup'], true)) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['active_tab']) && in_array($_POST['active_tab'], ['analytics', 'users', 'auditlogs', 'riders', 'stores', 'menus', 'transactions', 'dispatch-map', 'backup'], true)) {
+    $active_tab = $_POST['active_tab'];
+} elseif (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditlogs', 'riders', 'stores', 'menus', 'transactions', 'dispatch-map', 'backup'], true)) {
     $active_tab = $_GET['tab'];
-} elseif (isset($_POST['active_tab'])) {
+} elseif (isset($_POST['active_tab']) && in_array($_POST['active_tab'], ['analytics', 'users', 'auditlogs', 'riders', 'stores', 'menus', 'transactions', 'dispatch-map', 'backup'], true)) {
     $active_tab = $_POST['active_tab'];
 } elseif (isset($_POST['action_create_user']) || isset($_POST['action_edit_user']) || isset($_POST['action_delete_user']) || isset($_POST['action_unlock_user']) || isset($_POST['action_reset_password_unlock'])) {
     $active_tab = 'users';
@@ -1859,7 +2002,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
     <div id="tab-stores" class="tab-section">
       <div class="dashboard-section">
         <div class="section-title">
-          <span>Partner Stores (<?php echo $total_shops; ?>)</span>
+          <span>Partner Stores (<span id="total-shops-count"><?php echo $total_shops; ?></span>)</span>
           <div style="display: flex; gap: 6px; align-items: center;">
             <a href="scripts/backfill_shops_geocoding.php" target="_blank" class="btn-action" style="padding: 4px 10px; font-size: 0.72rem; background: #788A6E; text-decoration: none; color: #fff; display: inline-flex; align-items: center; gap: 5px; border-radius: 4px;" title="Geocode missing store coordinates via Nominatim"><i class="fa-solid fa-satellite-dish"></i> Backfill / Sync GPS</a>
             <button class="btn-action" onclick="openModal('addShopModal')" style="padding: 4px 10px; font-size: 0.72rem;">Add Store</button>
@@ -1871,30 +2014,33 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
               $s_logo = !empty($s['logo_url']) ? $s['logo_url'] : 'assets/shops/default_store.png';
               $s_cat = !empty($s['category']) ? $s['category'] : 'Restaurant';
               $s_addr = !empty($s['address']) ? $s['address'] : 'Ormoc City Proper';
-              $s_lat = !empty($s['lat']) ? (float)$s['lat'] : (!empty($s['lat']) ? (float)$s['lat'] : null);
-              $s_lng = !empty($s['lng']) ? (float)$s['lng'] : (!empty($s['lng']) ? (float)$s['lng'] : null);
+              $s_lat = !empty($s['lat']) ? (float)$s['lat'] : (!empty($s['latitude']) ? (float)$s['latitude'] : null);
+              $s_lng = !empty($s['lng']) ? (float)$s['lng'] : (!empty($s['longitude']) ? (float)$s['longitude'] : null);
             ?>
-              <div class="admin-store-card">
+              <div class="admin-store-card" id="store-card-<?php echo $s['shop_id']; ?>">
                 <div class="admin-store-logo">
-                  <img src="<?php echo htmlspecialchars($s_logo); ?>" alt="<?php echo htmlspecialchars($s['shop_name']); ?>" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='assets/shops/default_store.png';}else{this.onerror=null;this.src='logo.jpg';}">
+                  <img id="store-logo-img-<?php echo $s['shop_id']; ?>" src="<?php echo htmlspecialchars($s_logo); ?>" alt="<?php echo htmlspecialchars($s['shop_name']); ?>" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='assets/shops/default_store.png';}else{this.onerror=null;this.src='logo.jpg';}">
                 </div>
                 <div class="admin-store-meta">
                   <div class="admin-store-id">#SHOP-<?php echo $s['shop_id']; ?></div>
-                  <strong><?php echo htmlspecialchars($s['shop_name']); ?></strong>
-                  <span class="admin-store-cat"><?php echo htmlspecialchars($s_cat); ?></span>
+                  <strong id="store-name-val-<?php echo $s['shop_id']; ?>"><?php echo htmlspecialchars($s['shop_name']); ?></strong>
+                  <span class="admin-store-cat" id="store-cat-val-<?php echo $s['shop_id']; ?>"><?php echo htmlspecialchars($s_cat); ?></span>
                   <div style="font-size: 0.7rem; color: #74776a; margin-top: 3px; display: flex; flex-direction: column; gap: 2px;">
-                    <span><i class="fa-solid fa-location-dot" style="color: #D88F2A; font-size: 0.72rem;"></i> <?php echo htmlspecialchars($s_addr); ?></span>
+                    <span><i class="fa-solid fa-location-dot" style="color: #D88F2A; font-size: 0.72rem;"></i> <span id="store-addr-val-<?php echo $s['shop_id']; ?>"><?php echo htmlspecialchars($s_addr); ?></span></span>
+                    <span id="store-coords-box-<?php echo $s['shop_id']; ?>">
                     <?php if ($s_lat !== null && $s_lng !== null): ?>
                       <span style="font-family: monospace; font-size: 0.67rem; color: #4B5320; background: #FAF6EE; padding: 1px 4px; border-radius: 3px; width: fit-content; border: 1px solid #d4c5a5;"><i class="fa-solid fa-crosshairs" style="color:#2e7d32"></i> <?php echo number_format($s_lat, 5) . ', ' . number_format($s_lng, 5); ?></span>
                     <?php else: ?>
                       <span style="font-size: 0.67rem; color: #d32f2f;"><i class="fa-solid fa-triangle-exclamation"></i> GPS missing</span>
                     <?php endif; ?>
+                    </span>
                   </div>
                 </div>
                 <div class="admin-store-actions">
-                  <button class="btn-edit" onclick="openEditShopModal(<?php echo $s['shop_id']; ?>, '<?php echo addslashes($s['shop_name']); ?>', '<?php echo addslashes($s_cat); ?>', '<?php echo addslashes($s_logo); ?>', '<?php echo addslashes($s['address'] ?? ''); ?>', <?php echo json_encode($s_lat); ?>, <?php echo json_encode($s_lng); ?>)"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
-                  <form method="POST" style="display:inline;" onclick="return confirmAdminAction('Delete this shop?', 'Are you sure you want to delete this store?', this);">
+                  <button class="btn-edit" id="btn-edit-shop-<?php echo $s['shop_id']; ?>" onclick="openEditShopModal(<?php echo $s['shop_id']; ?>, '<?php echo addslashes($s['shop_name']); ?>', '<?php echo addslashes($s_cat); ?>', '<?php echo addslashes($s_logo); ?>', '<?php echo addslashes($s['address'] ?? ''); ?>', <?php echo json_encode($s_lat); ?>, <?php echo json_encode($s_lng); ?>)"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                  <form method="POST" action="admin_dashboard.php?tab=stores" style="display:inline;" onsubmit="return confirmAdminAction('Delete Store?', 'Are you sure you want to delete store <?php echo htmlspecialchars(addslashes($s['shop_name'])); ?>? Associated dishes will also be removed.', this, this.querySelector('button[name=action_delete_shop]'));">
                     <input type="hidden" name="shop_id" value="<?php echo $s['shop_id']; ?>">
+                    <input type="hidden" name="active_tab" value="stores">
                     <button type="submit" name="action_delete_shop" class="btn-delete"><i class="fa-solid fa-trash"></i> Delete</button>
                   </form>
                 </div>
@@ -1911,7 +2057,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
     <div id="tab-menus" class="tab-section">
       <div class="dashboard-section">
         <div class="section-title">
-          <span>Active Menu Dishes</span>
+          <span>Active Menu Dishes (<span id="total-menus-count"><?php echo $total_items; ?></span>)</span>
           <button class="btn-action" onclick="openModal('addItemModal')" style="padding: 4px 8px; font-size: 0.72rem;">Add Item</button>
         </div>
         <table>
@@ -1927,24 +2073,23 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
           <tbody>
             <?php if (!empty($menu_items)): ?>
               <?php foreach ($menu_items as $m): ?>
-                <tr>
-                  <td><strong><?php echo htmlspecialchars($m['item_name']); ?></strong></td>
-                  <td><?php echo htmlspecialchars($m['shop_name']); ?></td>
-                  <td>₱<?php echo number_format($m['price'], 2); ?></td>
-                  <td>
-                    <?php 
-                    $is_rec = !empty($m['is_recommended']) && $m['is_recommended'] !== 'f' && $m['is_recommended'] !== false;
-                    if ($is_rec): 
-                    ?>
+                <?php $is_rec = !empty($m['is_recommended']) && $m['is_recommended'] !== 'f' && $m['is_recommended'] !== false; ?>
+                <tr id="menu-row-<?php echo $m['item_id']; ?>">
+                  <td><strong id="item-name-val-<?php echo $m['item_id']; ?>"><?php echo htmlspecialchars($m['item_name']); ?></strong></td>
+                  <td id="item-shop-val-<?php echo $m['item_id']; ?>"><?php echo htmlspecialchars($m['shop_name']); ?></td>
+                  <td id="item-price-val-<?php echo $m['item_id']; ?>">₱<?php echo number_format($m['price'], 2); ?></td>
+                  <td id="item-badge-val-<?php echo $m['item_id']; ?>">
+                    <?php if ($is_rec): ?>
                       <span class="badge-recommended">Recommended</span>
                     <?php else: ?>
                       <span style="font-size:0.7rem; color:#b87b85;">Standard</span>
                     <?php endif; ?>
                   </td>
                   <td>
-                    <button class="btn-edit" onclick="openEditItemModal(<?php echo $m['item_id']; ?>, '<?php echo addslashes($m['item_name']); ?>', <?php echo $m['shop_id']; ?>, <?php echo $m['price']; ?>, <?php echo $is_rec ? 1 : 0; ?>)"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
-                    <form method="POST" style="display:inline;" onclick="return confirmAdminAction('Remove item?', 'Are you sure you want to remove this menu item?', this);">
+                    <button class="btn-edit" id="btn-edit-item-<?php echo $m['item_id']; ?>" onclick="openEditItemModal(<?php echo $m['item_id']; ?>, '<?php echo addslashes($m['item_name']); ?>', <?php echo $m['shop_id']; ?>, <?php echo $m['price']; ?>, <?php echo $is_rec ? 1 : 0; ?>)"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+                    <form method="POST" action="admin_dashboard.php?tab=menus" style="display:inline;" onsubmit="return confirmAdminAction('Remove item?', 'Are you sure you want to remove <?php echo htmlspecialchars(addslashes($m['item_name'])); ?> from the menu?', this, this.querySelector('button[name=action_delete_item]'));">
                       <input type="hidden" name="item_id" value="<?php echo $m['item_id']; ?>">
+                      <input type="hidden" name="active_tab" value="menus">
                       <button type="submit" name="action_delete_item" class="btn-delete"><i class="fa-solid fa-trash"></i> Remove</button>
                     </form>
                   </td>
@@ -2328,7 +2473,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
         <h3 style="margin:0; font-size:15px; color:#344016;"><i class="fa-solid fa-user-pen" style="color:var(--fd-olive);"></i> Edit Fleet Rider</h3>
         <button type="button" onclick="closeModal('editRiderModal')" style="background:none; border:none; font-size:18px; color:#74776a; cursor:pointer;">&times;</button>
       </div>
-      <form method="POST" id="editRiderForm" onsubmit="handleEditRiderSubmit(event, this);">
+      <form method="POST" id="editRiderForm" action="admin_dashboard.php?tab=riders" onsubmit="handleEditRiderSubmit(event, this);">
         <input type="hidden" name="action_edit_rider" value="1">
         <input type="hidden" name="active_tab" value="riders">
         <input type="hidden" name="rider_id" id="edit_rider_id" value="">
@@ -2375,7 +2520,8 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
   <div id="addShopModal" class="modal">
     <div class="modal-box" style="max-width: 480px;">
       <h3>Add New Store</h3>
-      <form method="POST">
+      <form method="POST" action="admin_dashboard.php?tab=stores" id="addShopForm">
+        <input type="hidden" name="active_tab" value="stores">
         <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Store Name</label>
         <input type="text" name="shop_name" id="add_shop_name" placeholder="e.g. Popeyes Louisiana Kitchen" required>
         
@@ -2414,7 +2560,9 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
   <div id="editShopModal" class="modal">
     <div class="modal-box" style="max-width: 480px;">
       <h3>Edit Store</h3>
-      <form method="POST">
+      <form method="POST" action="admin_dashboard.php?tab=stores" id="editShopForm" onsubmit="handleEditShopSubmit(event, this);">
+        <input type="hidden" name="action_edit_shop" value="1">
+        <input type="hidden" name="active_tab" value="stores">
         <input type="hidden" name="shop_id" id="edit_shop_id">
         
         <label style="font-size: 9px; color: #788A6E; font-weight: 600; display: block; margin-bottom: 3px;">Store Name</label>
@@ -2455,7 +2603,8 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
   <div id="addItemModal" class="modal">
     <div class="modal-box">
       <h3>Add Menu Item</h3>
-      <form method="POST">
+      <form method="POST" action="admin_dashboard.php?tab=menus" id="addItemForm">
+        <input type="hidden" name="active_tab" value="menus">
         <input type="text" name="item_name" placeholder="Item Name" required>
         
         <select name="shop_id" required>
@@ -2487,7 +2636,9 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
   <div id="editItemModal" class="modal">
     <div class="modal-box">
       <h3>Edit Menu Item</h3>
-      <form method="POST">
+      <form method="POST" action="admin_dashboard.php?tab=menus" id="editItemForm" onsubmit="handleEditItemSubmit(event, this);">
+        <input type="hidden" name="action_edit_item" value="1">
+        <input type="hidden" name="active_tab" value="menus">
         <input type="hidden" name="item_id" id="edit_item_id">
         <input type="text" name="item_name" id="edit_item_name" placeholder="Item Name" required>
         
@@ -2740,7 +2891,9 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
   </div>
 
   <script>
-    function switchTab(tabName) {
+    function switchTab(tabName, updateHistory) {
+      if (typeof updateHistory === 'undefined') updateHistory = true;
+
       document.querySelectorAll('.nav-links a').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-section').forEach(el => el.classList.remove('active-tab'));
 
@@ -2749,6 +2902,14 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
       const targetTab = document.getElementById('tab-' + tabName);
       if (targetTab) targetTab.classList.add('active-tab');
+
+      if (updateHistory && window.history && window.history.replaceState) {
+        var currentUrl = new URL(window.location.href);
+        if (currentUrl.searchParams.get('tab') !== tabName) {
+          currentUrl.searchParams.set('tab', tabName);
+          window.history.replaceState({ tab: tabName }, '', currentUrl.toString());
+        }
+      }
 
       if (tabName === 'dispatch-map') {
         setTimeout(function() {
@@ -2760,7 +2921,13 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
 
     // Initialize Active Tab
     var initialTab = <?php echo json_encode($active_tab); ?>;
-    switchTab(initialTab);
+    switchTab(initialTab, false);
+
+    window.addEventListener('popstate', function(e) {
+      var params = new URLSearchParams(window.location.search);
+      var tab = params.get('tab') || 'analytics';
+      switchTab(tab, false);
+    });
 
     // Custom store map pin icon
     function createStoreMapIcon() {
@@ -3263,6 +3430,22 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
           return;
         }
 
+        // Clean asynchronous deletion for stores
+        var isDelShop = _adminPendingForm.querySelector('input[name="action_delete_shop"]');
+        if (isDelShop) {
+          deleteShopAjax(_adminPendingForm);
+          closeAdminConfirm();
+          return;
+        }
+
+        // Clean asynchronous deletion for menu items
+        var isDelItem = _adminPendingForm.querySelector('input[name="action_delete_item"]');
+        if (isDelItem) {
+          deleteItemAjax(_adminPendingForm);
+          closeAdminConfirm();
+          return;
+        }
+
         _adminPendingForm.submit();
       }
       closeAdminConfirm();
@@ -3275,7 +3458,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       formData.set('ajax', '1');
       var userId = formData.get('user_id');
 
-      fetch('admin_dashboard.php', {
+      fetch('admin_dashboard.php?tab=users', {
         method: 'POST',
         body: formData,
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -3301,6 +3484,207 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
           }
         } else {
           showAdminAlertBanner(data.message || 'Error deleting user.');
+        }
+      })
+      .catch(function(err) {
+        form.submit();
+      });
+    }
+
+    // STORE DELETION AJAX HANDLER
+    function deleteShopAjax(form) {
+      var formData = new FormData(form);
+      formData.set('action_delete_shop', '1');
+      formData.set('ajax', '1');
+      var shopId = formData.get('shop_id');
+
+      fetch('admin_dashboard.php?tab=stores', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      })
+      .then(function(res) {
+        var ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) return res.json();
+        form.submit();
+        return null;
+      })
+      .then(function(data) {
+        if (!data) return;
+        if (data.success) {
+          showAdminAlertBanner(data.message || 'Store removed successfully!');
+          var card = document.getElementById('store-card-' + shopId);
+          if (card) {
+            card.style.transition = 'all 0.3s ease-out';
+            card.style.opacity = '0';
+            card.style.transform = 'scale(0.9)';
+            setTimeout(function() {
+              if (card.parentNode) card.parentNode.removeChild(card);
+            }, 300);
+          }
+          var countEl = document.getElementById('total-shops-count');
+          if (countEl) {
+            var curr = parseInt(countEl.textContent, 10);
+            if (!isNaN(curr) && curr > 0) countEl.textContent = curr - 1;
+          }
+          if (typeof pollMasterDispatchMap === 'function') {
+            pollMasterDispatchMap();
+          }
+        } else {
+          showAdminAlertBanner(data.message || 'Error deleting store.');
+        }
+      })
+      .catch(function(err) {
+        form.submit();
+      });
+    }
+
+    // STORE EDIT AJAX HANDLER
+    function handleEditShopSubmit(e, form) {
+      e.preventDefault();
+      var formData = new FormData(form);
+      formData.set('action_edit_shop', '1');
+      formData.set('ajax', '1');
+      var shopId = formData.get('shop_id');
+
+      fetch('admin_dashboard.php?tab=stores', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      })
+      .then(function(res) {
+        var ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) return res.json();
+        form.submit();
+        return null;
+      })
+      .then(function(data) {
+        if (!data) return;
+        if (data.success) {
+          closeModal('editShopModal');
+          showAdminAlertBanner(data.message || 'Store updated successfully!');
+
+          var nameEl = document.getElementById('store-name-val-' + shopId);
+          if (nameEl) nameEl.textContent = data.shop_name;
+          var catEl = document.getElementById('store-cat-val-' + shopId);
+          if (catEl) catEl.textContent = data.category;
+          var addrEl = document.getElementById('store-addr-val-' + shopId);
+          if (addrEl) addrEl.textContent = data.address;
+          var logoEl = document.getElementById('store-logo-img-' + shopId);
+          if (logoEl && data.logo_url) logoEl.src = data.logo_url;
+          var coordsBox = document.getElementById('store-coords-box-' + shopId);
+          if (coordsBox && data.lat !== null && data.lng !== null) {
+            coordsBox.innerHTML = '<span style="font-family: monospace; font-size: 0.67rem; color: #4B5320; background: #FAF6EE; padding: 1px 4px; border-radius: 3px; width: fit-content; border: 1px solid #d4c5a5;"><i class="fa-solid fa-crosshairs" style="color:#2e7d32"></i> ' + parseFloat(data.lat).toFixed(5) + ', ' + parseFloat(data.lng).toFixed(5) + '</span>';
+          }
+
+          var editBtn = document.getElementById('btn-edit-shop-' + shopId);
+          if (editBtn) {
+            editBtn.setAttribute('onclick', "openEditShopModal(" + shopId + ", " + JSON.stringify(data.shop_name) + ", " + JSON.stringify(data.category) + ", " + JSON.stringify(data.logo_url) + ", " + JSON.stringify(data.address || '') + ", " + JSON.stringify(data.lat) + ", " + JSON.stringify(data.lng) + ")");
+          }
+
+          if (typeof pollMasterDispatchMap === 'function') {
+            pollMasterDispatchMap();
+          }
+        } else {
+          adminToast(data.message || 'Failed to update store details.', true);
+        }
+      })
+      .catch(function(err) {
+        form.submit();
+      });
+    }
+
+    // MENU ITEM DELETION AJAX HANDLER
+    function deleteItemAjax(form) {
+      var formData = new FormData(form);
+      formData.set('action_delete_item', '1');
+      formData.set('ajax', '1');
+      var itemId = formData.get('item_id');
+
+      fetch('admin_dashboard.php?tab=menus', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      })
+      .then(function(res) {
+        var ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) return res.json();
+        form.submit();
+        return null;
+      })
+      .then(function(data) {
+        if (!data) return;
+        if (data.success) {
+          showAdminAlertBanner(data.message || 'Item removed from menu!');
+          var row = document.getElementById('menu-row-' + itemId);
+          if (row) {
+            row.style.transition = 'all 0.3s ease-out';
+            row.style.opacity = '0';
+            row.style.transform = 'translateX(-20px)';
+            setTimeout(function() {
+              if (row.parentNode) row.parentNode.removeChild(row);
+            }, 300);
+          }
+          var countEl = document.getElementById('total-menus-count');
+          if (countEl) {
+            var curr = parseInt(countEl.textContent, 10);
+            if (!isNaN(curr) && curr > 0) countEl.textContent = curr - 1;
+          }
+        } else {
+          showAdminAlertBanner(data.message || 'Error removing menu item.');
+        }
+      })
+      .catch(function(err) {
+        form.submit();
+      });
+    }
+
+    // MENU ITEM EDIT AJAX HANDLER
+    function handleEditItemSubmit(e, form) {
+      e.preventDefault();
+      var formData = new FormData(form);
+      formData.set('action_edit_item', '1');
+      formData.set('ajax', '1');
+      var itemId = formData.get('item_id');
+
+      fetch('admin_dashboard.php?tab=menus', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      })
+      .then(function(res) {
+        var ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) return res.json();
+        form.submit();
+        return null;
+      })
+      .then(function(data) {
+        if (!data) return;
+        if (data.success) {
+          closeModal('editItemModal');
+          showAdminAlertBanner(data.message || 'Menu item updated!');
+
+          var nameEl = document.getElementById('item-name-val-' + itemId);
+          if (nameEl) nameEl.textContent = data.item_name;
+          var shopEl = document.getElementById('item-shop-val-' + itemId);
+          if (shopEl) shopEl.textContent = data.shop_name;
+          var priceEl = document.getElementById('item-price-val-' + itemId);
+          if (priceEl) priceEl.textContent = '₱' + parseFloat(data.price).toFixed(2);
+          var badgeEl = document.getElementById('item-badge-val-' + itemId);
+          if (badgeEl) {
+            if (data.is_recommended) {
+              badgeEl.innerHTML = '<span class="badge-recommended">Recommended</span>';
+            } else {
+              badgeEl.innerHTML = '<span style="font-size:0.7rem; color:#b87b85;">Standard</span>';
+            }
+          }
+
+          var editBtn = document.getElementById('btn-edit-item-' + itemId);
+          if (editBtn) {
+            editBtn.setAttribute('onclick', "openEditItemModal(" + itemId + ", " + JSON.stringify(data.item_name) + ", " + data.shop_id + ", " + data.price + ", " + (data.is_recommended ? 1 : 0) + ")");
+          }
+        } else {
+          adminToast(data.message || 'Failed to update menu item.', true);
         }
       })
       .catch(function(err) {
@@ -3350,7 +3734,7 @@ if (isset($_GET['tab']) && in_array($_GET['tab'], ['analytics', 'users', 'auditl
       var formData = new FormData(form);
       var riderId = formData.get('rider_id');
 
-      fetch('admin_dashboard.php', {
+      fetch('admin_dashboard.php?tab=riders', {
         method: 'POST',
         body: formData,
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
