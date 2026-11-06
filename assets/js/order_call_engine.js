@@ -557,6 +557,7 @@
         window._arrivalModalTimer = null;
       }
       window._hasTriggeredArrivalModal = false;
+      window.arrivalModalShown = false;
       window._wasTrackArrived = false;
       if (window._customerTrackingLastStates && oId) {
         window._customerTrackingLastStates[oId] = 'on_delivery';
@@ -1459,6 +1460,7 @@
 
     if (typeof window !== 'undefined') {
       window._hasTriggeredArrivalModal = true;
+      window.arrivalModalShown = true;
     }
   }
 

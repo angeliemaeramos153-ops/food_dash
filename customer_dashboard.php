@@ -6107,61 +6107,19 @@ async function pollCustomerOrdersLive() {
         (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_arrival_ack_' + oId) === '1')
       );
 
-      // STRICT ARRIVAL TRIGGER: Only trigger banner and delayed modal on ACTIVE transition during active polling!
-      // Do NOT fire on initial page load if order was already arrived.
-      if (!hasObservedBaseline) {
+      if (isArrived) {
         _customerLastOrderStates[oId] = raw_status;
-      } else if (isActiveArrivalTransition && !window.isLoggingOut && 
-          !(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('fd_logging_out') === '1') &&
-          !(typeof localStorage !== 'undefined' && localStorage.getItem('fd_logging_out') === '1')) {
-
-        // Remove premature flags on active arrival transition so they never block modal execution
-        try {
-          localStorage.removeItem('fd_arrival_ack_' + oId);
-          sessionStorage.removeItem('fd_arrival_ack_' + oId);
-          localStorage.removeItem('fd_arrival_acknowledged_all');
-          sessionStorage.removeItem('fd_arrival_acknowledged_all');
-        } catch (e) {}
-        if (window.FoodDashCall) {
-          window.FoodDashCall.arrivalAcknowledged = false;
-        }
-
-        sessionStorage.setItem(arrivedKey, '1');
-        window.displayedNotificationIds.add('arrived_' + oId);
-
-        const rName = ord.rider_name || 'Rider';
-        const cleanRef = '#' + String(ord.order_ref || ('FD-' + oId)).replace(/^#+/, '');
-        window._lastArrivalPayload = { order_id: oId, rider_name: rName, order: ord };
-
-        // 1. Staggered Arrival Flow: Trigger ONLY top notification banner first
-        showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with order ${cleanRef}! Please meet outside.`, () => {
-          if (window._arrivalModalTimer) {
-            clearTimeout(window._arrivalModalTimer);
-            window._arrivalModalTimer = null;
-          }
-          triggerArrivalModal({ order_id: oId, rider_name: rName, order: ord });
-        }, 3000);
-
-        // 2. Delayed Modal Trigger: Let banner stay visible for ~3 seconds, then trigger interactive modal
-        if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
-          window._arrivalModalTimer = setTimeout(() => {
-            window._arrivalModalTimer = null;
-            triggerArrivalModal({ order_id: oId, rider_name: rName, order: ord });
-          }, 3000);
-        }
-
-        _customerLastOrderStates[oId] = raw_status;
-        if (typeof loadNotifications === 'function') loadNotifications();
-      } else if (isArrived) {
-        _customerLastOrderStates[oId] = raw_status;
-        // 3. Persistence Fix: Maintain modal stably on screen during 2s polls
-        if (modal && !isArrivalAck && window._hasTriggeredArrivalModal) {
+        if (!window.arrivalModalShown) {
+          const rName = ord.rider_name || 'Rider';
+          showArrivalModal({ order_id: oId, rider_name: rName, order: ord });
+        } else if (modal && !isArrivalAck && window._hasTriggeredArrivalModal) {
           modal.classList.add('show', 'active');
           modal.style.setProperty('display', 'flex', 'important');
           modal.style.setProperty('visibility', 'visible', 'important');
           modal.style.setProperty('pointer-events', 'auto', 'important');
         }
       } else if (wasArrived && !isArrived) {
+        window.arrivalModalShown = false;
         if (window._arrivalModalTimer) {
           clearTimeout(window._arrivalModalTimer);
           window._arrivalModalTimer = null;
@@ -7693,58 +7651,29 @@ function triggerArrivalModal(data = {}) {
     updateOrderStatusToArrived(oId);
   }
   window._hasTriggeredArrivalModal = true;
+  window.arrivalModalShown = true;
 }
 window.triggerArrivalModal = triggerArrivalModal;
 
-    // STRICT ARRIVAL TRIGGER: Only trigger banner and delayed modal on ACTIVE transition during active polling!
-    // Do NOT fire on initial tracking load if order was already arrived.
-    if (!hasTrackBaseline) {
-      window._customerTrackingLastStates[orderId] = isLiveArrived ? 'arrived' : (dataDelSt || ordDelSt || dataRawSt || ordRawSt || 'on_delivery');
-    } else if (isTrackTransitionToArrived) {
-      // Remove premature flags on active arrival transition so they never block modal execution
-      try {
-        localStorage.removeItem('fd_arrival_ack_' + orderId);
-        sessionStorage.removeItem('fd_arrival_ack_' + orderId);
-        localStorage.removeItem('fd_arrival_acknowledged_all');
-        sessionStorage.removeItem('fd_arrival_acknowledged_all');
-      } catch (e) {}
-      if (window.FoodDashCall) {
-        window.FoodDashCall.arrivalAcknowledged = false;
-      }
+function showArrivalModal(data = {}) {
+  if (window.arrivalModalShown) return;
+  window.arrivalModalShown = true;
+  triggerArrivalModal(data);
+}
+window.showArrivalModal = showArrivalModal;
 
-      sessionStorage.setItem(arrivedAlertKey, '1');
-      window.displayedNotificationIds.add('arrived_' + orderId);
-
-      const rName = currentTrackingRiderName || ord.rider_name || 'Rider';
-      window._lastArrivalPayload = { order_id: orderId, rider_name: rName, order: ord };
-
-      // 1. Staggered Arrival Flow: Trigger ONLY top notification banner first
-      showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside.`, () => {
-        if (window._arrivalModalTimer) {
-          clearTimeout(window._arrivalModalTimer);
-          window._arrivalModalTimer = null;
-        }
-        triggerArrivalModal({ order_id: orderId, rider_name: rName, order: ord });
-      }, 3000);
-
-      // 2. Delayed Modal Trigger: Let banner stay visible for ~3 seconds, then trigger interactive modal
-      if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
-        window._arrivalModalTimer = setTimeout(() => {
-          window._arrivalModalTimer = null;
-          triggerArrivalModal({ order_id: orderId, rider_name: rName, order: ord });
-        }, 3000);
-      }
+    if (isLiveArrived) {
       window._customerTrackingLastStates[orderId] = 'arrived';
-    } else if (isLiveArrived) {
-      window._customerTrackingLastStates[orderId] = 'arrived';
-      // 3. Persistence Fix: Maintain modal stably on screen during 2s polls
-      if (modal && !isAck && window._hasTriggeredArrivalModal) {
+      if (!window.arrivalModalShown) {
+        showArrivalModal({ order_id: orderId, rider_name: rName, order: ord });
+      } else if (modal && !isAck && window._hasTriggeredArrivalModal) {
         modal.classList.add('show', 'active');
         modal.style.setProperty('display', 'flex', 'important');
         modal.style.setProperty('visibility', 'visible', 'important');
         modal.style.setProperty('pointer-events', 'auto', 'important');
       }
     } else if (wasTrackArrived && !isLiveArrived) {
+      window.arrivalModalShown = false;
       if (window._arrivalModalTimer) {
         clearTimeout(window._arrivalModalTimer);
         window._arrivalModalTimer = null;
@@ -8917,6 +8846,7 @@ function openChatFromBanner() {
 }
 
 function closeRiderArrivedModal() {
+  window.arrivalModalShown = true;
   if (window._arrivalModalTimer) {
     clearTimeout(window._arrivalModalTimer);
     window._arrivalModalTimer = null;
@@ -9168,21 +9098,8 @@ function handleRiderArrivedEvent(data) {
   const rName = (data.rider_name || currentTrackingRiderName || 'Rider');
   window._lastArrivalPayload = { order_id: oId, rider_name: rName, order: data.order || data };
 
-  // 1. Staggered Arrival Flow: Trigger ONLY top notification banner first
-  showCustomerFloatingBanner(`RIDER ARRIVED (${rName})`, `📍 Your rider has arrived outside with your order! Please meet outside.`, () => {
-    if (window._arrivalModalTimer) {
-      clearTimeout(window._arrivalModalTimer);
-      window._arrivalModalTimer = null;
-    }
-    triggerArrivalModal({ order_id: oId, rider_name: rName, order: data.order || data });
-  }, 3000);
-
-  // 2. Delayed Modal Trigger: Let banner stay visible for ~3 seconds, then trigger interactive modal
-  if (!window._hasTriggeredArrivalModal && !window._arrivalModalTimer) {
-    window._arrivalModalTimer = setTimeout(() => {
-      window._arrivalModalTimer = null;
-      triggerArrivalModal({ order_id: oId, rider_name: rName, order: data.order || data });
-    }, 3000);
+  if (!window.arrivalModalShown) {
+    showArrivalModal({ order_id: oId, rider_name: rName, order: data.order || data });
   } else if (window._hasTriggeredArrivalModal) {
     // 3. Persistence Fix: Maintain modal stably on screen during 2s polls
     const modal = document.getElementById('riderArrivedModal');
