@@ -278,6 +278,17 @@ UPDATE orders o
 
 DELETE FROM shops WHERE shop_name = 'Green Wich';
 
+-- SYNC MCDONALDS ORDERS & SHOP ID RELATIONSHIPS
+UPDATE food_orders fo
+  JOIN shops s ON (s.shop_name LIKE '%McDonald%' OR s.shop_id = 1)
+  SET fo.shop_id = s.shop_id, fo.store_name = s.shop_name
+  WHERE fo.shop_id = 2 OR (fo.shop_id = s.shop_id AND (fo.store_name LIKE '%FoodDash%' OR fo.store_name LIKE '%Food Dash%'));
+
+UPDATE orders o
+  JOIN shops s ON (s.shop_name LIKE '%McDonald%' OR s.shop_id = 1)
+  SET o.shop_id = s.shop_id
+  WHERE o.shop_id = 2;
+
 -- SEED COMPLETE PARTNER STORE MENU ITEMS WITH DYNAMIC CATEGORIES
 INSERT INTO menu_items (shop_id, item_name, category, price, description, icon, is_recommended, is_available)
 SELECT s.shop_id, 'Ribeye Steak', 'Ribs & Steaks', 680.00, 'Tender USDA ribeye steak flame-grilled with herb butter.', '🥩', 1, 1 FROM shops s WHERE s.shop_name = 'FoodDash Grill' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Ribeye Steak');
@@ -293,19 +304,19 @@ INSERT INTO menu_items (shop_id, item_name, category, price, description, icon, 
 SELECT s.shop_id, 'Grilled Pork Belly Liempo', 'BBQ & Pork', 249.00, 'Marinated succulent pork belly grilled over live charcoal.', '🥩', 0, 1 FROM shops s WHERE s.shop_name = 'FoodDash Grill' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Grilled Pork Belly Liempo');
 
 INSERT INTO menu_items (shop_id, item_name, category, price, description, icon, is_recommended, is_available)
-SELECT s.shop_id, 'Big Mac', 'Burgers', 179.00, 'Two 100% pure beef patties, special sauce, lettuce and cheese.', '🍔', 1, 1 FROM shops s WHERE s.shop_name = 'McDonalds' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Big Mac');
+SELECT s.shop_id, 'Big Mac', 'Burgers', 179.00, 'Two 100% pure beef patties, special sauce, lettuce and cheese.', '🍔', 1, 1 FROM shops s WHERE s.shop_name LIKE '%McDonald%' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Big Mac');
 INSERT INTO menu_items (shop_id, item_name, category, price, description, icon, is_recommended, is_available)
-SELECT s.shop_id, 'Quarter Pounder', 'Burgers', 195.00, 'Quarter pound of 100% fresh beef with melted cheese.', '🍔', 0, 1 FROM shops s WHERE s.shop_name = 'McDonalds' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Quarter Pounder');
+SELECT s.shop_id, 'Quarter Pounder', 'Burgers', 195.00, 'Quarter pound of 100% fresh beef with melted cheese.', '🍔', 0, 1 FROM shops s WHERE s.shop_name LIKE '%McDonald%' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Quarter Pounder');
 INSERT INTO menu_items (shop_id, item_name, category, price, description, icon, is_recommended, is_available)
-SELECT s.shop_id, 'Chicken McDo', 'Chicken', 119.00, 'Golden crispy fried chicken served with rich gravy and rice.', '🍗', 1, 1 FROM shops s WHERE s.shop_name = 'McDonalds' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Chicken McDo');
+SELECT s.shop_id, 'Chicken McDo', 'Chicken', 119.00, 'Golden crispy fried chicken served with rich gravy and rice.', '🍗', 1, 1 FROM shops s WHERE s.shop_name LIKE '%McDonald%' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Chicken McDo');
 INSERT INTO menu_items (shop_id, item_name, category, price, description, icon, is_recommended, is_available)
-SELECT s.shop_id, 'McSpaghetti', 'Pasta', 89.00, 'Filipino-style sweet tomato sauce spaghetti with ground meat and cheese.', '🍝', 1, 1 FROM shops s WHERE s.shop_name = 'McDonalds' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'McSpaghetti');
+SELECT s.shop_id, 'McSpaghetti', 'Pasta', 89.00, 'Filipino-style sweet tomato sauce spaghetti with ground meat and cheese.', '🍝', 1, 1 FROM shops s WHERE s.shop_name LIKE '%McDonald%' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'McSpaghetti');
 INSERT INTO menu_items (shop_id, item_name, category, price, description, icon, is_recommended, is_available)
-SELECT s.shop_id, 'Chicken Ala King', 'Rice Meals', 129.00, 'Crispy chicken fillet with creamy ala king sauce over rice.', '🍚', 0, 1 FROM shops s WHERE s.shop_name = 'McDonalds' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Chicken Ala King');
+SELECT s.shop_id, 'Chicken Ala King', 'Rice Meals', 129.00, 'Crispy chicken fillet with creamy ala king sauce over rice.', '🍚', 0, 1 FROM shops s WHERE s.shop_name LIKE '%McDonald%' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Chicken Ala King');
 INSERT INTO menu_items (shop_id, item_name, category, price, description, icon, is_recommended, is_available)
-SELECT s.shop_id, 'French Fries', 'Sides', 75.00, 'Golden crispy french fries seasoned with salt.', '🍟', 1, 1 FROM shops s WHERE s.shop_name = 'McDonalds' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'French Fries');
+SELECT s.shop_id, 'French Fries', 'Sides', 75.00, 'Golden crispy french fries seasoned with salt.', '🍟', 1, 1 FROM shops s WHERE s.shop_name LIKE '%McDonald%' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'French Fries');
 INSERT INTO menu_items (shop_id, item_name, category, price, description, icon, is_recommended, is_available)
-SELECT s.shop_id, 'Hot Fudge Sundae', 'Desserts', 49.00, 'Creamy vanilla soft serve with warm chocolate fudge.', '🍨', 0, 1 FROM shops s WHERE s.shop_name = 'McDonalds' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Hot Fudge Sundae');
+SELECT s.shop_id, 'Hot Fudge Sundae', 'Desserts', 49.00, 'Creamy vanilla soft serve with warm chocolate fudge.', '🍨', 0, 1 FROM shops s WHERE s.shop_name LIKE '%McDonald%' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Hot Fudge Sundae');
 
 INSERT INTO menu_items (shop_id, item_name, category, price, description, icon, is_recommended, is_available)
 SELECT s.shop_id, 'Chickenjoy', 'Chicken', 129.00, 'Crispylicious, juicylicious fried chicken with savory gravy.', '🍗', 1, 1 FROM shops s WHERE s.shop_name = 'Jollibee' AND NOT EXISTS (SELECT 1 FROM menu_items WHERE shop_id = s.shop_id AND item_name = 'Chickenjoy');

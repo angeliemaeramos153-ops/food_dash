@@ -133,6 +133,7 @@ if ($method === 'POST') {
             $s_stmt->execute([':sid' => $shop_id]);
             $s_res = $s_stmt->fetch(PDO::FETCH_ASSOC);
             if ($s_res) {
+                $store_name = $s_res['shop_name'];
                 $store_lat = (!empty($s_res['lat']) && is_numeric($s_res['lat'])) 
                     ? (float)$s_res['lat'] 
                     : ((!empty($s_res['lat']) && is_numeric($s_res['lat'])) ? (float)$s_res['lat'] : null);
@@ -152,13 +153,14 @@ if ($method === 'POST') {
                 // Fallback partial match if exact name didn't hit
                 if (!$s_res) {
                     $s_like = '%' . strtolower(trim($first_store)) . '%';
-                    $s_stmt2 = $conn->prepare("SELECT shop_id, shop_name FROM shops WHERE LOWER(shop_name) LIKE :slike LIMIT 1");
-                    $s_stmt2->execute([':slike' => $s_like]);
+                    $s_stmt2 = $conn->prepare("SELECT shop_id, shop_name FROM shops WHERE LOWER(shop_name) LIKE :slike OR LOWER(:sraw) LIKE CONCAT('%', LOWER(shop_name), '%') LIMIT 1");
+                    $s_stmt2->execute([':slike' => $s_like, ':sraw' => $first_store]);
                     $s_res = $s_stmt2->fetch(PDO::FETCH_ASSOC);
                 }
 
                 if ($s_res) {
                     $shop_id = (int)$s_res['shop_id'];
+                    $store_name = $s_res['shop_name'];
                     $store_lat = (!empty($s_res['lat']) && is_numeric($s_res['lat'])) 
                         ? (float)$s_res['lat'] 
                         : ((!empty($s_res['lat']) && is_numeric($s_res['lat'])) ? (float)$s_res['lat'] : null);

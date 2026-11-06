@@ -108,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit();
         }
 
-        $chk = $conn->prepare("SELECT order_id, customer_id, order_ref, store_name, status, total_amount FROM food_orders WHERE order_id = :oid LIMIT 1");
+        $chk = $conn->prepare("SELECT fo.order_id, fo.customer_id, fo.shop_id, fo.order_ref, fo.status, fo.total_amount, COALESCE(NULLIF(s.shop_name, ''), NULLIF(fo.store_name, ''), 'Shop') AS store_name FROM food_orders fo LEFT JOIN shops s ON fo.shop_id = s.shop_id WHERE fo.order_id = :oid LIMIT 1");
         $chk->execute([':oid' => $order_id]);
         $ord_data = $chk->fetch(PDO::FETCH_ASSOC);
 
@@ -280,7 +280,7 @@ $store_counts = array();
 $total_all_orders = 0;
 
 // Query orders with shop_id for proper grouping
-$count_query = $conn->query("SELECT shop_id, COUNT(*) as total FROM food_orders WHERE UPPER(status) NOT IN ('COMPLETED', 'DELIVERED', 'SETTLED', 'CANCELLED') GROUP BY shop_id");
+$count_query = $conn->query("SELECT fo.shop_id, COUNT(*) as total FROM food_orders fo WHERE UPPER(fo.status) NOT IN ('COMPLETED', 'DELIVERED', 'SETTLED', 'CANCELLED', 'CANCELED') GROUP BY fo.shop_id");
 if ($count_query) {
     while ($r = $count_query->fetch(PDO::FETCH_ASSOC)) {
         $sid = (int)$r['shop_id'];
@@ -291,7 +291,7 @@ if ($count_query) {
 }
 
 // Also get counts for orders without shop_id (legacy) grouped by store_name
-$legacy_count_query = $conn->query("SELECT store_name, COUNT(*) as total FROM food_orders WHERE (shop_id = 0 OR shop_id IS NULL) AND UPPER(status) NOT IN ('COMPLETED', 'DELIVERED', 'SETTLED', 'CANCELLED') GROUP BY store_name");
+$legacy_count_query = $conn->query("SELECT store_name, COUNT(*) as total FROM food_orders WHERE (shop_id = 0 OR shop_id IS NULL) AND UPPER(status) NOT IN ('COMPLETED', 'DELIVERED', 'SETTLED', 'CANCELLED', 'CANCELED') GROUP BY store_name");
 if ($legacy_count_query) {
     while ($r = $legacy_count_query->fetch(PDO::FETCH_ASSOC)) {
         $store_name = $r['store_name'];
@@ -313,15 +313,34 @@ if ($legacy_count_query) {
     }
 }
 
-// 3. Fetch Orders
+// 3. Fetch Orders - Dynamically join shops table via shop_id foreign key
 $orders = array();
 if ($active_tab === 'orders') {
     if ($selected_shop_id === 0) {
         // All stores - show all active and recent orders across all lifecycle states
-        $res = $conn->query("SELECT * FROM food_orders ORDER BY order_id DESC LIMIT 100");
+        $order_sql = "SELECT fo.*, 
+                             s.shop_name, 
+                             s.logo_url AS shop_logo,
+                             s.category AS shop_category,
+                             COALESCE(NULLIF(s.shop_name, ''), NULLIF(fo.store_name, ''), 'Shop') AS store_name
+                      FROM food_orders fo
+                      LEFT JOIN shops s ON fo.shop_id = s.shop_id
+                      ORDER BY fo.order_id DESC
+                      LIMIT 100";
+        $res = $conn->query($order_sql);
     } else {
-        // Specific store - filter by shop_id
-        $stmt = $conn->prepare("SELECT * FROM food_orders WHERE shop_id = :sid ORDER BY order_id DESC LIMIT 100");
+        // Specific store - filter by shop_id with dynamic shops join
+        $order_sql = "SELECT fo.*, 
+                             s.shop_name, 
+                             s.logo_url AS shop_logo,
+                             s.category AS shop_category,
+                             COALESCE(NULLIF(s.shop_name, ''), NULLIF(fo.store_name, ''), 'Shop') AS store_name
+                      FROM food_orders fo
+                      LEFT JOIN shops s ON fo.shop_id = s.shop_id
+                      WHERE fo.shop_id = :sid
+                      ORDER BY fo.order_id DESC
+                      LIMIT 100";
+        $stmt = $conn->prepare($order_sql);
         $stmt->execute([':sid' => $selected_shop_id]);
         $res = $stmt;
     }
@@ -895,8 +914,13 @@ html, body {
             <?php 
               $raw_ref = !empty($ord['order_ref']) ? $ord['order_ref'] : $ord['order_id'];
               $display_ref = '#' . ltrim($raw_ref, '#');
+              $card_store_name = !empty($ord['shop_name']) 
+                ? $ord['shop_name'] 
+                : (!empty($selected_shop_name) 
+                  ? $selected_shop_name 
+                  : (!empty($ord['store_name']) ? $ord['store_name'] : 'Shop'));
             ?>
-            <strong style="font-size:11px;"><?php echo htmlspecialchars($display_ref); ?> — <?php echo htmlspecialchars(isset($ord['store_name']) ? $ord['store_name'] : 'Shop'); ?></strong>
+            <strong style="font-size:11px;"><?php echo htmlspecialchars($display_ref); ?> — <?php echo htmlspecialchars($card_store_name); ?></strong>
             <span class="status-badge status-<?php echo strtolower($st); ?>"><?php echo htmlspecialchars($st); ?></span>
           </div>
           <p style="font-size:10px;color:var(--muted);">Items: <strong><?php echo htmlspecialchars(isset($ord['items_summary']) ? $ord['items_summary'] : 'Order'); ?></strong></p>

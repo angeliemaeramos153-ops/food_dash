@@ -2960,7 +2960,7 @@ a:active,
         $pd_price = (float)$pd['price'];
         $pd_icon = !empty($pd['icon']) ? $pd['icon'] : '🍽️';
         $pd_desc = !empty($pd['description']) ? $pd['description'] : 'Fresh and delicious meal prepared to order.';
-        $pd_store = !empty($pd['shop_name']) ? $pd['shop_name'] : 'FoodDash Grill';
+        $pd_store = !empty($pd['shop_name']) ? $pd['shop_name'] : 'McDonalds';
     ?>
     <div class="food-card" data-category="Popular" onclick="openItem('<?php echo htmlspecialchars(addslashes($pd_name)); ?>',<?php echo $pd_price; ?>,'<?php echo htmlspecialchars(addslashes($pd_icon)); ?>','<?php echo htmlspecialchars(addslashes($pd_desc)); ?>','<?php echo htmlspecialchars(addslashes($pd_store)); ?>')">
       <div class="food-img"><?php echo htmlspecialchars($pd_icon); ?></div>
@@ -3064,7 +3064,7 @@ a:active,
       <div class="info"><strong><?php echo htmlspecialchars($sh_name); ?></strong><small><?php echo htmlspecialchars($sh_cat); ?></small></div>
     </div>
     <?php endforeach; else: ?>
-    <div class="row-card" onclick="openStore('FoodDash Grill','logo.jpg', 1)"><div class="row-icon"><img src="logo.jpg" alt="FoodDash Grill" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>FoodDash Grill</strong><small>Smoked Ribs • Flame-Grilled BBQ • Angus Burgers</small></div></div>
+    <div class="row-card" onclick="openStore('McDonalds','assets/shops/mcdonalds.png', 1)"><div class="row-icon"><img src="assets/shops/mcdonalds.png" alt="McDonalds" onerror="this.src='assets/shops/default_store.png'"></div><div class="info"><strong>McDonalds</strong><small>Burgers • Fries • Chicken McDo</small></div></div>
     <?php endif; ?>
   </div>
 </section>
@@ -10102,7 +10102,7 @@ function handlePayAction(e) {
       var dName = addBtn.getAttribute('data-name');
       var dPrice = parseFloat(addBtn.getAttribute('data-price') || '0');
       var dIcon = addBtn.getAttribute('data-icon') || '🍽️';
-      var dStore = addBtn.getAttribute('data-store') || 'FoodDash Grill';
+      var dStore = addBtn.getAttribute('data-store') || 'McDonalds';
       if (dName && typeof window.addCart === 'function') {
         window.addCart(dName, dPrice, dIcon, dStore);
         return;

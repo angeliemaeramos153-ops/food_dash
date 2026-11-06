@@ -168,6 +168,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' || !empty($payload)) {
         $shop_stmt = $conn->prepare("SELECT shop_id, shop_name FROM shops WHERE LOWER(shop_name) = LOWER(:s) LIMIT 1");
         $shop_stmt->execute([':s' => $store_name]);
         $found_shop = $shop_stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$found_shop) {
+            $s_like = '%' . strtolower(trim($store_name)) . '%';
+            $shop_stmt2 = $conn->prepare("SELECT shop_id, shop_name FROM shops WHERE LOWER(shop_name) LIKE :slike OR LOWER(:sraw) LIKE CONCAT('%', LOWER(shop_name), '%') LIMIT 1");
+            $shop_stmt2->execute([':slike' => $s_like, ':sraw' => $store_name]);
+            $found_shop = $shop_stmt2->fetch(PDO::FETCH_ASSOC);
+        }
         if ($found_shop && !empty($found_shop['shop_id'])) {
             $shop_id = (int)$found_shop['shop_id'];
             $store_name = $found_shop['shop_name'];
