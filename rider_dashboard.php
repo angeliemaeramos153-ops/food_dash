@@ -4038,6 +4038,7 @@ document.addEventListener('visibilitychange', () => {
 
 document.addEventListener('DOMContentLoaded', () => {
   setupRiderMapObservers();
+  bindChatActionListeners();
 });
 window.addEventListener('beforeunload', () => stopLiveLocation());
 // Rider & Customer / Manager Chat Integration
@@ -4049,6 +4050,7 @@ let activeChatChannel = 'customer'; // 'customer' or 'manager'
 let chatPollTimer = null;
 let lastKnownMessageId = 0;
 let isChatSubmitting = false;
+let _lastChatOpenTimestamp = 0;
 
 const CUSTOMER_QUICK_PILLS = [
   { icon: '🛵', label: "I've arrived outside", text: "I've arrived outside with your order! 🛵" },
@@ -4122,12 +4124,38 @@ function updateChatChannelUI() {
 }
 
 function openOrderChat(orderId, name, phone, dial, initialChannel, storeName) {
-  const resolvedOrderId = orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? (activeDeliveryData.order_id || activeDeliveryData.id) : null);
-  if (!resolvedOrderId) {
+  // Support flexible options object: openOrderChat({ orderId, channel, customerName, ... })
+  if (typeof orderId === 'object' && orderId !== null) {
+    const opts = orderId;
+    orderId = opts.orderId || opts.order_id || opts.id;
+    name = opts.customerName || opts.customer_name || opts.name;
+    initialChannel = opts.channel || opts.initialChannel;
+    phone = opts.phone || opts.customerPhone || opts.customer_phone;
+    dial = opts.dial || opts.customerDial || opts.customer_dial;
+    storeName = opts.storeName || opts.store_name;
+  }
+
+  // Support flexible signature if channel is passed as 3rd arg: openOrderChat(orderId, name, 'manager')
+  if (typeof phone === 'string' && (phone === 'customer' || phone === 'manager' || phone === 'support')) {
+    initialChannel = phone;
+    phone = null;
+  }
+
+  const now = Date.now();
+  const rawId = orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? (activeDeliveryData.order_id || activeDeliveryData.id) : null);
+  const parsedOrderId = rawId ? parseInt(rawId, 10) : 0;
+
+  // Ignore rapid duplicate trigger on the same order within 250ms
+  if (activeChatOrderId === parsedOrderId && parsedOrderId > 0 && (now - _lastChatOpenTimestamp) < 250) {
+    return;
+  }
+  _lastChatOpenTimestamp = now;
+
+  if (!parsedOrderId) {
     toastRider('No active delivery selected for chat', true);
     return;
   }
-  activeChatOrderId = parseInt(resolvedOrderId, 10);
+  activeChatOrderId = parsedOrderId;
   lastKnownMessageId = 0;
 
   activeChatCustomerName = name || currentActiveCustomerName || 'Customer';
@@ -4178,6 +4206,29 @@ function openOrderChat(orderId, name, phone, dial, initialChannel, storeName) {
       fetchOrderMessages(activeChatOrderId, false);
     }
   }, 2000);
+}
+
+// Active event listeners binder for elements with data-action="open-chat"
+function bindChatActionListeners() {
+  const chatButtons = document.querySelectorAll('[data-action="open-chat"], [data-action="open-chat-mgr"]');
+  chatButtons.forEach(btn => {
+    if (btn._chatBound) return;
+    btn._chatBound = true;
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const orderId = this.getAttribute('data-order-id') || this.dataset.orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? (activeDeliveryData.order_id || activeDeliveryData.id) : null);
+      const actionAttr = this.getAttribute('data-action') || '';
+      const channel = this.getAttribute('data-channel') || this.dataset.channel || (actionAttr === 'open-chat-mgr' ? 'manager' : 'customer');
+      const customerName = this.getAttribute('data-customer-name') || this.dataset.customerName || currentActiveCustomerName || 'Customer';
+      const customerPhone = this.getAttribute('data-customer-phone') || this.dataset.customerPhone || currentActiveCustomerPhone || '+63 917 123 4567';
+      const customerDial = this.getAttribute('data-customer-dial') || this.dataset.customerDial || customerPhone;
+      const storeName = this.getAttribute('data-store-name') || this.dataset.storeName || (activeDeliveryData ? activeDeliveryData.store_name : '') || 'Store';
+
+      openOrderChat(orderId, customerName, customerPhone, customerDial, channel, storeName);
+    });
+  });
 }
 
 function closeOrderChat() {
@@ -4765,32 +4816,21 @@ document.addEventListener('click', function(e) {
     return;
   }
 
-  // Chat modal open triggers (from active delivery, cards, or buttons)
-  const openChatTrigger = e.target.closest('.btn-open-chat, .msg-action-btn, [data-action="open-chat"]');
+  // Chat modal open triggers (from active delivery, cards, or buttons with data-action="open-chat")
+  const openChatTrigger = e.target.closest('[data-action="open-chat"], [data-action="open-chat-mgr"], .btn-open-chat, .msg-action-btn, .mgr-action-btn');
   if (openChatTrigger && !e.target.closest('#riderChatModal')) {
     e.preventDefault();
     e.stopPropagation();
-    const orderId = openChatTrigger.dataset.orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
-    const name = openChatTrigger.dataset.customerName || currentActiveCustomerName || 'Customer';
-    const phone = openChatTrigger.dataset.customerPhone || currentActiveCustomerPhone || '+63 917 123 4567';
-    const dial = openChatTrigger.dataset.customerDial || phone;
-    const store = openChatTrigger.dataset.storeName || (activeDeliveryData ? activeDeliveryData.store_name : '') || 'Store';
-    const channel = openChatTrigger.dataset.channel || 'customer';
-    openOrderChat(orderId, name, phone, dial, channel, store);
-    return;
-  }
 
-  // Support / Manager chat trigger
-  const openChatMgrTrigger = e.target.closest('.btn-open-chat-mgr, .mgr-action-btn, [data-action="open-chat-mgr"]');
-  if (openChatMgrTrigger && !e.target.closest('#riderChatModal')) {
-    e.preventDefault();
-    e.stopPropagation();
-    const orderId = openChatMgrTrigger.dataset.orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? activeDeliveryData.order_id : null);
-    const name = openChatMgrTrigger.dataset.customerName || currentActiveCustomerName || 'Customer';
-    const phone = openChatMgrTrigger.dataset.customerPhone || currentActiveCustomerPhone || '+63 917 123 4567';
-    const dial = openChatMgrTrigger.dataset.customerDial || phone;
-    const store = openChatMgrTrigger.dataset.storeName || (activeDeliveryData ? activeDeliveryData.store_name : '') || 'Store';
-    openOrderChat(orderId, name, phone, dial, 'manager', store);
+    const orderId = openChatTrigger.getAttribute('data-order-id') || openChatTrigger.dataset.orderId || activeRiderDeliveryOrderId || (activeDeliveryData ? (activeDeliveryData.order_id || activeDeliveryData.id) : null);
+    const actionAttr = openChatTrigger.getAttribute('data-action') || '';
+    const channel = openChatTrigger.getAttribute('data-channel') || openChatTrigger.dataset.channel || (actionAttr === 'open-chat-mgr' || openChatTrigger.classList.contains('mgr-action-btn') ? 'manager' : 'customer');
+    const customerName = openChatTrigger.getAttribute('data-customer-name') || openChatTrigger.dataset.customerName || currentActiveCustomerName || 'Customer';
+    const customerPhone = openChatTrigger.getAttribute('data-customer-phone') || openChatTrigger.dataset.customerPhone || currentActiveCustomerPhone || '+63 917 123 4567';
+    const customerDial = openChatTrigger.getAttribute('data-customer-dial') || openChatTrigger.dataset.customerDial || customerPhone;
+    const storeName = openChatTrigger.getAttribute('data-store-name') || openChatTrigger.dataset.storeName || (activeDeliveryData ? activeDeliveryData.store_name : '') || 'Store';
+
+    openOrderChat(orderId, customerName, customerPhone, customerDial, channel, storeName);
     return;
   }
 
