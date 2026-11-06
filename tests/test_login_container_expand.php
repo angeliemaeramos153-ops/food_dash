@@ -54,10 +54,44 @@ check("#login-form has display: flex and flex-direction: column",
     preg_match('/#login-form\s*\{[^}]*flex-direction:\s*column;/s', $index_content)
 );
 
-// Verify .btn has flex-shrink: 0 and z-index to avoid clipping/shrinking
+// Verify .btn has flex-shrink: 0 and margin spacing
 check(".btn has flex-shrink: 0 and margin spacing",
     preg_match('/\.btn\s*\{[^}]*flex-shrink:\s*0;/s', $index_content)
 );
+
+// Verify .captcha-wrapper has top and bottom margins
+check(".captcha-wrapper has top and bottom margins (margin: 16px 0 18px 0;)",
+    preg_match('/\.captcha-wrapper\s*\{[^}]*margin:\s*16px 0 18px 0;/s', $index_content)
+);
+
+// Verify .btn has padding and min-height for easy clicking
+check(".btn has generous padding and height for easy clicking",
+    preg_match('/\.btn\s*\{[^}]*height:\s*46px;/s', $index_content) &&
+    preg_match('/\.btn\s*\{[^}]*padding:\s*12px 20px;/s', $index_content)
+);
+
+// Verify CAPTCHA library only generates single-digit addition (1-9) with no multiplication
+$all_single_digit_addition = true;
+$zero_multiplication = true;
+$answers_correct = true;
+
+for ($i = 0; $i < 100; $i++) {
+    $c = generate_captcha_challenge(true);
+    if (strpos($c['display'], '×') !== false || strpos($c['question'], 'times') !== false || strpos($c['question'], 'multiplied') !== false) {
+        $zero_multiplication = false;
+    }
+    if (!preg_match('/^([1-9]) \+ ([1-9]) = \?$/', $c['display'], $m)) {
+        $all_single_digit_addition = false;
+    } else {
+        $expected = (int)$m[1] + (int)$m[2];
+        if ((int)$c['answer'] !== $expected) {
+            $answers_correct = false;
+        }
+    }
+}
+check("CAPTCHA library: 100/100 challenges are strictly single-digit addition (1-9)", $all_single_digit_addition);
+check("CAPTCHA library: 0/100 challenges contain multiplication", $zero_multiplication);
+check("CAPTCHA library: 100/100 answers match the addition sum", $answers_correct);
 
 // Verify CAPTCHA wrapper and Submit button stacking order in DOM
 $captcha_pos = strpos($index_content, 'id="captchaWrapper"');
@@ -73,10 +107,10 @@ $_SESSION['login_attempts'] = 2;
 $_SESSION['login_captcha'] = [
     'id' => 'test1234',
     'type' => 'math',
-    'display' => '12 + 8 = ?',
-    'question' => 'What is 12 + 8?',
-    'answer' => '20',
-    'audio_text' => 'Security challenge: What is 12 plus 8?',
+    'display' => '4 + 7 = ?',
+    'question' => 'What is 4 + 7?',
+    'answer' => '11',
+    'audio_text' => 'Security challenge: What is 4 plus 7?',
     'created_at' => time()
 ];
 session_write_close();
@@ -90,7 +124,7 @@ echo json_encode([
     'submit_btn_present'      => (strpos($html, 'id="login-btn"') !== false),
     'submit_has_sign_in'      => (strpos($html, '>Sign In</span>') !== false),
     'has_security_title'      => (strpos($html, 'Security Verification') !== false),
-    'has_challenge_text'      => (strpos($html, '12 + 8 = ?') !== false)
+    'has_challenge_text'      => (strpos($html, '4 + 7 = ?') !== false)
 ]);
 PHP;
 

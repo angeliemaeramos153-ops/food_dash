@@ -63,8 +63,8 @@ function is_captcha_required(?PDO $conn = null, ?string $username = null, int $l
 
 /**
  * Generate a randomized CAPTCHA challenge and store it in session.
- * Supports randomized math puzzles (addition, subtraction, multiplication)
- * and character security codes.
+ * Exclusively uses single-digit addition with numbers between 1 and 9 (e.g. 3 + 4).
+ * Multiplication and complex operators are completely removed.
  *
  * @param bool $force_new If true, forces generation of a new challenge
  * @return array Challenge payload [id, type, question, display, answer, audio_text]
@@ -77,64 +77,25 @@ function generate_captcha_challenge(bool $force_new = false): array {
         }
     }
 
-    // Choose challenge type: 80% Math puzzle, 20% Character code challenge
-    $challenge_type = (rand(1, 10) <= 8) ? 'math' : 'code';
+    // Single-digit addition operator pool only: numbers between 1 and 9
+    $ops = ['+'];
+    $op = $ops[0];
+    $num1 = rand(1, 9);
+    $num2 = rand(1, 9);
+    $answer = $num1 + $num2;
+    $display = "{$num1} + {$num2} = ?";
+    $question = "What is {$num1} + {$num2}?";
+    $audio_text = "Security challenge: What is {$num1} plus {$num2}?";
 
-    if ($challenge_type === 'math') {
-        $ops = ['+', '-', '×'];
-        $op = $ops[array_rand($ops)];
-
-        if ($op === '+') {
-            $num1 = rand(3, 19);
-            $num2 = rand(2, 18);
-            $answer = $num1 + $num2;
-            $display = "{$num1} + {$num2} = ?";
-            $question = "What is {$num1} + {$num2}?";
-            $audio_text = "Security challenge: What is {$num1} plus {$num2}?";
-        } elseif ($op === '-') {
-            $num1 = rand(15, 35);
-            $num2 = rand(2, $num1 - 1);
-            $answer = $num1 - $num2;
-            $display = "{$num1} - {$num2} = ?";
-            $question = "What is {$num1} - {$num2}?";
-            $audio_text = "Security challenge: What is {$num1} minus {$num2}?";
-        } else { // Multiplication
-            $num1 = rand(2, 9);
-            $num2 = rand(2, 9);
-            $answer = $num1 * $num2;
-            $display = "{$num1} × {$num2} = ?";
-            $question = "What is {$num1} times {$num2}?";
-            $audio_text = "Security challenge: What is {$num1} multiplied by {$num2}?";
-        }
-
-        $challenge = [
-            'id'         => bin2hex(random_bytes(8)),
-            'type'       => 'math',
-            'display'    => $display,
-            'question'   => $question,
-            'answer'     => (string)$answer,
-            'audio_text' => $audio_text,
-            'created_at' => time()
-        ];
-    } else {
-        // Unambiguous characters excluding 0, O, I, 1, L
-        $chars = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
-        $shuffled = str_shuffle($chars);
-        $code = substr($shuffled, 0, 5);
-        $display = implode(' ', str_split($code));
-        $question = "Enter the characters: {$code}";
-        $audio_text = "Security challenge: Please enter the characters " . implode(', ', str_split($code));
-
-        $challenge = [
-            'id'         => bin2hex(random_bytes(8)),
-            'type'       => 'code',
-            'display'    => $display,
-            'question'   => "Type code: {$code}",
-            'answer'     => $code,
-            'audio_text' => $audio_text,
-            'created_at' => time()
-        ];
-    }
+    $challenge = [
+        'id'         => bin2hex(random_bytes(8)),
+        'type'       => 'math',
+        'display'    => $display,
+        'question'   => $question,
+        'answer'     => (string)$answer,
+        'audio_text' => $audio_text,
+        'created_at' => time()
+    ];
 
     $_SESSION['login_captcha'] = $challenge;
     return $challenge;

@@ -499,6 +499,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
       height: auto;
       transition: min-height 0.35s ease, height 0.35s ease;
       overflow: visible;
+      padding-bottom: 8px;
     }
     .mobile-card.show-register .forms-wrapper {
       height: min(540px, calc(100dvh - 260px));
@@ -615,14 +616,15 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     }
 
     .btn {
-      width: 100%; height: 44px; background: var(--fd-olive); border: none; outline: none;
-      border-radius: 25px; cursor: pointer; font-size: 0.92rem; color: #fff;
+      width: 100%; height: 46px; background: var(--fd-olive); border: none; outline: none;
+      border-radius: 25px; cursor: pointer; font-size: 0.95rem; color: #fff;
       font-weight: 600; box-shadow: 0 10px 22px rgba(77, 90, 32, 0.22); transition: 0.3s;
-      margin-top: 10px; margin-bottom: 4px;
+      margin-top: 14px; margin-bottom: 8px; padding: 12px 20px;
       position: relative; z-index: 5; flex-shrink: 0;
       display: inline-flex; align-items: center; justify-content: center;
     }
-    .btn:hover { background: var(--fd-olive-dark); box-shadow: 0 12px 25px rgba(77, 90, 32, 0.28); }
+    .btn:hover { background: var(--fd-olive-dark); box-shadow: 0 12px 25px rgba(77, 90, 32, 0.28); transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
 
     .alert {
       background: #fff0ec; border: 1.5px solid #d98c7f; color: #9b4539; padding: 10px 14px;
@@ -744,7 +746,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
        Warm Food Dash theme: #4B5320, #D88F2A, #D4C5A5, #fffdf7
     ================================================================ */
     .captcha-wrapper {
-      margin: 10px 0 14px 0;
+      margin: 16px 0 18px 0;
       width: 100%;
       box-sizing: border-box;
       transition: all 0.3s ease;
@@ -1189,7 +1191,7 @@ if (($_SERVER["REQUEST_METHOD"] ?? '') === "POST") {
     }
 
     .demo-helper-bar {
-      margin: 4px 0 10px;
+      margin: 6px 0 12px;
       width: 100%;
     }
 
